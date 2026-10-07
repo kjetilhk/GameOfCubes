@@ -95,6 +95,8 @@ class Cloth {
     const startX = center.x - width/2;
     const startY = center.y + height/2;
 
+    this.particleMass = particleMass;
+
     for (let j = 0; j < ny; j++){
       for (let i = 0; i < nx; i++){
         const idx = j * nx + i;
@@ -140,12 +142,12 @@ class Cloth {
     }
   }
 
-  togglePin(idx, mass = 0.001){
+  togglePin(idx, mass = this.particleMass){
     if (idx < 0 || idx >= this.particles.length) return;
     const p = this.particles[idx];
     if (this.pinned.has(idx)){
       this.pinned.delete(idx);
-      p.invM = 1 / mass;
+      p.invM = 1 / (mass || 0.001);
     } else {
       this.pinned.add(idx);
       p.invM = 0;
