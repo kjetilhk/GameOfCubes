@@ -122,15 +122,15 @@ function initScene(){
   world.clear();
 
   // High-resolution continuum soft body: 6x6x6 grid (625 tetrahedra, 990 elastic edges, 216 particles)
-  const edgeComp = softMode ? 0.018 : 0.006;
-  const volComp = softMode ? 0.0004 : 0.00015;
+  // volCompliance = 0 enforces strict hydrostatic incompressibility so it squishes & bulges without deflating/shrinking
+  const edgeComp = softMode ? 0.008 : 0.002;
   activeTetMesh = world.addTetMesh({
     nx: 6, ny: 6, nz: 6,
     sizeX: 0.85, sizeY: 0.85, sizeZ: 0.85,
     center: new V(0, -box.hy * 0.25, -box.d * 0.5),
     mass: 16.0,
     edgeCompliance: edgeComp,
-    volCompliance: volComp
+    volCompliance: 0.0
   });
 
   buildTetVisualMesh(activeTetMesh);
@@ -190,13 +190,12 @@ RoomEnv.setupMotionSensors({
 document.getElementById('stiff').addEventListener('click', () => {
   softMode = !softMode;
   document.getElementById('stiff').textContent = softMode ? 'Stiffer' : 'Softer';
-  const edgeComp = softMode ? 0.018 : 0.006;
-  const volComp = softMode ? 0.0004 : 0.00015;
+  const edgeComp = softMode ? 0.008 : 0.002;
   if (activeTetMesh) {
     for (const c of activeTetMesh.edgeConstraints) c.compliance = edgeComp;
-    for (const c of activeTetMesh.volumeConstraints) c.compliance = volComp;
+    for (const c of activeTetMesh.volumeConstraints) c.compliance = 0.0;
   }
-  RoomEnv.showNote(softMode ? 'Elasticity: Extra soft & wobbly' : 'Elasticity: Natural soft rubber', 1500);
+  RoomEnv.showNote(softMode ? 'Elasticity: Extra soft & jelly' : 'Elasticity: Natural soft rubber', 1500);
 });
 
 document.getElementById('wire').addEventListener('click', () => {
