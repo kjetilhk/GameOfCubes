@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Cube Box</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#2b3a4a; --ink:#f3efe6; --muted:#b9c4cf; --panel:rgba(20,28,38,.72); --btn:#f2b632; --btn-ink:#1d2632;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1b2530; --panel:rgba(10,14,20,.78); } }
+:root[data-theme="dark"]{ --bg:#1b2530; --panel:rgba(10,14,20,.78); }
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+html,body{margin:0;overflow:hidden;background:var(--bg);touch-action:none;overscroll-behavior:none}
+body{height:100%;font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none}
+canvas{position:fixed;inset:0;display:block;width:100%;height:100%}
+#intro{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(18,26,35,.55);z-index:5}
+#intro .card{max-width:22rem;background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:22px;padding:26px 24px 22px}
+#intro h1{font-size:2.4rem;line-height:1;margin:0 0 .6rem;font-weight:700;letter-spacing:-.02em}
+#intro p{margin:0 0 1.2rem;color:var(--muted);line-height:1.45;font-size:1rem}
+button{font:inherit;border:0;cursor:pointer}
+button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+#go{background:var(--btn);color:var(--btn-ink);font-weight:700;font-size:1.1rem;padding:.8rem 1.4rem;border-radius:999px;width:100%}
+#hud{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;justify-content:center;z-index:4;pointer-events:none}
+#hud button{pointer-events:auto;background:var(--panel);color:var(--ink);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:.55rem 1rem;border-radius:999px;font-size:.95rem}
+#hud button.hidden{display:none}
+#note{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--panel);padding:.45rem .9rem;border-radius:999px;font-size:.85rem;color:var(--muted);z-index:4;max-width:90%;text-align:center;opacity:0;transition:opacity .4s}
+#note.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="intro"><div class="card">
+  <h1>Cube Box</h1>
+  <p>Your phone is a box of cubes. Tilt it and they slide downhill, shake it and they rattle, twist it and they lag behind.</p>
+  <button id="go">Start</button>
+</div></div>
+<div id="note"></div>
+<div id="hud">
+  <button id="add">Add cube</button>
+  <button id="shake" class="hidden">Shake</button>
+  <button id="reset">Reset</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+const V = THREE.Vector3, Q = THREE.Quaternion;
+
+/* ================= XPBD rigid body solver (cubes only) =================
+   Based on Müller et al. "Detailed Rigid Body Simulation with Extended
+   Position Based Dynamics". Many substeps, one position iteration each.
+   A cube's inertia tensor is isotropic (m s²/6), so inverse inertia is a scalar. */
+const SUBSTEPS = 20, DT = 1/60;
+const MU_S = 0.55, MU_D = 0.4, REST = 0.35;
+
+class Body {
+  constructor(size){
+    this.s = size; this.h = size/2;
+    const m = 700 * size*size*size;            // ~density of wood, kg
+    this.invM = 1/m; this.invI = 6/(m*size*size);
+    this.x = new V(); this.px = new V(); this.v = new V();
+    this.q = new Q(); this.pq = new Q(); this.w = new V();
+  }
+}
+
+const bodies = [];
+let box = { hx:0.035, hy:0.07, d:0.045 };      // half width, half height, depth (m)
+let walls = [];
+function buildWalls(){
+  // inward normal n, offset o: inside when n·p >= o
+  walls = [
+    {n:new V( 1,0,0), o:-box.hx}, {n:new V(-1,0,0), o:-box.hx},
+    {n:new V(0, 1,0), o:-box.hy}, {n:new V(0,-1,0), o:-box.hy},
+    {n:new V(0,0, 1), o:-box.d},  {n:new V(0,0,-1), o:0}       // back wall, glass
+  ];
+}
+
+const CORNERS = [];
+for (let i=0;i<8;i++) CORNERS.push(new V(i&1?1:-1, i&2?1:-1, i&4?1:-1));
+
+// scratch
+const t1=new V(), t2=new V(), t3=new V(), t4=new V(), tq=new Q();
+
+function applyPosCorrection(b, r, p, sign){
+  if (!b) return;
+  b.x.addScaledVector(p, sign*b.invM);
+  t4.crossVectors(r, p).multiplyScalar(sign*b.invI);
+  tq.set(t4.x, t4.y, t4.z, 0).multiply(b.q);
+  b.q.x += .5*tq.x; b.q.y += .5*tq.y; b.q.z += .5*tq.z; b.q.w += .5*tq.w;
+  b.q.normalize();
+}
+function applyVelImpulse(b, r, p, sign){
+  if (!b) return;
+  b.v.addScaledVector(p, sign*b.invM);
+  t4.crossVectors(r, p).multiplyScalar(sign*b.invI);
+  b.w.add(t4);
+}
+function genInvMass(b, r, n){
+  if (!b) return 0;
+  t4.crossVectors(r, n);
+  return b.invM + b.invI * t4.lengthSq();
+}
+function worldPoint(b, local, out, prev){
+  return out.copy(local).applyQuaternion(prev ? b.pq : b.q).add(prev ? b.px : b.x);
+}
+
+// Contact: vertex of body a pushed out of body b (or a wall when b is null). n points out of b.
+let contacts = [];
+function addContact(a, b, P, n, pen, wallPoint){
+  const c = { a, b, n: n.clone(), lam: 0, vnPrev: 0 };
+  c.la = P.clone().sub(a.x).applyQuaternion(a.q.clone().invert());
+  const P2 = P.clone().addScaledVector(n, pen);
+  if (b) c.lb = P2.sub(b.x).applyQuaternion(b.q.clone().invert());
+  else c.wp = P2;
+  // normal relative velocity before solving (for restitution)
+  const r1 = P.clone().sub(a.x);
+  const v = a.v.clone().add(t1.crossVectors(a.w, r1));
+  if (b){ const r2 = P.clone().sub(b.x); v.sub(b.v).sub(t1.crossVectors(b.w, r2)); }
+  c.vnPrev = v.dot(n);
+  contacts.push(c);
+}
+
+function pointInBox(P, b, nOut){
+  t1.copy(P).sub(b.x).applyQuaternion(tq.copy(b.q).invert());
+  const dx=b.h-Math.abs(t1.x), dy=b.h-Math.abs(t1.y), dz=b.h-Math.abs(t1.z);
+  if (dx<=0||dy<=0||dz<=0) return -1;
+  if (dx<dy && dx<dz){ nOut.set(Math.sign(t1.x),0,0); }
+  else if (dy<dz){ nOut.set(0,Math.sign(t1.y),0); }
+  else { nOut.set(0,0,Math.sign(t1.z)); }
+  nOut.applyQuaternion(b.q);
+  return Math.min(dx,dy,dz);
+}
+
+function detect(){
+  contacts = [];
+  const P = new V(), n = new V();
+  for (const a of bodies){
+    for (const c of CORNERS){
+      P.copy(c).multiplyScalar(a.h).applyQuaternion(a.q).add(a.x);
+      for (const w of walls){
+        const pen = w.o - w.n.dot(P);
+        if (pen > 0) addContact(a, null, P, w.n, pen);
+      }
+    }
+  }
+  for (let i=0;i<bodies.length;i++) for (let j=i+1;j<bodies.length;j++){
+    const A=bodies[i], B=bodies[j];
+    const R=(A.h+B.h)*1.7321;
+    if (A.x.distanceToSquared(B.x) > R*R) continue;
+    for (const [a,b] of [[A,B],[B,A]]){
+      for (const c of CORNERS){
+        P.copy(c).multiplyScalar(a.h).applyQuaternion(a.q).add(a.x);
+        const pen = pointInBox(P, b, n);
+        if (pen > 0) addContact(a, b, P, n, pen);
+      }
+    }
+  }
+}
+
+const P1=new V(), P2=new V(), P1p=new V(), P2p=new V(), r1=new V(), r2=new V(), dir=new V(), dp=new V();
+function solvePositions(){
+  for (const c of contacts){
+    const {a,b,n} = c;
+    worldPoint(a, c.la, P1);
+    if (b) worldPoint(b, c.lb, P2); else P2.copy(c.wp);
+    const d = dir.copy(P2).sub(P1).dot(n);
+    if (d <= 0) continue;
+    r1.copy(P1).sub(a.x); if (b) r2.copy(P2).sub(b.x);
+    const w = genInvMass(a,r1,n) + genInvMass(b,r2,n);
+    const dl = d / w;
+    c.lam += dl;
+    dir.copy(n).multiplyScalar(dl);
+    applyPosCorrection(a, r1, dir, +1);
+    applyPosCorrection(b, r2, dir, -1);
+
+    // static friction: undo tangential slip of the contact points this substep
+    worldPoint(a, c.la, P1); worldPoint(a, c.la, P1p, true);
+    if (b){ worldPoint(b, c.lb, P2); worldPoint(b, c.lb, P2p, true); }
+    else { P2.copy(c.wp); P2p.copy(c.wp); }
+    dp.copy(P1).sub(P1p).sub(P2).add(P2p);
+    dp.addScaledVector(n, -dp.dot(n));
+    const len = dp.length();
+    if (len < 1e-10) continue;
+    dir.copy(dp).divideScalar(len);
+    r1.copy(P1).sub(a.x); if (b) r2.copy(P2).sub(b.x);
+    const lt = len / (genInvMass(a,r1,dir) + genInvMass(b,r2,dir));
+    if (lt < MU_S * c.lam){
+      dir.multiplyScalar(lt);
+      applyPosCorrection(a, r1, dir, -1);
+      applyPosCorrection(b, r2, dir, +1);
+    }
+  }
+}
+
+const va=new V(), dv=new V();
+function solveVelocities(h, gmag){
+  for (const c of contacts){
+    if (c.lam <= 0) continue;
+    const {a,b,n} = c;
+    worldPoint(a, c.la, P1); r1.copy(P1).sub(a.x);
+    va.copy(a.v).add(t1.crossVectors(a.w, r1));
+    if (b){ worldPoint(b, c.lb, P2); r2.copy(P2).sub(b.x); va.sub(b.v).sub(t1.crossVectors(b.w, r2)); }
+    const vn = va.dot(n);
+    dv.set(0,0,0);
+    // dynamic friction
+    t2.copy(va).addScaledVector(n, -vn);
+    const vt = t2.length();
+    if (vt > 1e-9){
+      const fn = c.lam/(h*h);
+      dv.addScaledVector(t2, -Math.min(h*MU_D*fn, vt)/vt);
+    }
+    // restitution
+    const e = Math.abs(vn) < 2*gmag*h ? 0 : REST;
+    dv.addScaledVector(n, -vn + Math.max(-e*c.vnPrev, 0));
+    const L = dv.length();
+    if (L < 1e-9) continue;
+    dir.copy(dv).divideScalar(L);
+    const w = genInvMass(a,r1,dir) + genInvMass(b,r2,dir);
+    dir.multiplyScalar(L/w);
+    applyVelImpulse(a, r1, dir, +1);
+    applyVelImpulse(b, r2, dir, -1);
+  }
+}
+
+// Frame inputs, all in screen coordinates (x right, y up, z out of the glass)
+const accel = new V(0,-9.81,0);      // apparent acceleration felt inside the phone
+const omega = new V(), omegaDot = new V();
+const center = new V();
+
+function step(){
+  const h = DT/SUBSTEPS, gmag = Math.max(accel.length(), 1);
+  center.set(0,0,-box.d/2);
+  for (let s=0;s<SUBSTEPS;s++){
+    for (const b of bodies){
+      b.px.copy(b.x); b.pq.copy(b.q);
+      // gravity + shake, plus fictitious forces from rotating the phone
+      t1.copy(b.x).sub(center);
+      t2.crossVectors(omegaDot, t1);                         // Euler
+      t3.crossVectors(omega, t1); t3.crossVectors(omega, t3); // centrifugal
+      b.v.addScaledVector(accel, h).addScaledVector(t2, -h).addScaledVector(t3, -h);
+      t2.crossVectors(omega, b.v); b.v.addScaledVector(t2, -2*h); // Coriolis
+      b.w.addScaledVector(omegaDot, -h);
+      b.x.addScaledVector(b.v, h);
+      tq.set(b.w.x, b.w.y, b.w.z, 0).multiply(b.q);
+      b.q.x += .5*h*tq.x; b.q.y += .5*h*tq.y; b.q.z += .5*h*tq.z; b.q.w += .5*h*tq.w;
+      b.q.normalize();
+    }
+    detect();
+    solvePositions();
+    for (const b of bodies){
+      b.v.copy(b.x).sub(b.px).divideScalar(h);
+      tq.copy(b.pq).invert().premultiply(b.q);
+      b.w.set(tq.x, tq.y, tq.z).multiplyScalar(2/h);
+      if (tq.w < 0) b.w.negate();
+    }
+    solveVelocities(h, gmag);
+  }
+}
+
+/* ================= rendering ================= */
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 0.002, 2);
+scene.add(new THREE.HemisphereLight(0xfff4e0, 0x37475a, 0.65));
+const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.bias = -0.0004;
+const sc = sun.shadow.camera; sc.left=-.15; sc.right=.15; sc.top=.15; sc.bottom=-.15; sc.near=.01; sc.far=1;
+scene.add(sun, sun.target);
+
+const wallMat = new THREE.MeshStandardMaterial({ color:0x8fa3b5, roughness:.95 });
+const backMat = new THREE.MeshStandardMaterial({ color:0x9fb3c4, roughness:.95 });
+let wallGroup = new THREE.Group(); scene.add(wallGroup);
+
+function rebuildWallMeshes(){
+  scene.remove(wallGroup); wallGroup = new THREE.Group();
+  const {hx,hy,d} = box;
+  const mk = (w,hh,mat,pos,rot) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w,hh), mat);
+    m.position.copy(pos); m.rotation.set(...rot); m.receiveShadow = true; wallGroup.add(m);
+  };
+  mk(2*hx, 2*hy, backMat, new V(0,0,-d), [0,0,0]);
+  mk(d, 2*hy, wallMat, new V(-hx,0,-d/2), [0, Math.PI/2, 0]);
+  mk(d, 2*hy, wallMat, new V( hx,0,-d/2), [0,-Math.PI/2, 0]);
+  mk(2*hx, d, wallMat, new V(0,-hy,-d/2), [-Math.PI/2,0,0]);
+  mk(2*hx, d, wallMat, new V(0, hy,-d/2), [ Math.PI/2,0,0]);
+  scene.add(wallGroup);
+}
+
+function roundedCube(s, r, seg){
+  const g = new THREE.BoxGeometry(s,s,s,seg,seg,seg);
+  const p = g.attributes.position, nrm = g.attributes.normal;
+  const v = new V(), c = new V(), k = s/2 - r;
+  for (let i=0;i<p.count;i++){
+    v.fromBufferAttribute(p,i);
+    c.set(THREE.MathUtils.clamp(v.x,-k,k), THREE.MathUtils.clamp(v.y,-k,k), THREE.MathUtils.clamp(v.z,-k,k));
+    v.sub(c).normalize(); nrm.setXYZ(i, v.x, v.y, v.z);
+    v.multiplyScalar(r).add(c); p.setXYZ(i, v.x, v.y, v.z);
+  }
+  return g;
+}
+const PALETTE = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x4fbf9f, 0xf3efe6, 0x7a5cc4, 0xff9f43];
+const meshes = [];
+
+function addCube(){
+  const s = 0.009 + Math.random()*0.005;
+  const b = new Body(s);
+  b.x.set((Math.random()-.5)*box.hx, box.hy*0.6*Math.random(), -box.d/2);
+  b.q.setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6));
+  b.v.set((Math.random()-.5)*.3, 0, 0);
+  bodies.push(b);
+  const m = new THREE.Mesh(roundedCube(s, s*0.14, 4),
+    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness:.4 }));
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m); meshes.push(m);
+}
+function reset(){
+  for (const m of meshes){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+  meshes.length = 0; bodies.length = 0;
+  for (let i=0;i<12;i++) addCube();
+}
+
+function resize(){
+  const W = innerWidth, H = innerHeight, aspect = W/H;
+  renderer.setSize(W, H, false);
+  camera.aspect = aspect;
+  // physical-ish box: short side ≈ 7 cm
+  const short = 0.035;
+  if (aspect < 1){ box.hx = short; box.hy = short/aspect; } else { box.hy = short; box.hx = short*aspect; }
+  box.d = 0.045;
+  buildWalls(); rebuildWallMeshes();
+  const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+  const dist = Math.max(box.hy/tanH, box.hx/(tanH*aspect));
+  camera.position.set(0,0,dist); camera.lookAt(0,0,0);
+  camera.updateProjectionMatrix();
+  sun.position.set(box.hx*0.6, box.hy*1.2, 0.25); sun.target.position.set(0,0,-box.d);
+}
+addEventListener('resize', resize);
+resize();
+reset();
+
+/* ================= input ================= */
+function screenAngle(){
+  if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
+  return typeof window.orientation === 'number' ? window.orientation : 0;
+}
+function toScreen(x, y, z, out){
+  const a = THREE.MathUtils.degToRad(screenAngle()), c=Math.cos(a), s=Math.sin(a);
+  return out.set(x*c - y*s, x*s + y*c, z);
+}
+let gotMotion = false, lastT = 0;
+const prevOmega = new V(), tmpO = new V(), rawA = new V();
+function onMotion(e){
+  const g = e.accelerationIncludingGravity;
+  if (!g || g.x == null) return;
+  gotMotion = true;
+  // reading = phone accel − gravity; things inside the phone feel the opposite
+  toScreen(-g.x, -g.y, -g.z, rawA);
+  const L = rawA.length(); if (L > 80) rawA.multiplyScalar(80/L);
+  accel.copy(rawA);
+  const r = e.rotationRate;
+  if (r && r.alpha != null){
+    const k = Math.PI/180;
+    toScreen(r.beta*k, r.gamma*k, r.alpha*k, tmpO);
+    const now = performance.now()/1000, dt = lastT ? Math.min(Math.max(now-lastT, 0.005), 0.1) : 0;
+    lastT = now;
+    omega.lerp(tmpO, 0.6);
+    if (dt){
+      t1.copy(omega).sub(prevOmega).divideScalar(dt);
+      if (t1.length() > 200) t1.setLength(200);
+      omegaDot.lerp(t1, 0.35);
+    }
+    prevOmega.copy(omega);
+  }
+}
+
+const note = document.getElementById('note');
+function showNote(text, ms){
+  note.textContent = text; note.classList.add('show');
+  clearTimeout(showNote.t); if (ms) showNote.t = setTimeout(()=>note.classList.remove('show'), ms);
+}
+
+// Drag to tilt (desktop or no sensors)
+let tiltX = 0, tiltY = 0, dragging = false, lx = 0, ly = 0;
+function dragGravity(){
+  const g = 9.81;
+  accel.set(Math.sin(tiltX)*Math.cos(tiltY)*g, -Math.cos(tiltX)*Math.cos(tiltY)*g, -Math.sin(tiltY)*g);
+}
+renderer.domElement.addEventListener('pointerdown', e => { dragging = true; lx = e.clientX; ly = e.clientY; });
+addEventListener('pointerup', () => dragging = false);
+addEventListener('pointermove', e => {
+  if (!dragging || gotMotion) return;
+  tiltX = THREE.MathUtils.clamp(tiltX + (e.clientX-lx)*0.008, -1.5, 1.5);
+  tiltY = THREE.MathUtils.clamp(tiltY + (e.clientY-ly)*0.008, -1.5, 1.5);
+  lx = e.clientX; ly = e.clientY;
+  dragGravity();
+});
+
+let denied = false;
+document.getElementById('go').addEventListener('click', async () => {
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res !== 'granted') throw new Error('denied');
+    }
+    addEventListener('devicemotion', onMotion);
+  } catch(err){ denied = true; }
+  document.getElementById('intro').remove();
+  setTimeout(() => {
+    if (!gotMotion){
+      document.getElementById('shake').classList.remove('hidden');
+      let embedded = false; try { embedded = window.self !== window.top; } catch(e){ embedded = true; }
+      const msg = denied ? 'Motion access was denied. Drag to tilt the box.'
+        : embedded ? 'This viewer blocks motion sensors. Host the file on an https page to use tilt. Drag to tilt for now.'
+        : !isSecureContext ? 'Motion sensors need an https page. Drag to tilt for now.'
+        : 'No motion data arrived. Drag to tilt the box.';
+      showNote(msg, 7000);
+    }
+  }, 1200);
+});
+document.getElementById('add').addEventListener('click', () => { if (bodies.length < 30) addCube(); });
+document.getElementById('reset').addEventListener('click', reset);
+document.getElementById('shake').addEventListener('click', () => {
+  for (const b of bodies){
+    b.v.add(new V((Math.random()-.5)*1.2, Math.random()*1.0, (Math.random()-.3)*0.6));
+    b.w.add(new V((Math.random()-.5)*60, (Math.random()-.5)*60, (Math.random()-.5)*60));
+  }
+});
+
+/* ================= loop ================= */
+let acc = 0, last = performance.now();
+function frame(now){
+  acc += Math.min((now-last)/1000, 0.1); last = now;
+  let n = 0;
+  while (acc >= DT && n < 3){ step(); acc -= DT; n++; }
+  if (n === 3) acc = 0;
+  for (let i=0;i<bodies.length;i++){ meshes[i].position.copy(bodies[i].x); meshes[i].quaternion.copy(bodies[i].q); }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
