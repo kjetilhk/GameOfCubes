@@ -153,9 +153,12 @@ class Cloth {
     if (this.pinned.has(idx)){
       this.pinned.delete(idx);
       p.invM = 1 / (mass || 0.001);
+      p.px.copy(p.x);
+      p.v.set(0, 0, 0);
     } else {
       this.pinned.add(idx);
       p.invM = 0;
+      p.px.copy(p.x);
       p.v.set(0, 0, 0);
     }
   }
@@ -761,6 +764,8 @@ class World {
           const pen = (w.o + p.radius) - w.n.dot(p.x);
           if (pen > 0){
             p.x.addScaledVector(w.n, pen);
+            // Advance px normally to prevent geometric depenetration from creating upward kinetic velocity
+            p.px.addScaledVector(w.n, pen);
             // Tangential surface friction against walls and floor
             t1.subVectors(p.x, p.px);
             const normDisp = t1.dot(w.n);
@@ -771,8 +776,11 @@ class World {
               const maxFrictionDisp = frictionCoeff * pen;
               if (tLen < maxFrictionDisp){
                 p.x.sub(t1);
+                p.px.sub(t1);
               } else {
-                p.x.addScaledVector(t1, -maxFrictionDisp / tLen);
+                const f = maxFrictionDisp / tLen;
+                p.x.addScaledVector(t1, -f);
+                p.px.addScaledVector(t1, -f);
               }
             }
           }
@@ -800,6 +808,23 @@ class World {
         p.v.subVectors(p.x, p.px).divideScalar(h);
         p.v.multiplyScalar(linK);
         if (p.v.lengthSq() > this.maxSpeed*this.maxSpeed) p.v.setLength(this.maxSpeed);
+      }
+
+      // 5b. internal constraint damping (dissipates high-frequency tension flutter in cloth)
+      for (const c of constraints){
+        const p1 = c.p1, p2 = c.p2;
+        const w1 = p1.invM, w2 = p2.invM;
+        const wSum = w1 + w2;
+        if (wSum <= 0) continue;
+        t1.subVectors(p1.x, p2.x);
+        const len = t1.length();
+        if (len < 1e-6) continue;
+        t1.divideScalar(len);
+        t2.subVectors(p1.v, p2.v);
+        const vn = t2.dot(t1);
+        const dv = -0.04 * vn;
+        if (w1 > 0) p1.v.addScaledVector(t1, dv * (w1 / wSum));
+        if (w2 > 0) p2.v.addScaledVector(t1, -dv * (w2 / wSum));
       }
 
       // 6. collide rigid bodies

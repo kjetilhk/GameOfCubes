@@ -211,11 +211,10 @@ const clothMat = new THREE.MeshStandardMaterial({
   color: 0xf6f0e6,
   map: cottonTex.map,
   bumpMap: cottonTex.bumpMap,
-  bumpScale: 0.009,
+  bumpScale: 0.0008,          // Subtle realistic thread weave relief (prevents normal flipping)
   roughness: 0.94,            // Soft matte diffuse scattering (no plastic sheen)
   metalness: 0.0,
-  side: THREE.DoubleSide,
-  shadowSide: THREE.DoubleSide
+  side: THREE.DoubleSide
 });
 
 /* ================= cloth mesh ================= */
@@ -336,7 +335,7 @@ function initScene(){
     width: 1.6, height: 1.6,
     center: new V(0, box.hy * 0.35, -box.d * 0.5),
     mass: 1.6,
-    compliance: 0,            // Inextensible cotton warp & weft threads
+    compliance: 0.000008,     // Inextensible regularized cotton warp & weft (prevents numeric shock chatter)
     shearCompliance: 0.02,    // Soft diagonal weave shear drape (natural fabric folds)
     bendCompliance: 0,        // 0 = no stiff paper-like 2-hop spring-back (prevents curling)
     pinnedCorners: pinsActive ? [0, nx - 1] : []
