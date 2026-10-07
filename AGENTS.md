@@ -47,7 +47,7 @@ Do not upgrade three.js casually. The code uses r128-era APIs such as `renderer.
 - Contact normals point from body `b` (or a wall) toward body `a`.
 - Walls are `{n, o}` with inward normal; a point is inside when `n·p >= o`. Change them only through `world.setBox()`, which `resize()` calls.
 - `world.bodies[i]` and `meshes[i]` are parallel arrays. Always add or remove them together, as `addCube()` and `reset()` do.
-- In the hot path, reuse module-level scratch vectors and the contact pool instead of allocating. Pair detection is O(n²) with a bounding-sphere early-out. The cube count is capped at 30 and resets to 12. With 30 cubes a frame costs about 3.5 ms on a desktop CPU, so mind the cost on phones before adding substeps or iterations.
+- In the hot path, reuse module-level scratch vectors and the contact pool instead of allocating. Pair detection is O(n²) with a bounding-sphere early-out. The cube count is capped at 30 and resets to 3. With 30 cubes a frame costs about 3.5 ms on a desktop CPU, so mind the cost on phones before adding substeps or iterations.
 - Layout must stay mobile-safe. Keep the `viewport-fit=cover` meta tag, the safe-area padding, `touch-action: none`, and the light/dark color tokens on `:root`.
 - Match the existing style: compact, 2-space indentation, short names, and comments only where the physics is non-obvious.
 

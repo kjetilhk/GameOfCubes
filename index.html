@@ -541,7 +541,7 @@ function addCube(){
 function reset(){
   for (const m of meshes){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
   meshes.length = 0; world.clear();
-  for (let i=0;i<12;i++) addCube();
+  for (let i=0;i<3;i++) addCube();
 }
 
 function resize(){
