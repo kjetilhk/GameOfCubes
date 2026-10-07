@@ -29,7 +29,8 @@ const DEFAULTS = {
   maxSpeed: 25,                 // m/s, room-scale speed guard
   maxSpin: 250,                 // rad/s
   maxPushSpeed: 5.0,            // m/s, depenetration per substep cap
-  contactMargin: 0.005          // m: near contacts collection margin
+  contactMargin: 0.005,         // m: near contacts collection margin
+  selfCollision: false          // particle-particle / cloth self-collision toggle
 };
 
 class Body {
@@ -83,6 +84,7 @@ class Cloth {
     compliance = 0,           // stretch compliance
     shearCompliance = 0.01,   // diagonal compliance
     bendCompliance = null,    // null / 0 = soft fabric (no paper-like spring-back); > 0 = stiff paper/leather
+    particleRadius = null,
     pinnedCorners = [0, nx - 1]
   } = {}){
     this.nx = nx; this.ny = ny;
@@ -96,6 +98,7 @@ class Cloth {
     const startY = center.y + height/2;
 
     this.particleMass = particleMass;
+    const colRadius = particleRadius !== null && particleRadius !== undefined ? particleRadius : Math.min(dx, dy) * 0.28;
 
     for (let j = 0; j < ny; j++){
       for (let i = 0; i < nx; i++){
@@ -105,7 +108,10 @@ class Cloth {
         // Subtle out-of-plane catenary wave so fabric hangs with organic 3D drapery
         const pz = center.z + Math.sin(i / (nx - 1) * Math.PI) * 0.025 * (j / (ny - 1));
         const isPinned = Array.isArray(pinnedCorners) && pinnedCorners.includes(idx);
-        const p = new Particle(px, py, pz, isPinned ? 0 : particleMass, Math.min(dx, dy)*0.25);
+        const p = new Particle(px, py, pz, isPinned ? 0 : particleMass, colRadius);
+        p._cloth = this;
+        p._cx = i;
+        p._cy = j;
         if (isPinned) this.pinned.add(idx);
         this.particles.push(p);
       }
@@ -221,7 +227,10 @@ class TetMesh {
           const py = startY - j * dy;
           const pz = startZ + k * dz;
           const radius = Math.min(dx, dy, dz) * 0.28;
-          this.particles.push(new Particle(px, py, pz, pMass, radius));
+          const p = new Particle(px, py, pz, pMass, radius);
+          p._tetMesh = this;
+          p._tx = i; p._ty = j; p._tz = k;
+          this.particles.push(p);
         }
       }
     }
@@ -344,6 +353,88 @@ function solveTetVolume(c, h){
   if (w2 > 0) p2.x.addScaledVector(g2, w2 * dLambda);
   if (w3 > 0) p3.x.addScaledVector(g3, w3 * dLambda);
   if (w4 > 0) p4.x.addScaledVector(g4, w4 * dLambda);
+}
+
+// ---------- particle self-collision (spatial hash) ----------
+const SPATIAL_HASH_SIZE = 4096;
+const SPATIAL_HASH_MASK = SPATIAL_HASH_SIZE - 1;
+const hashHead = new Int32Array(SPATIAL_HASH_SIZE);
+let hashNext = new Int32Array(1024);
+
+function solveParticleSelfCollisions(particles){
+  const n = particles.length;
+  if (n < 2) return;
+  if (hashNext.length < n){
+    hashNext = new Int32Array(Math.max(n * 2, 1024));
+  }
+
+  let maxR = 0.02;
+  for (let i = 0; i < n; i++){
+    if (particles[i].radius > maxR) maxR = particles[i].radius;
+  }
+  const cellSize = Math.max(maxR * 2.2, 0.05);
+  const invCell = 1 / cellSize;
+
+  hashHead.fill(-1);
+  for (let i = 0; i < n; i++){
+    const p = particles[i];
+    const ix = Math.floor(p.x.x * invCell);
+    const iy = Math.floor(p.x.y * invCell);
+    const iz = Math.floor(p.x.z * invCell);
+    const bucket = (((ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791)) & 0x7fffffff) & SPATIAL_HASH_MASK;
+    hashNext[i] = hashHead[bucket];
+    hashHead[bucket] = i;
+  }
+
+  for (let i = 0; i < n; i++){
+    const p1 = particles[i];
+    const ix = Math.floor(p1.x.x * invCell);
+    const iy = Math.floor(p1.x.y * invCell);
+    const iz = Math.floor(p1.x.z * invCell);
+
+    for (let ox = -1; ox <= 1; ox++){
+      for (let oy = -1; oy <= 1; oy++){
+        for (let oz = -1; oz <= 1; oz++){
+          const bucket = ((((ix + ox) * 73856093) ^ ((iy + oy) * 19349663) ^ ((iz + oz) * 83492791)) & 0x7fffffff) & SPATIAL_HASH_MASK;
+          let j = hashHead[bucket];
+          while (j !== -1){
+            if (j > i){
+              const p2 = particles[j];
+              let skip = false;
+              if (p1._cloth && p1._cloth === p2._cloth){
+                if (Math.abs(p1._cx - p2._cx) <= 1 && Math.abs(p1._cy - p2._cy) <= 1) skip = true;
+              } else if (p1._tetMesh && p1._tetMesh === p2._tetMesh){
+                if (Math.abs(p1._tx - p2._tx) <= 1 && Math.abs(p1._ty - p2._ty) <= 1 && Math.abs(p1._tz - p2._tz) <= 1) skip = true;
+              }
+              if (!skip){
+                const dx = p1.x.x - p2.x.x;
+                const dy = p1.x.y - p2.x.y;
+                const dz = p1.x.z - p2.x.z;
+                const d2 = dx*dx + dy*dy + dz*dz;
+                const minDist = p1.radius + p2.radius;
+                if (d2 < minDist * minDist && d2 > 1e-12){
+                  const d = Math.sqrt(d2);
+                  const pen = minDist - d;
+                  const nx = dx / d, ny = dy / d, nz = dz / d;
+                  const w1 = p1.invM, w2 = p2.invM;
+                  const wSum = w1 + w2;
+                  if (wSum > 0){
+                    const s1 = pen * (w1 / wSum);
+                    const s2 = pen * (w2 / wSum);
+                    p1.x.x += nx * s1; p1.x.y += ny * s1; p1.x.z += nz * s1;
+                    p2.x.x -= nx * s2; p2.x.y -= ny * s2; p2.x.z -= nz * s2;
+                    p1.px.x += nx * s1; p1.px.y += ny * s1; p1.px.z += nz * s1;
+                    p2.px.x -= nx * s2; p2.px.y -= ny * s2; p2.px.z -= nz * s2;
+                  }
+                }
+              }
+            }
+            j = hashNext[j];
+          }
+        }
+      }
+    }
+  }
 }
 
 // ---------- generic position / velocity corrections ----------
@@ -756,7 +847,10 @@ class World {
         for (const c of volumeConstraints) solveTetVolume(c, h);
       }
 
-      // 4. particle collisions (walls & rigid bodies)
+      // 4. particle collisions (self, walls & rigid bodies)
+      if (this.selfCollision){
+        solveParticleSelfCollisions(particles);
+      }
       for (const p of particles){
         if (p.invM === 0) continue;
         // wall collision

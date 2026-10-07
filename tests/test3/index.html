@@ -29,6 +29,7 @@ button:focus-visible, a:focus-visible{outline:3px solid #fff;outline-offset:3px}
 #hud button.hidden{display:none}
 #note{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--panel);padding:.45rem .9rem;border-radius:999px;font-size:.85rem;color:var(--muted);z-index:4;max-width:90%;text-align:center;opacity:0;transition:opacity .4s}
 #note.show{opacity:1}
+#fps{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:calc(14px + env(safe-area-inset-right,0px));background:var(--panel);color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.82rem;font-weight:600;padding:.35rem .75rem;border-radius:999px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:4;pointer-events:none}
 </style>
 </head>
 <body>
@@ -37,6 +38,7 @@ button:focus-visible, a:focus-visible{outline:3px solid #fff;outline-offset:3px}
   <p>Volumetric XPBD Tetrahedral Mesh with exact volume conservation. Tilt to squash against walls, shake to wobble, drag to poke and stretch, or drop rigid cubes onto it.</p>
   <button id="go">Start</button>
 </div></div>
+<div id="fps">-- FPS</div>
 <div id="note"></div>
 <div id="hud">
   <a id="back" href="../../">← Tests</a>
@@ -384,7 +386,15 @@ document.getElementById('shake').addEventListener('click', () => {
 
 /* ================= animation loop ================= */
 let acc = 0, last = performance.now();
+let fpsCount = 0, fpsLastTime = performance.now();
+const fpsEl = document.getElementById('fps');
 function frame(now){
+  fpsCount++;
+  if (now - fpsLastTime >= 400){
+    fpsEl.textContent = `${Math.round((fpsCount * 1000) / (now - fpsLastTime))} FPS`;
+    fpsCount = 0;
+    fpsLastTime = now;
+  }
   acc += Math.min((now-last)/1000, 0.1); last = now;
   let n = 0;
   while (acc >= world.dt && n < 3){ world.step(); acc -= world.dt; n++; }

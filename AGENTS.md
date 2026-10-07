@@ -44,8 +44,8 @@ XPBD rigid bodies with no DOM or rendering code, based on Müller et al., "Detai
   2. **Solve particle constraints** using exact XPBD compliance ($\Delta \lambda = (-C - \tilde{\alpha}\lambda) / (\sum w + \tilde{\alpha})$ with $\tilde{\alpha} = \alpha / h^2$):
      - Edge distance constraints for stretch and shear elasticity.
      - Tetrahedral volume preservation constraints ($C = V - V_0$) for incompressibility ($0.0001\%$ volume drift).
-  3. **Particle collisions** against the 6 box walls and against rigid cubes.
-  4. **Derive particle velocities** and apply linear damping.
+  3. **Particle collisions** against the 6 box walls, rigid cubes, and optional particle/cloth self-collision using zero-allocation 3D spatial hashing.
+  4. **Derive particle velocities** and apply linear damping and internal constraint damping.
   5. **Rigid body collision.** Cube corners are tested against the six walls. Cube–cube uses a separating-axis test with a contact manifold (`collideBoxes`). Face contacts clip the incident face against the reference face (up to 8 points). Edge axes are used only when strictly better than a face axis to prevent normal flips. Contacts within `contactMargin` are collected and solved only if penetrating.
   6. **Position solve.** `positionIterations` normal sweeps run first, then static friction, then a normal cleanup sweep. Depenetration is capped at `maxPushSpeed`.
   7. **Derive velocities** from position changes.
@@ -68,6 +68,7 @@ Interactive XPBD cotton cloth sheet in the box.
 - Dynamic $24 \times 24$ grid of particles connected by inextensible structural warp and weft constraints with compliant shear, allowing natural catenary draping and folding without springy paper curling.
 - Textured with a procedural interwoven warp-and-weft cotton canvas texture and bump relief map for authentic textile appearance under 3-point lighting.
 - Top corners pinned with visual pin markers; togglable via "Unpin / Pin Top" button.
+- Cloth self-collision toggle ("Self Collision: Off / On") using zero-allocation spatial hashing, preventing overlapping folds from penetrating.
 - Raycaster pointer interaction allows grabbing and dragging cloth vertices in real time.
 - Two-way interaction: dynamic rigid cubes can be spawned into the box, falling and colliding with the cloth fabric.
 - DeviceMotion accelerometer and gyroscope induce waves and wrinkles in the fabric through fictitious forces.
