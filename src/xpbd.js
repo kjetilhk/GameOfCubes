@@ -81,8 +81,8 @@ class Cloth {
     center = new V(0, 0.015, -0.022),
     mass = 0.015,
     compliance = 0,           // stretch compliance
-    shearCompliance = 0.001,  // diagonal compliance
-    bendCompliance = 0.005,   // 2-hop bending compliance
+    shearCompliance = 0.01,   // diagonal compliance
+    bendCompliance = null,    // null / 0 = soft fabric (no paper-like spring-back); > 0 = stiff paper/leather
     pinnedCorners = [0, nx - 1]
   } = {}){
     this.nx = nx; this.ny = ny;
@@ -102,7 +102,8 @@ class Cloth {
         const idx = j * nx + i;
         const px = startX + i * dx;
         const py = startY - j * dy;
-        const pz = center.z;
+        // Subtle out-of-plane catenary wave so fabric hangs with organic 3D drapery
+        const pz = center.z + Math.sin(i / (nx - 1) * Math.PI) * 0.025 * (j / (ny - 1));
         const isPinned = Array.isArray(pinnedCorners) && pinnedCorners.includes(idx);
         const p = new Particle(px, py, pz, isPinned ? 0 : particleMass, Math.min(dx, dy)*0.25);
         if (isPinned) this.pinned.add(idx);
@@ -114,7 +115,7 @@ class Cloth {
       this.constraints.push(new DistanceConstraint(this.particles[i1], this.particles[i2], comp));
     };
 
-    // Structural
+    // Structural (inextensible threads)
     for (let j = 0; j < ny; j++){
       for (let i = 0; i < nx; i++){
         const idx = j * nx + i;
@@ -123,21 +124,25 @@ class Cloth {
       }
     }
 
-    // Shear
-    for (let j = 0; j < ny - 1; j++){
-      for (let i = 0; i < nx - 1; i++){
-        const idx = j * nx + i;
-        addC(idx, idx + nx + 1, shearCompliance);
-        addC(idx + 1, idx + nx, shearCompliance);
+    // Shear (diagonal drape)
+    if (shearCompliance !== null && shearCompliance !== undefined){
+      for (let j = 0; j < ny - 1; j++){
+        for (let i = 0; i < nx - 1; i++){
+          const idx = j * nx + i;
+          addC(idx, idx + nx + 1, shearCompliance);
+          addC(idx + 1, idx + nx, shearCompliance);
+        }
       }
     }
 
-    // Bending (2-hop)
-    for (let j = 0; j < ny; j++){
-      for (let i = 0; i < nx; i++){
-        const idx = j * nx + i;
-        if (i < nx - 2) addC(idx, idx + 2, bendCompliance);
-        if (j < ny - 2) addC(idx, idx + 2*nx, bendCompliance);
+    // Bending (2-hop distance constraints - only for stiff materials like paper, cardboard, sheet metal)
+    if (bendCompliance !== null && bendCompliance !== undefined && bendCompliance > 0){
+      for (let j = 0; j < ny; j++){
+        for (let i = 0; i < nx; i++){
+          const idx = j * nx + i;
+          if (i < nx - 2) addC(idx, idx + 2, bendCompliance);
+          if (j < ny - 2) addC(idx, idx + 2*nx, bendCompliance);
+        }
       }
     }
   }
@@ -754,7 +759,23 @@ class World {
         // wall collision
         for (const w of walls){
           const pen = (w.o + p.radius) - w.n.dot(p.x);
-          if (pen > 0) p.x.addScaledVector(w.n, pen);
+          if (pen > 0){
+            p.x.addScaledVector(w.n, pen);
+            // Tangential surface friction against walls and floor
+            t1.subVectors(p.x, p.px);
+            const normDisp = t1.dot(w.n);
+            t1.addScaledVector(w.n, -normDisp);
+            const tLen = t1.length();
+            if (tLen > 1e-6){
+              const frictionCoeff = 0.55;
+              const maxFrictionDisp = frictionCoeff * pen;
+              if (tLen < maxFrictionDisp){
+                p.x.sub(t1);
+              } else {
+                p.x.addScaledVector(t1, -maxFrictionDisp / tLen);
+              }
+            }
+          }
         }
         // cube collision
         for (const b of bodies){

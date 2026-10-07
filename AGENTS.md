@@ -65,7 +65,7 @@ A mobile-first browser toy and test scene. The phone screen represents the front
 ### Test 2: Cloth Simulation (`tests/test2/index.html`)
 
 Interactive XPBD cotton cloth sheet in the box.
-- Dynamic $24 \times 24$ grid of particles connected by structural, shear, and 2-hop bending compliant distance constraints, simulating soft, natural catenary draping.
+- Dynamic $24 \times 24$ grid of particles connected by inextensible structural warp and weft constraints with compliant shear, allowing natural catenary draping and folding without springy paper curling.
 - Textured with a procedural interwoven warp-and-weft cotton canvas texture and bump relief map for authentic textile appearance under 3-point lighting.
 - Top corners pinned with visual pin markers; togglable via "Unpin / Pin Top" button.
 - Raycaster pointer interaction allows grabbing and dragging cloth vertices in real time.

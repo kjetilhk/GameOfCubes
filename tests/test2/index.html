@@ -51,7 +51,7 @@ button:focus-visible, a:focus-visible{outline:3px solid #fff;outline-offset:3px}
 <script>
 (() => {
 const V = THREE.Vector3, Q = THREE.Quaternion;
-const world = new XPBD.World({ dt: 1/60, substeps: 20 });
+const world = new XPBD.World({ dt: 1/60, substeps: 20, linearDamping: 0.7 });
 const { bodies, particles, box, accel, omega, omegaDot } = world;
 
 /* ================= rendering ================= */
@@ -329,16 +329,16 @@ function initScene(){
   world.clear();
 
   // Create XPBD cotton cloth (1.6m x 1.6m in 3m tall room)
-  // Fine 24x24 grid (576 particles) creates soft, natural curved catenary draping rather than angular paper creases
+  // Fine 24x24 grid (576 particles) with zero 2-hop bending stiffness so it folds, settles, and drapes like soft fabric
   const nx = 24, ny = 24;
   activeCloth = world.addCloth({
     nx, ny,
     width: 1.6, height: 1.6,
     center: new V(0, box.hy * 0.35, -box.d * 0.5),
     mass: 1.6,
-    compliance: 0,
-    shearCompliance: 0.0001,
-    bendCompliance: 0.015,
+    compliance: 0,            // Inextensible cotton warp & weft threads
+    shearCompliance: 0.02,    // Soft diagonal weave shear drape (natural fabric folds)
+    bendCompliance: 0,        // 0 = no stiff paper-like 2-hop spring-back (prevents curling)
     pinnedCorners: pinsActive ? [0, nx - 1] : []
   });
 
