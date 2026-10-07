@@ -17,8 +17,10 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
 ├── src/
 │   └── xpbd.js         # Core XPBD physics engine (Müller et al.)
 └── tests/
-    └── test1/
-        └── index.html  # Test 1: Cube Box (mobile XPBD rigid bodies)
+    ├── test1/
+    │   └── index.html  # Test 1: Cube Box (mobile XPBD rigid bodies)
+    └── test2/
+        └── index.html  # Test 2: Cloth Simulation (compliant XPBD cloth)
 ```
 
 The core physics engine lives in `src/xpbd.js` without DOM or rendering dependencies. It exports `XPBD` (and alias `CubePhysics`) to the global scope (`window`/`globalThis`) and to CommonJS (`module.exports`).
@@ -34,14 +36,17 @@ Do not upgrade three.js casually. The code uses r128-era APIs such as `renderer.
 ## Core Physics Engine (`src/xpbd.js`)
 
 XPBD rigid bodies with no DOM or rendering code, based on Müller et al., "Detailed Rigid Body Simulation with Extended Position Based Dynamics".
-- `World` holds `bodies`, `box`, `accel` (apparent acceleration felt inside the box), and `omega` / `omegaDot` (device rotation rate and angular acceleration). Methods: `setBox()`, `addCube()`, `clear()`, `crowded()`, and `step()`.
+- `World` holds `bodies`, `particles`, `constraints`, `cloths`, `box`, `accel` (apparent acceleration felt inside the box), and `omega` / `omegaDot` (device rotation rate and angular acceleration). Methods: `setBox()`, `addCube()`, `addCloth()`, `addParticle()`, `addDistanceConstraint()`, `clear()`, `crowded()`, and `step()`.
 - `step()` runs one fixed `dt` frame split into `substeps`:
-  1. **Integrate** gravity/shake plus fictitious forces (Euler, centrifugal, Coriolis).
-  2. **Collide.** Cube corners are tested against the six walls. Cube–cube uses a separating-axis test with a contact manifold (`collideBoxes`). Face contacts clip the incident face against the reference face (up to 8 points). Edge axes are used only when strictly better than a face axis to prevent normal flips. Contacts within `contactMargin` are collected and solved only if penetrating.
-  3. **Position solve.** `positionIterations` normal sweeps run first, then static friction, then a normal cleanup sweep. Depenetration is capped at `maxPushSpeed`.
-  4. **Derive velocities** from position changes.
-  5. **Velocity solve.** `velocityIterations` interleaved sweeps apply dynamic friction (accumulated impulse clamped to μ·λ/h) and restitution (disabled for slow contacts).
-  6. **Damping** and speed/spin clamps.
+  1. **Integrate** rigid bodies and particles (gravity/shake plus fictitious Euler, centrifugal, and Coriolis forces).
+  2. **Solve particle constraints** using exact XPBD compliance ($\Delta \lambda = (-C - \tilde{\alpha}\lambda) / (\sum w + \tilde{\alpha})$ with $\tilde{\alpha} = \alpha / h^2$).
+  3. **Particle collisions** against the 6 box walls and against rigid cubes.
+  4. **Derive particle velocities** and apply linear damping.
+  5. **Rigid body collision.** Cube corners are tested against the six walls. Cube–cube uses a separating-axis test with a contact manifold (`collideBoxes`). Face contacts clip the incident face against the reference face (up to 8 points). Edge axes are used only when strictly better than a face axis to prevent normal flips. Contacts within `contactMargin` are collected and solved only if penetrating.
+  6. **Position solve.** `positionIterations` normal sweeps run first, then static friction, then a normal cleanup sweep. Depenetration is capped at `maxPushSpeed`.
+  7. **Derive velocities** from position changes.
+  8. **Velocity solve.** `velocityIterations` interleaved sweeps apply dynamic friction (accumulated impulse clamped to μ·λ/h) and restitution (disabled for slow contacts).
+  9. **Damping** and speed/spin clamps.
 - Contacts sit in a pool and are swept in alternating order each substep to prevent resting creep.
 - All tunables live in `DEFAULTS`, overridden via `new World(opts)`.
 
@@ -52,6 +57,15 @@ XPBD rigid bodies with no DOM or rendering code, based on Müller et al., "Detai
 A mobile-first browser toy and test scene. The phone screen represents the front glass of a small box holding loose cubes. Tilting slides them under gravity, shaking rattles them, and twisting induces rotational inertia and fictitious forces. On desktop or when motion sensors are inactive, dragging tilts the box.
 - Loads `../../src/xpbd.js` for physics.
 - App script handles three.js scene, wall planes (`rebuildWallMeshes`), rounded cube meshes (`roundedCube`), DeviceMotion sensor integration, drag-to-tilt desktop fallback, and loop accumulator.
+
+### Test 2: Cloth Simulation (`tests/test2/index.html`)
+
+Interactive XPBD cloth sheet in the box.
+- Dynamic $15 \times 15$ grid of particles connected by structural, shear, and 2-hop bending compliant distance constraints.
+- Top corners pinned with visual pin markers; togglable via "Unpin / Pin Top" button.
+- Raycaster pointer interaction allows grabbing and dragging cloth vertices in real time.
+- Two-way interaction: dynamic rigid cubes can be spawned into the box, falling and colliding with the cloth fabric.
+- DeviceMotion accelerometer and gyroscope induce waves and wrinkles in the fabric through fictitious forces.
 
 ## Adding New Tests
 

@@ -54,6 +54,106 @@ class Body {
   toWorldPrev(l, out){ return out.copy(l).applyQuaternion(this.pq).add(this.px); }
 }
 
+class Particle {
+  constructor(x = 0, y = 0, z = 0, mass = 0.005, radius = 0.0015){
+    this.x = new V(x, y, z);
+    this.px = new V(x, y, z);
+    this.v = new V();
+    this.invM = mass > 0 ? 1/mass : 0; // 0 = pinned / infinite mass
+    this.radius = radius;
+  }
+}
+
+class DistanceConstraint {
+  constructor(p1, p2, compliance = 0, restLength = null){
+    this.p1 = p1;
+    this.p2 = p2;
+    this.compliance = compliance; // m/N (0 = rigid)
+    this.restLength = restLength !== null ? restLength : p1.x.distanceTo(p2.x);
+    this.lambda = 0;
+  }
+}
+
+class Cloth {
+  constructor({
+    nx = 14, ny = 14,
+    width = 0.045, height = 0.045,
+    center = new V(0, 0.015, -0.022),
+    mass = 0.015,
+    compliance = 0,           // stretch compliance
+    shearCompliance = 0.001,  // diagonal compliance
+    bendCompliance = 0.005,   // 2-hop bending compliance
+    pinnedCorners = [0, nx - 1]
+  } = {}){
+    this.nx = nx; this.ny = ny;
+    this.particles = [];
+    this.constraints = [];
+    this.pinned = new Set();
+    const particleMass = mass / (nx * ny);
+    const dx = width / (nx - 1);
+    const dy = height / (ny - 1);
+    const startX = center.x - width/2;
+    const startY = center.y + height/2;
+
+    for (let j = 0; j < ny; j++){
+      for (let i = 0; i < nx; i++){
+        const idx = j * nx + i;
+        const px = startX + i * dx;
+        const py = startY - j * dy;
+        const pz = center.z;
+        const isPinned = Array.isArray(pinnedCorners) && pinnedCorners.includes(idx);
+        const p = new Particle(px, py, pz, isPinned ? 0 : particleMass, Math.min(dx, dy)*0.25);
+        if (isPinned) this.pinned.add(idx);
+        this.particles.push(p);
+      }
+    }
+
+    const addC = (i1, i2, comp) => {
+      this.constraints.push(new DistanceConstraint(this.particles[i1], this.particles[i2], comp));
+    };
+
+    // Structural
+    for (let j = 0; j < ny; j++){
+      for (let i = 0; i < nx; i++){
+        const idx = j * nx + i;
+        if (i < nx - 1) addC(idx, idx + 1, compliance);
+        if (j < ny - 1) addC(idx, idx + nx, compliance);
+      }
+    }
+
+    // Shear
+    for (let j = 0; j < ny - 1; j++){
+      for (let i = 0; i < nx - 1; i++){
+        const idx = j * nx + i;
+        addC(idx, idx + nx + 1, shearCompliance);
+        addC(idx + 1, idx + nx, shearCompliance);
+      }
+    }
+
+    // Bending (2-hop)
+    for (let j = 0; j < ny; j++){
+      for (let i = 0; i < nx; i++){
+        const idx = j * nx + i;
+        if (i < nx - 2) addC(idx, idx + 2, bendCompliance);
+        if (j < ny - 2) addC(idx, idx + 2*nx, bendCompliance);
+      }
+    }
+  }
+
+  togglePin(idx, mass = 0.001){
+    if (idx < 0 || idx >= this.particles.length) return;
+    const p = this.particles[idx];
+    if (this.pinned.has(idx)){
+      this.pinned.delete(idx);
+      p.invM = 1 / mass;
+    } else {
+      this.pinned.add(idx);
+      p.invM = 0;
+      p.v.set(0, 0, 0);
+    }
+  }
+}
+
 // ---------- scratch vectors (hot path never allocates) ----------
 const t1 = new V(), t2 = new V(), t3 = new V(), tq = new Q();
 const P1 = new V(), P2 = new V(), P1p = new V(), P2p = new V();
@@ -338,6 +438,9 @@ class World {
   constructor(opts){
     Object.assign(this, DEFAULTS, opts);
     this.bodies = [];
+    this.particles = [];
+    this.constraints = [];
+    this.cloths = [];
     this.walls = [];
     this.box = { hx:0.035, hy:0.07, d:0.045 };   // half width, half height, depth (m)
     this.accel = new V(0, -9.81, 0);   // apparent acceleration felt inside the box
@@ -363,7 +466,29 @@ class World {
     this.bodies.push(b);
     return b;
   }
-  clear(){ this.bodies.length = 0; }
+  addCloth(opts){
+    const c = new Cloth(opts);
+    this.cloths.push(c);
+    this.particles.push(...c.particles);
+    this.constraints.push(...c.constraints);
+    return c;
+  }
+  addParticle(x, y, z, mass, radius){
+    const p = new Particle(x, y, z, mass, radius);
+    this.particles.push(p);
+    return p;
+  }
+  addDistanceConstraint(p1, p2, compliance, restLength){
+    const c = new DistanceConstraint(p1, p2, compliance, restLength);
+    this.constraints.push(c);
+    return c;
+  }
+  clear(){
+    this.bodies.length = 0;
+    this.particles.length = 0;
+    this.constraints.length = 0;
+    this.cloths.length = 0;
+  }
   // true if a cube of this size at pos overlaps an existing cube's bounding sphere
   crowded(pos, size){
     for (const b of this.bodies){
@@ -378,10 +503,10 @@ class World {
     const gmag = Math.max(this.accel.length(), 1);
     const maxPush = this.maxPushSpeed*h;
     const linK = Math.max(0, 1 - this.linearDamping*h), angK = Math.max(0, 1 - this.angularDamping*h);
-    const { bodies, omega, omegaDot, accel, center } = this;
+    const { bodies, particles, constraints, walls, omega, omegaDot, accel, center } = this;
 
     for (let s = 0; s < this.substeps; s++){
-      // integrate: gravity/shake plus fictitious forces from the rotating frame
+      // 1. integrate rigid bodies
       for (const b of bodies){
         b.px.copy(b.x); b.pq.copy(b.q);
         t1.subVectors(b.x, center);
@@ -397,7 +522,73 @@ class World {
         b.sync();
       }
 
-      // collide
+      // 2. integrate particles (gravity, shake, and fictitious forces)
+      for (const p of particles){
+        if (p.invM === 0) continue;
+        p.px.copy(p.x);
+        t1.subVectors(p.x, center);
+        t2.crossVectors(omegaDot, t1);                            // Euler
+        t3.crossVectors(omega, t1); t3.crossVectors(omega, t3);   // centrifugal
+        p.v.addScaledVector(accel, h).addScaledVector(t2, -h).addScaledVector(t3, -h);
+        t2.crossVectors(omega, p.v); p.v.addScaledVector(t2, -2*h);  // Coriolis
+        p.x.addScaledVector(p.v, h);
+      }
+
+      // 3. solve particle constraints (XPBD compliance)
+      for (const c of constraints) c.lambda = 0;
+      for (let it = 0; it < this.positionIterations; it++){
+        for (const c of constraints){
+          const p1 = c.p1, p2 = c.p2;
+          const w1 = p1.invM, w2 = p2.invM;
+          const wSum = w1 + w2;
+          if (wSum <= 0) continue;
+          t1.subVectors(p1.x, p2.x);
+          const len = t1.length();
+          if (len < 1e-9) continue;
+          const C = len - c.restLength;
+          const alphaTilde = c.compliance / (h * h);
+          const dLambda = (-C - alphaTilde * c.lambda) / (wSum + alphaTilde);
+          c.lambda += dLambda;
+          t1.multiplyScalar(dLambda / len);
+          if (w1 > 0) p1.x.addScaledVector(t1, w1);
+          if (w2 > 0) p2.x.addScaledVector(t1, -w2);
+        }
+      }
+
+      // 4. particle collisions (walls & rigid bodies)
+      for (const p of particles){
+        if (p.invM === 0) continue;
+        // wall collision
+        for (const w of walls){
+          const pen = (w.o + p.radius) - w.n.dot(p.x);
+          if (pen > 0) p.x.addScaledVector(w.n, pen);
+        }
+        // cube collision
+        for (const b of bodies){
+          if (p.x.distanceToSquared(b.x) > (b.h * SQRT3 + p.radius)**2) continue;
+          b.toLocal(p.x, t1);
+          const bh = b.h + p.radius;
+          if (Math.abs(t1.x) < bh && Math.abs(t1.y) < bh && Math.abs(t1.z) < bh){
+            const dx = bh - Math.abs(t1.x);
+            const dy = bh - Math.abs(t1.y);
+            const dz = bh - Math.abs(t1.z);
+            if (dx < dy && dx < dz) t1.x = t1.x > 0 ? bh : -bh;
+            else if (dy < dz) t1.y = t1.y > 0 ? bh : -bh;
+            else t1.z = t1.z > 0 ? bh : -bh;
+            b.toWorld(t1, p.x);
+          }
+        }
+      }
+
+      // 5. update particle velocities
+      for (const p of particles){
+        if (p.invM === 0){ p.v.set(0, 0, 0); continue; }
+        p.v.subVectors(p.x, p.px).divideScalar(h);
+        p.v.multiplyScalar(linK);
+        if (p.v.lengthSq() > this.maxSpeed*this.maxSpeed) p.v.setLength(this.maxSpeed);
+      }
+
+      // 6. collide rigid bodies
       nContacts = 0;
       margin = this.contactMargin;
       for (const b of bodies) collideWalls(b, this.walls);
@@ -406,7 +597,7 @@ class World {
 
       solvePositions.call(this, h, maxPush, this.positionIterations);
 
-      // velocities from position change
+      // 7. rigid body velocities from position change
       for (const b of bodies){
         b.v.subVectors(b.x, b.px).divideScalar(h);
         tq.copy(b.pq).conjugate().premultiply(b.q);
@@ -426,7 +617,7 @@ class World {
   }
 }
 
-const CubePhysics = { World, Body, DEFAULTS };
+const CubePhysics = { World, Body, Particle, DistanceConstraint, Cloth, DEFAULTS };
 
 // Export
 global.CubePhysics = CubePhysics;
