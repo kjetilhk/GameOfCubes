@@ -62,17 +62,32 @@ renderer.outputEncoding = THREE.sRGBEncoding;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(38, 1, 0.002, 2);
-scene.add(new THREE.HemisphereLight(0xfff4e0, 0x37475a, 0.65));
-const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-sun.castShadow = true;
-sun.shadow.mapSize.set(1024,1024);
-sun.shadow.bias = -0.0004;
-const sc = sun.shadow.camera; sc.left=-.15; sc.right=.15; sc.top=.15; sc.bottom=-.15; sc.near=.01; sc.far=1;
-scene.add(sun, sun.target);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 50);
 
-const wallMat = new THREE.MeshStandardMaterial({ color:0x8fa3b5, roughness:.95 });
-const backMat = new THREE.MeshStandardMaterial({ color:0x9fb3c4, roughness:.95 });
+// Fine 3-point lighting
+const hemiLight = new THREE.HemisphereLight(0x404856, 0x15181e, 0.45);
+scene.add(hemiLight);
+
+// 1. Key Light (primary high-right warm light casting crisp soft shadows)
+const keyLight = new THREE.DirectionalLight(0xfff6ea, 1.15);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.bias = -0.0003;
+const sc = keyLight.shadow.camera; sc.left=-3; sc.right=3; sc.top=3; sc.bottom=-3; sc.near=0.1; sc.far=15;
+scene.add(keyLight, keyLight.target);
+
+// 2. Fill Light (softer cool light from left to soften shadows)
+const fillLight = new THREE.DirectionalLight(0xcde0f8, 0.45);
+scene.add(fillLight);
+
+// 3. Rim / Back Light (behind and above pointing toward camera for edge specular contour)
+const rimLight = new THREE.DirectionalLight(0xffffff, 0.65);
+scene.add(rimLight, rimLight.target);
+
+// Dark gray room materials
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x242830, roughness: 0.88, metalness: 0.05 });
+const backMat = new THREE.MeshStandardMaterial({ color: 0x1b1f25, roughness: 0.92, metalness: 0.04 });
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.82, metalness: 0.08 });
 let wallGroup = new THREE.Group(); scene.add(wallGroup);
 
 function rebuildWallMeshes(){
@@ -85,8 +100,8 @@ function rebuildWallMeshes(){
   mk(2*hx, 2*hy, backMat, new V(0,0,-d), [0,0,0]);
   mk(d, 2*hy, wallMat, new V(-hx,0,-d/2), [0, Math.PI/2, 0]);
   mk(d, 2*hy, wallMat, new V( hx,0,-d/2), [0,-Math.PI/2, 0]);
-  mk(2*hx, d, wallMat, new V(0,-hy,-d/2), [-Math.PI/2,0,0]);
-  mk(2*hx, d, wallMat, new V(0, hy,-d/2), [ Math.PI/2,0,0]);
+  mk(2*hx, d, floorMat, new V(0,-hy,-d/2), [-Math.PI/2,0,0]); // dark floor
+  mk(2*hx, d, wallMat, new V(0, hy,-d/2), [ Math.PI/2,0,0]);  // ceiling
   scene.add(wallGroup);
 }
 
@@ -106,18 +121,18 @@ const PALETTE = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x4fbf9f, 0xf3efe6, 0x7a5cc4, 0xf
 const meshes = [];
 
 function addCube(){
-  const s = 0.009 + Math.random()*0.005;
-  // look for a free spot so new cubes don't start inside each other
+  // Room scale: 35 cm to 50 cm cubes in a 3-meter tall room
+  const s = 0.36 + Math.random()*0.14;
   const pos = new V();
   for (let tries = 0; tries < 20; tries++){
-    pos.set((Math.random()-.5)*2*(box.hx - s), box.hy*(0.8*Math.random() - 0.1), -box.d/2);
+    pos.set((Math.random()-.5)*2*(box.hx - s*0.8), box.hy*(0.6*Math.random() - 0.1), -box.d*0.5);
     if (!world.crowded(pos, s)) break;
   }
   world.addCube(s, pos,
     new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
-    new V((Math.random()-.5)*.3, 0, 0));
-  const m = new THREE.Mesh(roundedCube(s, s*0.14, 4),
-    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness:.4 }));
+    new V((Math.random()-.5)*0.8, 0, 0));
+  const m = new THREE.Mesh(roundedCube(s, s*0.12, 4),
+    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness:.38 }));
   m.castShadow = m.receiveShadow = true;
   scene.add(m); meshes.push(m);
 }
@@ -131,16 +146,25 @@ function resize(){
   const W = innerWidth, H = innerHeight, aspect = W/H;
   renderer.setSize(W, H, false);
   camera.aspect = aspect;
-  // physical-ish box: short side ≈ 7 cm
-  const short = 0.035;
-  if (aspect < 1) world.setBox(short, short/aspect, 0.045);
-  else world.setBox(short*aspect, short, 0.045);
+  // Room is exactly 3.0 meters tall
+  const roomHeight = 3.0;
+  const hy = roomHeight / 2; // 1.5 m
+  const hx = hy * aspect;
+  const roomDepth = 2.4;
+  world.setBox(hx, hy, roomDepth);
   rebuildWallMeshes();
+
   const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
   const dist = Math.max(box.hy/tanH, box.hx/(tanH*aspect));
-  camera.position.set(0,0,dist); camera.lookAt(0,0,0);
+  camera.position.set(0,0,dist); camera.lookAt(0,0,-box.d*0.3);
   camera.updateProjectionMatrix();
-  sun.position.set(box.hx*0.6, box.hy*1.2, 0.25); sun.target.position.set(0,0,-box.d);
+
+  // Fine 3-point light adjustment
+  keyLight.position.set(box.hx*0.85, box.hy*1.3, 1.8);
+  keyLight.target.position.set(0, 0, -box.d*0.5);
+  fillLight.position.set(-box.hx*1.2, -box.hy*0.2, 1.5);
+  rimLight.position.set(0, box.hy*1.4, -box.d*1.2);
+  rimLight.target.position.set(0, -box.hy*0.2, -box.d*0.4);
 }
 addEventListener('resize', resize);
 resize();
@@ -229,8 +253,8 @@ document.getElementById('add').addEventListener('click', () => { if (bodies.leng
 document.getElementById('reset').addEventListener('click', reset);
 document.getElementById('shake').addEventListener('click', () => {
   for (const b of bodies){
-    b.v.add(new V((Math.random()-.5)*1.2, Math.random()*1.0, (Math.random()-.3)*0.6));
-    b.w.add(new V((Math.random()-.5)*60, (Math.random()-.5)*60, (Math.random()-.5)*60));
+    b.v.add(new V((Math.random()-.5)*4, Math.random()*3.5, (Math.random()-.3)*2.5));
+    b.w.add(new V((Math.random()-.5)*15, (Math.random()-.5)*15, (Math.random()-.5)*15));
   }
 });
 

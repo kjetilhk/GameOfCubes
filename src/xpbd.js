@@ -26,10 +26,10 @@ const DEFAULTS = {
   density: 700,                 // kg/m³, about wood
   linearDamping: 0.3,           // 1/s
   angularDamping: 1.0,          // 1/s
-  maxSpeed: 4,                  // m/s, guards against sensor spikes
+  maxSpeed: 25,                 // m/s, room-scale speed guard
   maxSpin: 250,                 // rad/s
-  maxPushSpeed: 1.5,            // m/s, cap on depenetration per substep
-  contactMargin: 0.001          // m: near contacts are collected, solved only if penetrating
+  maxPushSpeed: 5.0,            // m/s, depenetration per substep cap
+  contactMargin: 0.005          // m: near contacts collection margin
 };
 
 class Body {
@@ -621,7 +621,7 @@ class World {
     this.cloths = [];
     this.tetMeshes = [];
     this.walls = [];
-    this.box = { hx:0.035, hy:0.07, d:0.045 };   // half width, half height, depth (m)
+    this.box = { hx:1.0, hy:1.5, d:2.2 };   // 3 meters tall (hy = 1.5m), 2.2m depth
     this.accel = new V(0, -9.81, 0);   // apparent acceleration felt inside the box
     this.omega = new V();              // phone angular velocity
     this.omegaDot = new V();           // phone angular acceleration

@@ -90,12 +90,26 @@ When adding new tests:
 
 ## Conventions and Invariants
 
-- **Units are SI**: meters, kilograms, seconds. In Test 1, the box's short side is ~7 cm and depth is 4.5 cm. Cubes are 9–14 mm.
+- **Units are SI**: meters, kilograms, seconds.
+- **Room Dimensions**: The test room is **3.0 meters tall** across all tests (`roomHeight = 3.0` m, half-height `hy = 1.5` m, depth `d = 2.4` m). Horizontal half-width is derived from aspect ratio (`hx = hy * aspect`) so the room fits vertically on screen at true 3m scale.
+- **Lighting**: Studio **3-point lighting** with dark room ambiance:
+  - **Key Light**: High-right warm directional light (`0xfff6ea`, intensity 1.15) with soft PCF shadow mapping (2048×2048 map, bounds `[-3, 3]`, near 0.1, far 15).
+  - **Fill Light**: Softer cool directional light (`0xcde0f8`, intensity 0.45) from the left to soften shadows.
+  - **Rim / Back Light**: High-rear directional light (`0xffffff`, intensity 0.65) oriented toward the camera for crisp edge highlights.
+  - **Hemisphere Light**: Subtle fill (`0x404856` / `0x15181e`, intensity 0.45) for dark ambiance.
+- **Dark Gray Walls Palette**:
+  - Walls and ceiling: `0x242830` (roughness 0.88, metalness 0.05).
+  - Back wall: `0x1b1f25` (roughness 0.92, metalness 0.04).
+  - Floor: `0x16191f` (roughness 0.82, metalness 0.08).
+- **Object Scales (calibrated to 3m room)**:
+  - Test 1 rigid cubes: 36–50 cm (`s = 0.36 + Math.random()*0.14`).
+  - Test 2 cloth: 1.6 m × 1.6 m sheet, mass 1.5 kg, pin radius 0.04 m, dropped cubes 38 cm.
+  - Test 3 soft body: 0.85 m × 0.85 m × 0.85 m volumetric tetrahedral cube, mass 25 kg, dropped cubes 38 cm.
 - **Coordinates are screen space**: x right, y up, z out of the glass toward the viewer. The box spans z from `-box.d` (back) to `0` (glass).
 - Contact normals point from body `b` (or a wall) toward body `a`.
 - Walls are `{n, o}` with inward normal; a point is inside when `n·p >= o`. Change them only through `world.setBox()`, which `resize()` calls.
 - `world.bodies[i]` and `meshes[i]` are parallel arrays. Always add or remove them together, as `addCube()` and `reset()` do.
-- In the hot path, reuse module-level scratch vectors and the contact pool instead of allocating. Pair detection is O(n²) with a bounding-sphere early-out. The cube count is capped at 30 and defaults/resets to 3.
+- In the hot path, reuse module-level scratch vectors and the contact pool instead of allocating. Pair detection is O(n²) with a bounding-sphere early-out.
 - Layout must stay mobile-safe: keep the `viewport-fit=cover` meta tag, safe-area padding (`env(safe-area-inset-*)`), `touch-action: none`, and light/dark color tokens on `:root`.
 - Match existing style: compact, 2-space indentation, short names, and comments only where physics math is non-obvious.
 
