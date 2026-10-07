@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Test 3: Soft Body Simulation (Tet Mesh) — XPBD Dynamics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#2b3a4a; --ink:#f3efe6; --muted:#b9c4cf; --panel:rgba(20,28,38,.72); --btn:#f2b632; --btn-ink:#1d2632;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1b2530; --panel:rgba(10,14,20,.78); } }
+:root[data-theme="dark"]{ --bg:#1b2530; --panel:rgba(10,14,20,.78); }
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+html,body{margin:0;overflow:hidden;background:var(--bg);touch-action:none;overscroll-behavior:none}
+body{height:100%;font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none}
+canvas{position:fixed;inset:0;display:block;width:100%;height:100%}
+#intro{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(18,26,35,.55);z-index:5}
+#intro .card{max-width:22rem;background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:22px;padding:26px 24px 22px}
+#intro h1{font-size:2.2rem;line-height:1.05;margin:0 0 .6rem;font-weight:700;letter-spacing:-.02em}
+#intro p{margin:0 0 1.2rem;color:var(--muted);line-height:1.45;font-size:1rem}
+button, a{font:inherit;border:0;cursor:pointer}
+button:focus-visible, a:focus-visible{outline:3px solid #fff;outline-offset:3px}
+#go{background:var(--btn);color:var(--btn-ink);font-weight:700;font-size:1.1rem;padding:.8rem 1.4rem;border-radius:999px;width:100%}
+#hud{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 12px;z-index:4;pointer-events:none}
+#hud a, #hud button{pointer-events:auto;background:var(--panel);color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:.55rem 1rem;border-radius:999px;font-size:.92rem}
+#hud button.hidden{display:none}
+#note{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--panel);padding:.45rem .9rem;border-radius:999px;font-size:.85rem;color:var(--muted);z-index:4;max-width:90%;text-align:center;opacity:0;transition:opacity .4s}
+#note.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="intro"><div class="card">
+  <h1>Test 3: Soft Body</h1>
+  <p>Volumetric XPBD Tetrahedral Mesh with exact volume conservation. Tilt to squash against walls, shake to wobble, drag to poke and stretch, or drop rigid cubes onto it.</p>
+  <button id="go">Start</button>
+</div></div>
+<div id="note"></div>
+<div id="hud">
+  <a id="back" href="../../">← Tests</a>
+  <button id="stiff">Softer</button>
+  <button id="wire">Wireframe</button>
+  <button id="cube">Add Cube</button>
+  <button id="shake" class="hidden">Shake</button>
+  <button id="reset">Reset</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="../../src/xpbd.js"></script>
+<script>
+(() => {
+const V = THREE.Vector3, Q = THREE.Quaternion;
+const world = new XPBD.World({ dt: 1/60, substeps: 20 });
+const { bodies, particles, box, accel, omega, omegaDot } = world;
+
+/* ================= rendering ================= */
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 0.002, 2);
+scene.add(new THREE.HemisphereLight(0xfff4e0, 0x37475a, 0.75));
+const sun = new THREE.DirectionalLight(0xffffff, 0.95);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.bias = -0.0004;
+const sc = sun.shadow.camera; sc.left=-.15; sc.right=.15; sc.top=.15; sc.bottom=-.15; sc.near=.01; sc.far=1;
+scene.add(sun, sun.target);
+
+const wallMat = new THREE.MeshStandardMaterial({ color:0x8fa3b5, roughness:.95 });
+const backMat = new THREE.MeshStandardMaterial({ color:0x9fb3c4, roughness:.95 });
+let wallGroup = new THREE.Group(); scene.add(wallGroup);
+
+function rebuildWallMeshes(){
+  scene.remove(wallGroup); wallGroup = new THREE.Group();
+  const {hx,hy,d} = box;
+  const mk = (w,hh,mat,pos,rot) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w,hh), mat);
+    m.position.copy(pos); m.rotation.set(...rot); m.receiveShadow = true; wallGroup.add(m);
+  };
+  mk(2*hx, 2*hy, backMat, new V(0,0,-d), [0,0,0]);
+  mk(d, 2*hy, wallMat, new V(-hx,0,-d/2), [0, Math.PI/2, 0]);
+  mk(d, 2*hy, wallMat, new V( hx,0,-d/2), [0,-Math.PI/2, 0]);
+  mk(2*hx, d, wallMat, new V(0,-hy,-d/2), [-Math.PI/2,0,0]);
+  mk(2*hx, d, wallMat, new V(0, hy,-d/2), [ Math.PI/2,0,0]);
+  scene.add(wallGroup);
+}
+
+/* ================= tet mesh visual ================= */
+let activeTetMesh = null;
+let tetVisualMesh = null;
+let showWire = false;
+let softMode = false;
+
+function buildTetVisualMesh(tm){
+  if (tetVisualMesh) { scene.remove(tetVisualMesh); tetVisualMesh.geometry.dispose(); }
+
+  const geom = new THREE.BufferGeometry();
+  const posArr = new Float32Array(tm.particles.length * 3);
+  geom.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  geom.setIndex(tm.surfaceIndices);
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x4fbf9f,
+    roughness: 0.25,
+    metalness: 0.1,
+    wireframe: showWire
+  });
+
+  tetVisualMesh = new THREE.Mesh(geom, mat);
+  tetVisualMesh.castShadow = true;
+  tetVisualMesh.receiveShadow = true;
+  scene.add(tetVisualMesh);
+}
+
+function syncTetVisualMesh(){
+  if (!activeTetMesh || !tetVisualMesh) return;
+  const posAttr = tetVisualMesh.geometry.attributes.position;
+  const arr = posAttr.array;
+  const parts = activeTetMesh.particles;
+  for (let i = 0; i < parts.length; i++){
+    const p = parts[i].x;
+    arr[i*3] = p.x;
+    arr[i*3 + 1] = p.y;
+    arr[i*3 + 2] = p.z;
+  }
+  posAttr.needsUpdate = true;
+  tetVisualMesh.geometry.computeVertexNormals();
+}
+
+/* ================= rigid cubes ================= */
+function roundedCube(s, r, seg){
+  const g = new THREE.BoxGeometry(s,s,s,seg,seg,seg);
+  const p = g.attributes.position, nrm = g.attributes.normal;
+  const v = new V(), c = new V(), k = s/2 - r;
+  for (let i=0;i<p.count;i++){
+    v.fromBufferAttribute(p,i);
+    c.set(THREE.MathUtils.clamp(v.x,-k,k), THREE.MathUtils.clamp(v.y,-k,k), THREE.MathUtils.clamp(v.z,-k,k));
+    v.sub(c).normalize(); nrm.setXYZ(i, v.x, v.y, v.z);
+    v.multiplyScalar(r).add(c); p.setXYZ(i, v.x, v.y, v.z);
+  }
+  return g;
+}
+const PALETTE = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x7a5cc4];
+const cubeMeshes = [];
+
+function addCube(){
+  if (bodies.length >= 8) return;
+  const s = 0.012;
+  const pos = new V((Math.random()-.5)*box.hx*0.6, box.hy*0.7, -box.d*0.5);
+  world.addCube(s, pos,
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
+    new V((Math.random()-.5)*0.2, 0, 0));
+  const m = new THREE.Mesh(roundedCube(s, s*0.14, 4),
+    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness:.4 }));
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m); cubeMeshes.push(m);
+}
+
+/* ================= scene init ================= */
+function initScene(){
+  for (const m of cubeMeshes){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+  cubeMeshes.length = 0;
+  world.clear();
+
+  // Create XPBD Tetrahedral Mesh (3x3x3 grid = 27 particles, 40 tets, 90 edges)
+  activeTetMesh = world.addTetMesh({
+    nx: 3, ny: 3, nz: 3,
+    sizeX: 0.024, sizeY: 0.024, sizeZ: 0.024,
+    center: new V(0, box.hy * 0.25, -box.d * 0.5),
+    mass: 0.03,
+    edgeCompliance: softMode ? 0.0006 : 0.00008, // elastic stiffness
+    volCompliance: 0                             // 0 = exact incompressibility
+  });
+
+  buildTetVisualMesh(activeTetMesh);
+}
+
+function resize(){
+  const W = innerWidth, H = innerHeight, aspect = W/H;
+  renderer.setSize(W, H, false);
+  camera.aspect = aspect;
+  const short = 0.035;
+  if (aspect < 1) world.setBox(short, short/aspect, 0.045);
+  else world.setBox(short*aspect, short, 0.045);
+  rebuildWallMeshes();
+  const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+  const dist = Math.max(box.hy/tanH, box.hx/(tanH*aspect));
+  camera.position.set(0,0,dist); camera.lookAt(0,0,0);
+  camera.updateProjectionMatrix();
+  sun.position.set(box.hx*0.6, box.hy*1.2, 0.25); sun.target.position.set(0,0,-box.d);
+}
+addEventListener('resize', resize);
+resize();
+initScene();
+
+/* ================= input ================= */
+function screenAngle(){
+  if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
+  return typeof window.orientation === 'number' ? window.orientation : 0;
+}
+function toScreen(x, y, z, out){
+  const a = THREE.MathUtils.degToRad(screenAngle()), c=Math.cos(a), s=Math.sin(a);
+  return out.set(x*c - y*s, x*s + y*c, z);
+}
+let gotMotion = false, lastT = 0;
+const prevOmega = new V(), tmpO = new V(), rawA = new V(), dO = new V();
+function onMotion(e){
+  const g = e.accelerationIncludingGravity;
+  if (!g || g.x == null) return;
+  gotMotion = true;
+  toScreen(-g.x, -g.y, -g.z, rawA);
+  const L = rawA.length(); if (L > 80) rawA.multiplyScalar(80/L);
+  accel.copy(rawA);
+  const r = e.rotationRate;
+  if (r && r.alpha != null){
+    const k = Math.PI/180;
+    toScreen(r.beta*k, r.gamma*k, r.alpha*k, tmpO);
+    const now = performance.now()/1000, dt = lastT ? Math.min(Math.max(now-lastT, 0.005), 0.1) : 0;
+    lastT = now;
+    omega.lerp(tmpO, 0.6);
+    if (dt){
+      dO.copy(omega).sub(prevOmega).divideScalar(dt);
+      if (dO.length() > 200) dO.setLength(200);
+      omegaDot.lerp(dO, 0.35);
+    }
+    prevOmega.copy(omega);
+  }
+}
+
+const note = document.getElementById('note');
+function showNote(text, ms){
+  note.textContent = text; note.classList.add('show');
+  clearTimeout(showNote.t); if (ms) showNote.t = setTimeout(()=>note.classList.remove('show'), ms);
+}
+
+// Drag / grab interactions
+let tiltX = 0, tiltY = 0, dragging = false, lx = 0, ly = 0;
+let grabbedParticle = null, grabbedOrigInvM = 0;
+const raycaster = new THREE.Raycaster();
+const mouseVec = new THREE.Vector2();
+const planeZ = new THREE.Plane(new V(0,0,1), box.d/2);
+const hitPoint = new V();
+
+function dragGravity(){
+  const g = 9.81;
+  accel.set(Math.sin(tiltX)*Math.cos(tiltY)*g, -Math.cos(tiltX)*Math.cos(tiltY)*g, -Math.sin(tiltY)*g);
+}
+
+renderer.domElement.addEventListener('pointerdown', e => {
+  dragging = true; lx = e.clientX; ly = e.clientY;
+  mouseVec.x = (e.clientX / innerWidth) * 2 - 1;
+  mouseVec.y = -(e.clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouseVec, camera);
+
+  // Check if pointer hit tet mesh
+  if (activeTetMesh) {
+    let closestP = null, minD = 0.012;
+    for (const p of activeTetMesh.particles){
+      const dist = raycaster.ray.distanceToPoint(p.x);
+      if (dist < minD){ minD = dist; closestP = p; }
+    }
+    if (closestP) {
+      grabbedParticle = closestP;
+      grabbedOrigInvM = closestP.invM;
+      closestP.invM = 0;
+    }
+  }
+});
+
+addEventListener('pointerup', () => {
+  dragging = false;
+  if (grabbedParticle) {
+    grabbedParticle.invM = grabbedOrigInvM;
+    grabbedParticle = null;
+  }
+});
+
+addEventListener('pointermove', e => {
+  if (!dragging) return;
+  mouseVec.x = (e.clientX / innerWidth) * 2 - 1;
+  mouseVec.y = -(e.clientY / innerHeight) * 2 + 1;
+
+  if (grabbedParticle) {
+    raycaster.setFromCamera(mouseVec, camera);
+    planeZ.constant = -grabbedParticle.x.z;
+    if (raycaster.ray.intersectPlane(planeZ, hitPoint)){
+      grabbedParticle.x.copy(hitPoint);
+      grabbedParticle.px.copy(hitPoint);
+      grabbedParticle.v.set(0, 0, 0);
+    }
+    return;
+  }
+
+  if (gotMotion) return;
+  tiltX = THREE.MathUtils.clamp(tiltX + (e.clientX-lx)*0.008, -1.5, 1.5);
+  tiltY = THREE.MathUtils.clamp(tiltY + (e.clientY-ly)*0.008, -1.5, 1.5);
+  lx = e.clientX; ly = e.clientY;
+  dragGravity();
+});
+
+let denied = false;
+document.getElementById('go').addEventListener('click', async () => {
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res !== 'granted') throw new Error('denied');
+    }
+    addEventListener('devicemotion', onMotion);
+  } catch(err){ denied = true; }
+  document.getElementById('intro').remove();
+  setTimeout(() => {
+    if (!gotMotion){
+      document.getElementById('shake').classList.remove('hidden');
+      let embedded = false; try { embedded = window.self !== window.top; } catch(e){ embedded = true; }
+      const msg = denied ? 'Motion access denied. Drag to stretch soft body or tilt box.'
+        : embedded ? 'Viewer blocks motion sensors. Drag to deform soft body or tilt box.'
+        : !isSecureContext ? 'Motion sensors require HTTPS. Drag to deform soft body or tilt box.'
+        : 'Drag soft body to poke & stretch, or drag background to tilt.';
+      showNote(msg, 6000);
+    }
+  }, 1200);
+});
+
+document.getElementById('stiff').addEventListener('click', () => {
+  softMode = !softMode;
+  document.getElementById('stiff').textContent = softMode ? 'Firmer' : 'Softer';
+  if (activeTetMesh){
+    const comp = softMode ? 0.0006 : 0.00008;
+    for (const c of activeTetMesh.edgeConstraints) c.compliance = comp;
+  }
+});
+
+document.getElementById('wire').addEventListener('click', () => {
+  showWire = !showWire;
+  if (tetVisualMesh) tetVisualMesh.material.wireframe = showWire;
+});
+
+document.getElementById('cube').addEventListener('click', addCube);
+document.getElementById('reset').addEventListener('click', initScene);
+document.getElementById('shake').addEventListener('click', () => {
+  for (const p of particles){
+    p.v.add(new V((Math.random()-.5)*1.8, Math.random()*1.4, (Math.random()-.5)*1.0));
+  }
+  for (const b of bodies){
+    b.v.add(new V((Math.random()-.5)*1.2, Math.random()*1.0, (Math.random()-.3)*0.6));
+    b.w.add(new V((Math.random()-.5)*60, (Math.random()-.5)*60, (Math.random()-.5)*60));
+  }
+});
+
+/* ================= animation loop ================= */
+let acc = 0, last = performance.now();
+function frame(now){
+  acc += Math.min((now-last)/1000, 0.1); last = now;
+  let n = 0;
+  while (acc >= world.dt && n < 3){ world.step(); acc -= world.dt; n++; }
+  if (n === 3) acc = 0;
+
+  syncTetVisualMesh();
+  for (let i=0; i<bodies.length; i++){
+    cubeMeshes[i].position.copy(bodies[i].x);
+    cubeMeshes[i].quaternion.copy(bodies[i].q);
+  }
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

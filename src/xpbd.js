@@ -154,10 +154,187 @@ class Cloth {
   }
 }
 
+class TetVolumeConstraint {
+  constructor(p1, p2, p3, p4, compliance = 0){
+    this.p1 = p1; this.p2 = p2; this.p3 = p3; this.p4 = p4;
+    this.compliance = compliance; // m^4 / N (0 = strictly incompressible)
+    this.lambda = 0;
+    // ensure initial orientation has positive volume
+    let v0 = this.calcV();
+    if (v0 < 0){
+      const tmp = this.p2; this.p2 = this.p3; this.p3 = tmp;
+      v0 = -v0;
+    }
+    this.restVolume = Math.max(v0, 1e-12);
+  }
+
+  calcV(){
+    const { p1, p2, p3, p4 } = this;
+    t1.subVectors(p2.x, p1.x);
+    t2.subVectors(p3.x, p1.x);
+    t3.subVectors(p4.x, p1.x);
+    return t4.crossVectors(t1, t2).dot(t3) / 6;
+  }
+}
+
+class TetMesh {
+  constructor({
+    nx = 3, ny = 3, nz = 3,
+    sizeX = 0.026, sizeY = 0.026, sizeZ = 0.026,
+    center = new V(0, 0.015, -0.022),
+    mass = 0.04,
+    edgeCompliance = 0.0001,
+    volCompliance = 0
+  } = {}){
+    this.nx = nx; this.ny = ny; this.nz = nz;
+    this.particles = [];
+    this.edgeConstraints = [];
+    this.volumeConstraints = [];
+    this.tets = [];
+    this.surfaceIndices = [];
+
+    const totalParticles = nx * ny * nz;
+    const pMass = mass / totalParticles;
+    const dx = sizeX / (nx - 1);
+    const dy = sizeY / (ny - 1);
+    const dz = sizeZ / (nz - 1);
+    const startX = center.x - sizeX/2;
+    const startY = center.y + sizeY/2;
+    const startZ = center.z - sizeZ/2;
+
+    const pIdx = (i, j, k) => (k * ny + j) * nx + i;
+
+    for (let k = 0; k < nz; k++){
+      for (let j = 0; j < ny; j++){
+        for (let i = 0; i < nx; i++){
+          const px = startX + i * dx;
+          const py = startY - j * dy;
+          const pz = startZ + k * dz;
+          const radius = Math.min(dx, dy, dz) * 0.28;
+          this.particles.push(new Particle(px, py, pz, pMass, radius));
+        }
+      }
+    }
+
+    // Subdivide hex cells into 5 tetrahedra with alternating diagonal orientation
+    for (let k = 0; k < nz - 1; k++){
+      for (let j = 0; j < ny - 1; j++){
+        for (let i = 0; i < nx - 1; i++){
+          const v0 = pIdx(i, j, k);
+          const v1 = pIdx(i+1, j, k);
+          const v2 = pIdx(i+1, j+1, k);
+          const v3 = pIdx(i, j+1, k);
+          const v4 = pIdx(i, j, k+1);
+          const v5 = pIdx(i+1, j, k+1);
+          const v6 = pIdx(i+1, j+1, k+1);
+          const v7 = pIdx(i, j+1, k+1);
+          if ((i + j + k) % 2 === 0){
+            this.tets.push([v0, v1, v3, v4]);
+            this.tets.push([v1, v2, v3, v6]);
+            this.tets.push([v1, v4, v5, v6]);
+            this.tets.push([v3, v4, v6, v7]);
+            this.tets.push([v1, v3, v4, v6]);
+          } else {
+            this.tets.push([v0, v1, v2, v5]);
+            this.tets.push([v0, v2, v3, v7]);
+            this.tets.push([v0, v4, v5, v7]);
+            this.tets.push([v2, v5, v6, v7]);
+            this.tets.push([v0, v2, v5, v7]);
+          }
+        }
+      }
+    }
+
+    // Unique edges -> DistanceConstraint
+    const edgeSet = new Set();
+    for (const [a, b, c, d] of this.tets){
+      const edges = [[a,b],[a,c],[a,d],[b,c],[b,d],[c,d]];
+      for (const [u, v] of edges){
+        const key = u < v ? u + ',' + v : v + ',' + u;
+        if (!edgeSet.has(key)){
+          edgeSet.add(key);
+          this.edgeConstraints.push(new DistanceConstraint(this.particles[u], this.particles[v], edgeCompliance));
+        }
+      }
+    }
+
+    // Tetrahedral volume preservation constraints
+    for (const [a, b, c, d] of this.tets){
+      this.volumeConstraints.push(new TetVolumeConstraint(
+        this.particles[a], this.particles[b], this.particles[c], this.particles[d], volCompliance
+      ));
+    }
+
+    // Boundary surface extraction
+    const faceMap = new Map();
+    for (const tet of this.tets){
+      const fList = [
+        [tet[0], tet[1], tet[2], tet[3]],
+        [tet[0], tet[1], tet[3], tet[2]],
+        [tet[0], tet[2], tet[3], tet[1]],
+        [tet[1], tet[2], tet[3], tet[0]]
+      ];
+      for (const [a, b, c, opp] of fList){
+        const key = [a, b, c].sort((x, y) => x - y).join(',');
+        if (!faceMap.has(key)) faceMap.set(key, { count: 0, a, b, c, opp });
+        faceMap.get(key).count++;
+      }
+    }
+
+    for (const [key, val] of faceMap){
+      if (val.count === 1){
+        const { a, b, c, opp } = val;
+        const pa = this.particles[a].x, pb = this.particles[b].x, pc = this.particles[c].x, popp = this.particles[opp].x;
+        t1.subVectors(pb, pa); t2.subVectors(pc, pa);
+        t3.crossVectors(t1, t2);
+        t4.subVectors(pa, popp);
+        if (t3.dot(t4) > 0){
+          this.surfaceIndices.push(a, b, c);
+        } else {
+          this.surfaceIndices.push(a, c, b);
+        }
+      }
+    }
+  }
+}
+
 // ---------- scratch vectors (hot path never allocates) ----------
-const t1 = new V(), t2 = new V(), t3 = new V(), tq = new Q();
+const t1 = new V(), t2 = new V(), t3 = new V(), t4 = new V(), tq = new Q();
+const g1 = new V(), g2 = new V(), g3 = new V(), g4 = new V();
 const P1 = new V(), P2 = new V(), P1p = new V(), P2p = new V();
 const r1 = new V(), r2 = new V(), dir = new V(), dp = new V(), va = new V(), dv = new V();
+
+function solveTetVolume(c, h){
+  const { p1, p2, p3, p4 } = c;
+  const w1 = p1.invM, w2 = p2.invM, w3 = p3.invM, w4 = p4.invM;
+  const wSum = w1 + w2 + w3 + w4;
+  if (wSum <= 0) return;
+
+  t1.subVectors(p2.x, p1.x);
+  t2.subVectors(p3.x, p1.x);
+  t3.subVectors(p4.x, p1.x);
+
+  t4.crossVectors(t1, t2);
+  const V = t4.dot(t3) / 6;
+  const C = V - c.restVolume;
+
+  g4.copy(t4).multiplyScalar(1/6);
+  g2.crossVectors(t2, t3).multiplyScalar(1/6);
+  g3.crossVectors(t3, t1).multiplyScalar(1/6);
+  g1.copy(g2).add(g3).add(g4).negate();
+
+  const denom = w1*g1.lengthSq() + w2*g2.lengthSq() + w3*g3.lengthSq() + w4*g4.lengthSq();
+  if (denom < 1e-15) return;
+
+  const alphaTilde = c.compliance / (h * h);
+  const dLambda = (-C - alphaTilde * c.lambda) / (denom + alphaTilde);
+  c.lambda += dLambda;
+
+  if (w1 > 0) p1.x.addScaledVector(g1, w1 * dLambda);
+  if (w2 > 0) p2.x.addScaledVector(g2, w2 * dLambda);
+  if (w3 > 0) p3.x.addScaledVector(g3, w3 * dLambda);
+  if (w4 > 0) p4.x.addScaledVector(g4, w4 * dLambda);
+}
 
 // ---------- generic position / velocity corrections ----------
 function genInvMass(b, r, n){
@@ -440,7 +617,9 @@ class World {
     this.bodies = [];
     this.particles = [];
     this.constraints = [];
+    this.volumeConstraints = [];
     this.cloths = [];
+    this.tetMeshes = [];
     this.walls = [];
     this.box = { hx:0.035, hy:0.07, d:0.045 };   // half width, half height, depth (m)
     this.accel = new V(0, -9.81, 0);   // apparent acceleration felt inside the box
@@ -473,6 +652,14 @@ class World {
     this.constraints.push(...c.constraints);
     return c;
   }
+  addTetMesh(opts){
+    const tm = new TetMesh(opts);
+    this.tetMeshes.push(tm);
+    this.particles.push(...tm.particles);
+    this.constraints.push(...tm.edgeConstraints);
+    this.volumeConstraints.push(...tm.volumeConstraints);
+    return tm;
+  }
   addParticle(x, y, z, mass, radius){
     const p = new Particle(x, y, z, mass, radius);
     this.particles.push(p);
@@ -487,7 +674,9 @@ class World {
     this.bodies.length = 0;
     this.particles.length = 0;
     this.constraints.length = 0;
+    this.volumeConstraints.length = 0;
     this.cloths.length = 0;
+    this.tetMeshes.length = 0;
   }
   // true if a cube of this size at pos overlaps an existing cube's bounding sphere
   crowded(pos, size){
@@ -503,7 +692,7 @@ class World {
     const gmag = Math.max(this.accel.length(), 1);
     const maxPush = this.maxPushSpeed*h;
     const linK = Math.max(0, 1 - this.linearDamping*h), angK = Math.max(0, 1 - this.angularDamping*h);
-    const { bodies, particles, constraints, walls, omega, omegaDot, accel, center } = this;
+    const { bodies, particles, constraints, volumeConstraints, walls, omega, omegaDot, accel, center } = this;
 
     for (let s = 0; s < this.substeps; s++){
       // 1. integrate rigid bodies
@@ -536,6 +725,7 @@ class World {
 
       // 3. solve particle constraints (XPBD compliance)
       for (const c of constraints) c.lambda = 0;
+      for (const c of volumeConstraints) c.lambda = 0;
       for (let it = 0; it < this.positionIterations; it++){
         for (const c of constraints){
           const p1 = c.p1, p2 = c.p2;
@@ -553,6 +743,7 @@ class World {
           if (w1 > 0) p1.x.addScaledVector(t1, w1);
           if (w2 > 0) p2.x.addScaledVector(t1, -w2);
         }
+        for (const c of volumeConstraints) solveTetVolume(c, h);
       }
 
       // 4. particle collisions (walls & rigid bodies)
@@ -617,7 +808,7 @@ class World {
   }
 }
 
-const CubePhysics = { World, Body, Particle, DistanceConstraint, Cloth, DEFAULTS };
+const CubePhysics = { World, Body, Particle, DistanceConstraint, Cloth, TetVolumeConstraint, TetMesh, DEFAULTS };
 
 // Export
 global.CubePhysics = CubePhysics;
