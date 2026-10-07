@@ -6,32 +6,7 @@
 <title>Test 2: Cloth Simulation - XPBD Dynamics</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
-<style>
-:root{
-  --bg:#2b3a4a; --ink:#f3efe6; --muted:#b9c4cf; --panel:rgba(20,28,38,.72); --btn:#f2b632; --btn-ink:#1d2632;
-  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
-}
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1b2530; --panel:rgba(10,14,20,.78); } }
-:root[data-theme="dark"]{ --bg:#1b2530; --panel:rgba(10,14,20,.78); }
-html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
-html,body{margin:0;overflow:hidden;background:var(--bg);touch-action:none;overscroll-behavior:none}
-body{height:100%;font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none}
-canvas{position:fixed;inset:0;display:block;width:100%;height:100%}
-#intro{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(18,26,35,.55);z-index:5}
-#intro .card{max-width:22rem;background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:22px;padding:26px 24px 22px}
-#intro h1{font-size:2.2rem;line-height:1.05;margin:0 0 .6rem;font-weight:700;letter-spacing:-.02em}
-#intro p{margin:0 0 1.2rem;color:var(--muted);line-height:1.45;font-size:1rem}
-button, a{font:inherit;border:0;cursor:pointer}
-button:focus-visible, a:focus-visible{outline:3px solid #fff;outline-offset:3px}
-#go{background:var(--btn);color:var(--btn-ink);font-weight:700;font-size:1.1rem;padding:.8rem 1.4rem;border-radius:999px;width:100%}
-#hud{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 12px;z-index:4;pointer-events:none}
-#hud a, #hud button{pointer-events:auto;background:var(--panel);color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:.55rem 1rem;border-radius:999px;font-size:.92rem;transition:background .2s, color .2s}
-#hud button.active{background:var(--btn);color:var(--btn-ink);font-weight:700}
-#hud button.hidden{display:none}
-#note{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--panel);padding:.45rem .9rem;border-radius:999px;font-size:.85rem;color:var(--muted);z-index:4;max-width:90%;text-align:center;opacity:0;transition:opacity .4s}
-#note.show{opacity:1}
-#fps{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:calc(14px + env(safe-area-inset-right,0px));background:var(--panel);color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.82rem;font-weight:600;padding:.35rem .75rem;border-radius:999px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:4;pointer-events:none}
-</style>
+<link rel="stylesheet" href="../../src/common.css">
 </head>
 <body>
 <div id="intro"><div class="card">
@@ -52,14 +27,17 @@ button:focus-visible, a:focus-visible{outline:3px solid #fff;outline-offset:3px}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="../../src/xpbd.js"></script>
+<script src="../../src/room.js"></script>
 <script>
 (() => {
-const V = THREE.Vector3, Q = THREE.Quaternion;
-const world = new XPBD.World({ dt: 1/60, substeps: 20, linearDamping: 0.7 });
-const { bodies, particles, box, accel, omega, omegaDot } = world;
+'use strict';
 
-/* ================= rendering ================= */
-const renderer = new THREE.WebGLRenderer({ antialias:true });
+const V = THREE.Vector3;
+const world = new XPBD.World({ dt: 1/60, substeps: 18, linearDamping: 0.7 });
+const { bodies, particles, box } = world;
+
+/* ================= rendering & room ================= */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -68,47 +46,14 @@ document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 50);
+const lights = RoomEnv.createLighting(scene);
+let wallGroup = null;
 
-// Fine 3-point lighting
-const hemiLight = new THREE.HemisphereLight(0x404856, 0x15181e, 0.45);
-scene.add(hemiLight);
-
-// 1. Key Light (primary high-right warm light casting crisp soft shadows)
-const keyLight = new THREE.DirectionalLight(0xfff6ea, 1.15);
-keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(2048, 2048);
-keyLight.shadow.bias = -0.0003;
-const sc = keyLight.shadow.camera; sc.left=-3; sc.right=3; sc.top=3; sc.bottom=-3; sc.near=0.1; sc.far=15;
-scene.add(keyLight, keyLight.target);
-
-// 2. Fill Light (softer cool light from left to soften shadows)
-const fillLight = new THREE.DirectionalLight(0xcde0f8, 0.45);
-scene.add(fillLight);
-
-// 3. Rim / Back Light (behind and above pointing toward camera for edge specular contour)
-const rimLight = new THREE.DirectionalLight(0xffffff, 0.65);
-scene.add(rimLight, rimLight.target);
-
-// Dark gray room materials
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x242830, roughness: 0.88, metalness: 0.05 });
-const backMat = new THREE.MeshStandardMaterial({ color: 0x1b1f25, roughness: 0.92, metalness: 0.04 });
-const floorMat = new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.82, metalness: 0.08 });
-let wallGroup = new THREE.Group(); scene.add(wallGroup);
-
-function rebuildWallMeshes(){
-  scene.remove(wallGroup); wallGroup = new THREE.Group();
-  const {hx,hy,d} = box;
-  const mk = (w,hh,mat,pos,rot) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w,hh), mat);
-    m.position.copy(pos); m.rotation.set(...rot); m.receiveShadow = true; wallGroup.add(m);
-  };
-  mk(2*hx, 2*hy, backMat, new V(0,0,-d), [0,0,0]);
-  mk(d, 2*hy, wallMat, new V(-hx,0,-d/2), [0, Math.PI/2, 0]);
-  mk(d, 2*hy, wallMat, new V( hx,0,-d/2), [0,-Math.PI/2, 0]);
-  mk(2*hx, d, floorMat, new V(0,-hy,-d/2), [-Math.PI/2,0,0]); // dark floor
-  mk(2*hx, d, wallMat, new V(0, hy,-d/2), [ Math.PI/2,0,0]);  // ceiling
-  scene.add(wallGroup);
+function resize(){
+  wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
 }
+window.addEventListener('resize', resize);
+resize();
 
 /* ================= cotton texture & material ================= */
 function createCottonTextures(){
@@ -116,8 +61,6 @@ function createCottonTextures(){
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
-
-  // Cotton base color: warm unbleached natural cotton canvas / linen
   ctx.fillStyle = '#ede5d8';
   ctx.fillRect(0, 0, size, size);
 
@@ -128,21 +71,17 @@ function createCottonTextures(){
   bCtx.fillRect(0, 0, size, size);
 
   const threads = 32;
-  const step = size / threads; // 16px per thread
+  const step = size / threads;
 
-  // Interwoven warp and weft textile yarns
   for (let y = 0; y < size; y += step){
     for (let x = 0; x < size; x += step){
       const cx = Math.floor(x / step);
       const cy = Math.floor(y / step);
       const warpOnTop = (cx + cy) % 2 === 0;
-
-      // Subtle yarn-to-yarn organic shade variance
       const lum = ((cx * 17 + cy * 11) % 19) - 9;
       const baseR = 238 + lum, baseG = 230 + lum, baseB = 218 + lum;
 
       if (warpOnTop){
-        // Vertical warp thread on top
         const grad = ctx.createLinearGradient(x, 0, x + step, 0);
         grad.addColorStop(0, `rgb(${baseR - 32}, ${baseG - 32}, ${baseB - 32})`);
         grad.addColorStop(0.2, `rgb(${baseR + 6}, ${baseG + 6}, ${baseB + 6})`);
@@ -159,7 +98,6 @@ function createCottonTextures(){
         bCtx.fillStyle = bGrad;
         bCtx.fillRect(x + 1, y, step - 2, step);
       } else {
-        // Horizontal weft thread on top
         const grad = ctx.createLinearGradient(0, y, 0, y + step);
         grad.addColorStop(0, `rgb(${baseR - 32}, ${baseG - 32}, ${baseB - 32})`);
         grad.addColorStop(0.2, `rgb(${baseR + 6}, ${baseG + 6}, ${baseB + 6})`);
@@ -179,7 +117,7 @@ function createCottonTextures(){
     }
   }
 
-  // Micro-grain fiber fuzz / fluff for soft cotton feel
+  // Micro-grain fiber fuzz for soft cotton look
   const imgData = ctx.getImageData(0, 0, size, size);
   const data = imgData.data;
   for (let i = 0; i < data.length; i += 4){
@@ -215,8 +153,8 @@ const clothMat = new THREE.MeshStandardMaterial({
   color: 0xf6f0e6,
   map: cottonTex.map,
   bumpMap: cottonTex.bumpMap,
-  bumpScale: 0.0008,          // Subtle realistic thread weave relief (prevents normal flipping)
-  roughness: 0.94,            // Soft matte diffuse scattering (no plastic sheen)
+  bumpScale: 0.0008,
+  roughness: 0.94,
   metalness: 0.0,
   side: THREE.DoubleSide
 });
@@ -261,7 +199,6 @@ function buildClothMesh(cloth){
   clothMesh.receiveShadow = true;
   scene.add(clothMesh);
 
-  // Pin marker meshes
   for (let k = 0; k < 2; k++){
     const pm = new THREE.Mesh(pinGeom, pinMat);
     scene.add(pm);
@@ -283,7 +220,6 @@ function syncClothMesh(){
   posAttr.needsUpdate = true;
   clothMesh.geometry.computeVertexNormals();
 
-  // update pin visual positions
   if (pinMarkers[0] && parts[0]) {
     pinMarkers[0].position.copy(parts[0].x);
     pinMarkers[0].visible = activeCloth.pinned.has(0);
@@ -296,178 +232,83 @@ function syncClothMesh(){
 }
 
 /* ================= rigid cubes ================= */
-function roundedCube(s, r, seg){
-  const g = new THREE.BoxGeometry(s,s,s,seg,seg,seg);
-  const p = g.attributes.position, nrm = g.attributes.normal;
-  const v = new V(), c = new V(), k = s/2 - r;
-  for (let i=0;i<p.count;i++){
-    v.fromBufferAttribute(p,i);
-    c.set(THREE.MathUtils.clamp(v.x,-k,k), THREE.MathUtils.clamp(v.y,-k,k), THREE.MathUtils.clamp(v.z,-k,k));
-    v.sub(c).normalize(); nrm.setXYZ(i, v.x, v.y, v.z);
-    v.multiplyScalar(r).add(c); p.setXYZ(i, v.x, v.y, v.z);
-  }
-  return g;
-}
-const PALETTE = [0x2a5bd7, 0xf2b632, 0x4fbf9f, 0x7a5cc4];
 const cubeMeshes = [];
+const PALETTE = [0x5080b0, 0x5a9a78, 0xd06850, 0xcca038, 0x8a6cb0];
 
 function addCube(){
-  if (bodies.length >= 10) return;
+  if (bodies.length >= 20) return;
   const s = 0.38;
-  const pos = new V((Math.random()-.5)*box.hx*0.7, box.hy*0.7, -box.d*0.5);
+  const pos = new V((Math.random() - 0.5) * box.hx * 0.7, box.hy * 0.7, -box.d * 0.5);
   world.addCube(s, pos,
     new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
-    new V((Math.random()-.5)*0.8, 0, 0));
-  const m = new THREE.Mesh(roundedCube(s, s*0.12, 4),
-    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness:.38 }));
+    new V((Math.random() - 0.5) * 0.8, 0, 0));
+  const m = new THREE.Mesh(RoomEnv.roundedCube(s, s * 0.12, 4),
+    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness: 0.38 }));
   m.castShadow = m.receiveShadow = true;
-  scene.add(m); cubeMeshes.push(m);
+  scene.add(m);
+  cubeMeshes.push(m);
 }
 
 /* ================= scene init ================= */
 let pinsActive = true;
 let selfColActive = false;
+
 function initScene(){
   for (const m of cubeMeshes){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
   cubeMeshes.length = 0;
   world.clear();
   world.selfCollision = selfColActive;
 
-  // Create XPBD cotton cloth (1.6m x 1.6m in 3m tall room)
-  // Fine 24x24 grid (576 particles) with zero 2-hop bending stiffness so it folds, settles, and drapes like soft fabric
-  const nx = 24, ny = 24;
+  // High-resolution cloth: 48x48 particles (doubled segment density from 24x24)
+  const nx = 48, ny = 48;
   activeCloth = world.addCloth({
     nx, ny,
     width: 1.6, height: 1.6,
     center: new V(0, box.hy * 0.35, -box.d * 0.5),
     mass: 1.6,
-    compliance: 0.000008,     // Inextensible regularized cotton warp & weft (prevents numeric shock chatter)
-    shearCompliance: 0.02,    // Soft diagonal weave shear drape (natural fabric folds)
-    bendCompliance: 0,        // 0 = no stiff paper-like 2-hop spring-back (prevents curling)
+    compliance: 0.000004,     // Inextensible regularized cotton warp & weft
+    shearCompliance: 0.02,    // Natural diagonal weave drape
+    bendCompliance: 0,        // Zero paper spring-back
     pinnedCorners: pinsActive ? [0, nx - 1] : []
   });
 
   buildClothMesh(activeCloth);
   document.getElementById('pins').textContent = pinsActive ? 'Unpin' : 'Pin Top';
 }
-
-function resize(){
-  const W = innerWidth, H = innerHeight, aspect = W/H;
-  renderer.setSize(W, H, false);
-  camera.aspect = aspect;
-  // Room is exactly 3.0 meters tall
-  const roomHeight = 3.0;
-  const hy = roomHeight / 2; // 1.5 m
-  const hx = hy * aspect;
-  const roomDepth = 2.4;
-  world.setBox(hx, hy, roomDepth);
-  rebuildWallMeshes();
-
-  const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
-  const dist = Math.max(box.hy/tanH, box.hx/(tanH*aspect));
-  camera.position.set(0, 0, dist);
-  camera.lookAt(0, 0, -box.d * 0.3);
-  camera.updateProjectionMatrix();
-
-  // Fine 3-point light adjustment
-  keyLight.position.set(box.hx*0.85, box.hy*1.3, 1.8);
-  keyLight.target.position.set(0, 0, -box.d*0.5);
-  fillLight.position.set(-box.hx*1.2, -box.hy*0.2, 1.5);
-  rimLight.position.set(0, box.hy*1.4, -box.d*1.2);
-  rimLight.target.position.set(0, -box.hy*0.2, -box.d*0.4);
-}
-addEventListener('resize', resize);
-resize();
 initScene();
 
-/* ================= input ================= */
-function screenAngle(){
-  if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
-  return typeof window.orientation === 'number' ? window.orientation : 0;
-}
-function toScreen(x, y, z, out){
-  const a = THREE.MathUtils.degToRad(screenAngle()), c=Math.cos(a), s=Math.sin(a);
-  return out.set(x*c - y*s, x*s + y*c, z);
-}
-let gotMotion = false, lastT = 0;
-const prevOmega = new V(), tmpO = new V(), rawA = new V(), dO = new V();
-function onMotion(e){
-  const g = e.accelerationIncludingGravity;
-  if (!g || g.x == null) return;
-  gotMotion = true;
-  toScreen(-g.x, -g.y, -g.z, rawA);
-  const L = rawA.length(); if (L > 80) rawA.multiplyScalar(80/L);
-  accel.copy(rawA);
-  const r = e.rotationRate;
-  if (r && r.alpha != null){
-    const k = Math.PI/180;
-    toScreen(r.beta*k, r.gamma*k, r.alpha*k, tmpO);
-    const now = performance.now()/1000, dt = lastT ? Math.min(Math.max(now-lastT, 0.005), 0.1) : 0;
-    lastT = now;
-    omega.lerp(tmpO, 0.6);
-    if (dt){
-      dO.copy(omega).sub(prevOmega).divideScalar(dt);
-      if (dO.length() > 200) dO.setLength(200);
-      omegaDot.lerp(dO, 0.35);
-    }
-    prevOmega.copy(omega);
-  }
-}
-
-const note = document.getElementById('note');
-function showNote(text, ms){
-  note.textContent = text; note.classList.add('show');
-  clearTimeout(showNote.t); if (ms) showNote.t = setTimeout(()=>note.classList.remove('show'), ms);
-}
-
-// Drag / grab interactions
-let tiltX = 0, tiltY = 0, dragging = false, lx = 0, ly = 0;
+/* ================= input & raycast cloth grabbing ================= */
 let grabbedParticle = null, grabbedOrigInvM = 0;
 const raycaster = new THREE.Raycaster();
 const mouseVec = new THREE.Vector2();
-const planeZ = new THREE.Plane(new V(0,0,1), box.d/2);
+const planeZ = new THREE.Plane(new V(0, 0, 1), box.d / 2);
 const hitPoint = new V();
 
-function dragGravity(){
-  const g = 9.81;
-  accel.set(Math.sin(tiltX)*Math.cos(tiltY)*g, -Math.cos(tiltX)*Math.cos(tiltY)*g, -Math.sin(tiltY)*g);
-}
+function handlePointer(e, type){
+  mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-renderer.domElement.addEventListener('pointerdown', e => {
-  dragging = true; lx = e.clientX; ly = e.clientY;
-  mouseVec.x = (e.clientX / innerWidth) * 2 - 1;
-  mouseVec.y = -(e.clientY / innerHeight) * 2 + 1;
-  raycaster.setFromCamera(mouseVec, camera);
-
-  // Check if pointer hit cloth
-  if (activeCloth) {
-    let closestP = null, minD = 0.25;
-    for (const p of activeCloth.particles){
-      const dist = raycaster.ray.distanceToPoint(p.x);
-      if (dist < minD){ minD = dist; closestP = p; }
+  if (type === 'down'){
+    raycaster.setFromCamera(mouseVec, camera);
+    if (activeCloth) {
+      let closestP = null, minD = 0.20;
+      for (const p of activeCloth.particles){
+        const dist = raycaster.ray.distanceToPoint(p.x);
+        if (dist < minD){ minD = dist; closestP = p; }
+      }
+      if (closestP) {
+        grabbedParticle = closestP;
+        grabbedOrigInvM = closestP.invM;
+        closestP.invM = 0;
+        return true;
+      }
     }
-    if (closestP) {
-      grabbedParticle = closestP;
-      grabbedOrigInvM = closestP.invM;
-      closestP.invM = 0; // lock while dragging
+  } else if (type === 'up'){
+    if (grabbedParticle) {
+      grabbedParticle.invM = grabbedOrigInvM;
+      grabbedParticle = null;
     }
-  }
-});
-
-addEventListener('pointerup', () => {
-  dragging = false;
-  if (grabbedParticle) {
-    grabbedParticle.invM = grabbedOrigInvM;
-    grabbedParticle = null;
-  }
-});
-
-addEventListener('pointermove', e => {
-  if (!dragging) return;
-  mouseVec.x = (e.clientX / innerWidth) * 2 - 1;
-  mouseVec.y = -(e.clientY / innerHeight) * 2 + 1;
-
-  if (grabbedParticle) {
+  } else if (type === 'move' && grabbedParticle){
     raycaster.setFromCamera(mouseVec, camera);
     planeZ.constant = -grabbedParticle.x.z;
     if (raycaster.ray.intersectPlane(planeZ, hitPoint)){
@@ -475,39 +316,17 @@ addEventListener('pointermove', e => {
       grabbedParticle.px.copy(hitPoint);
       grabbedParticle.v.set(0, 0, 0);
     }
-    return;
+    return true; // handled, don't tilt box
   }
+  return false;
+}
 
-  if (gotMotion) return;
-  tiltX = THREE.MathUtils.clamp(tiltX + (e.clientX-lx)*0.008, -1.5, 1.5);
-  tiltY = THREE.MathUtils.clamp(tiltY + (e.clientY-ly)*0.008, -1.5, 1.5);
-  lx = e.clientX; ly = e.clientY;
-  dragGravity();
+RoomEnv.setupMotionSensors({
+  world,
+  onPointerDrag: handlePointer
 });
 
-let denied = false;
-document.getElementById('go').addEventListener('click', async () => {
-  try {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
-      const res = await DeviceMotionEvent.requestPermission();
-      if (res !== 'granted') throw new Error('denied');
-    }
-    addEventListener('devicemotion', onMotion);
-  } catch(err){ denied = true; }
-  document.getElementById('intro').remove();
-  setTimeout(() => {
-    if (!gotMotion){
-      document.getElementById('shake').classList.remove('hidden');
-      let embedded = false; try { embedded = window.self !== window.top; } catch(e){ embedded = true; }
-      const msg = denied ? 'Motion access denied. Drag on screen to grab cloth or tilt box.'
-        : embedded ? 'Viewer blocks motion sensors. Drag to pull cloth or tilt box.'
-        : !isSecureContext ? 'Motion sensors require HTTPS. Drag to pull cloth or tilt box.'
-        : 'Drag cloth to pull fabric, or drag background to tilt.';
-      showNote(msg, 6000);
-    }
-  }, 1200);
-});
-
+/* ================= HUD button listeners ================= */
 document.getElementById('pins').addEventListener('click', () => {
   if (!activeCloth) return;
   pinsActive = !pinsActive;
@@ -515,46 +334,44 @@ document.getElementById('pins').addEventListener('click', () => {
   activeCloth.togglePin(activeCloth.nx - 1);
   document.getElementById('pins').textContent = pinsActive ? 'Unpin' : 'Pin Top';
 });
+
 const selfColBtn = document.getElementById('selfcol');
 selfColBtn.addEventListener('click', () => {
   selfColActive = !selfColActive;
   world.selfCollision = selfColActive;
   selfColBtn.textContent = selfColActive ? 'Self Collision: On' : 'Self Collision: Off';
   selfColBtn.classList.toggle('active', selfColActive);
-  showNote(selfColActive ? 'Self collision enabled' : 'Self collision disabled', 1500);
+  RoomEnv.showNote(selfColActive ? 'Self collision enabled' : 'Self collision disabled', 1500);
 });
+
 document.getElementById('cube').addEventListener('click', addCube);
 document.getElementById('reset').addEventListener('click', initScene);
 document.getElementById('shake').addEventListener('click', () => {
   for (const p of particles){
     if (p.invM > 0){
-      p.v.add(new V((Math.random()-.5)*4, Math.random()*3.5, (Math.random()-.5)*2));
+      p.v.add(new V((Math.random() - 0.5) * 4, Math.random() * 3.5, (Math.random() - 0.5) * 2));
     }
   }
   for (const b of bodies){
-    b.v.add(new V((Math.random()-.5)*4, Math.random()*3, (Math.random()-.3)*2));
-    b.w.add(new V((Math.random()-.5)*15, (Math.random()-.5)*15, (Math.random()-.5)*15));
+    b.v.add(new V((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.3) * 2));
+    b.w.add(new V((Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15));
   }
 });
 
 /* ================= animation loop ================= */
+const tickFps = RoomEnv.createFpsMeter();
 let acc = 0, last = performance.now();
-let fpsCount = 0, fpsLastTime = performance.now();
-const fpsEl = document.getElementById('fps');
+
 function frame(now){
-  fpsCount++;
-  if (now - fpsLastTime >= 400){
-    fpsEl.textContent = `${Math.round((fpsCount * 1000) / (now - fpsLastTime))} FPS`;
-    fpsCount = 0;
-    fpsLastTime = now;
-  }
-  acc += Math.min((now-last)/1000, 0.1); last = now;
+  tickFps(now);
+  acc += Math.min((now - last) / 1000, 0.1);
+  last = now;
   let n = 0;
   while (acc >= world.dt && n < 3){ world.step(); acc -= world.dt; n++; }
   if (n === 3) acc = 0;
 
   syncClothMesh();
-  for (let i=0; i<bodies.length; i++){
+  for (let i = 0; i < bodies.length; i++){
     cubeMeshes[i].position.copy(bodies[i].x);
     cubeMeshes[i].quaternion.copy(bodies[i].q);
   }
@@ -563,6 +380,7 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
 })();
 </script>
 </body>

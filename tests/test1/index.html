@@ -6,31 +6,7 @@
 <title>Test 1: Cube Box - XPBD Dynamics</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
-<style>
-:root{
-  --bg:#2b3a4a; --ink:#f3efe6; --muted:#b9c4cf; --panel:rgba(20,28,38,.72); --btn:#f2b632; --btn-ink:#1d2632;
-  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
-}
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1b2530; --panel:rgba(10,14,20,.78); } }
-:root[data-theme="dark"]{ --bg:#1b2530; --panel:rgba(10,14,20,.78); }
-html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
-html,body{margin:0;overflow:hidden;background:var(--bg);touch-action:none;overscroll-behavior:none}
-body{height:100%;font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none}
-canvas{position:fixed;inset:0;display:block;width:100%;height:100%}
-#intro{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(18,26,35,.55);z-index:5}
-#intro .card{max-width:22rem;background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:22px;padding:26px 24px 22px}
-#intro h1{font-size:2.2rem;line-height:1.05;margin:0 0 .6rem;font-weight:700;letter-spacing:-.02em}
-#intro p{margin:0 0 1.2rem;color:var(--muted);line-height:1.45;font-size:1rem}
-button, a{font:inherit;border:0;cursor:pointer}
-button:focus-visible, a:focus-visible{outline:3px solid #fff;outline-offset:3px}
-#go{background:var(--btn);color:var(--btn-ink);font-weight:700;font-size:1.1rem;padding:.8rem 1.4rem;border-radius:999px;width:100%}
-#hud{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;justify-content:center;z-index:4;pointer-events:none}
-#hud a, #hud button{pointer-events:auto;background:var(--panel);color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:.55rem 1rem;border-radius:999px;font-size:.95rem}
-#hud button.hidden{display:none}
-#note{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--panel);padding:.45rem .9rem;border-radius:999px;font-size:.85rem;color:var(--muted);z-index:4;max-width:90%;text-align:center;opacity:0;transition:opacity .4s}
-#note.show{opacity:1}
-#fps{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:calc(14px + env(safe-area-inset-right,0px));background:var(--panel);color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.82rem;font-weight:600;padding:.35rem .75rem;border-radius:999px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:4;pointer-events:none}
-</style>
+<link rel="stylesheet" href="../../src/common.css">
 </head>
 <body>
 <div id="intro"><div class="card">
@@ -42,21 +18,24 @@ button:focus-visible, a:focus-visible{outline:3px solid #fff;outline-offset:3px}
 <div id="note"></div>
 <div id="hud">
   <a id="back" href="../../">← Tests</a>
-  <button id="add">Add cube</button>
+  <button id="add">Add Cube</button>
   <button id="shake" class="hidden">Shake</button>
   <button id="reset">Reset</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="../../src/xpbd.js"></script>
+<script src="../../src/room.js"></script>
 <script>
 (() => {
-const V = THREE.Vector3;
-const world = new CubePhysics.World();
-const { bodies, box, accel, omega, omegaDot } = world;
+'use strict';
 
-/* ================= rendering ================= */
-const renderer = new THREE.WebGLRenderer({ antialias:true });
+const V = THREE.Vector3;
+const world = new XPBD.World();
+const { bodies, box } = world;
+
+/* ================= rendering & room ================= */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -65,221 +44,79 @@ document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 50);
+const lights = RoomEnv.createLighting(scene);
+let wallGroup = null;
 
-// Fine 3-point lighting
-const hemiLight = new THREE.HemisphereLight(0x404856, 0x15181e, 0.45);
-scene.add(hemiLight);
-
-// 1. Key Light (primary high-right warm light casting crisp soft shadows)
-const keyLight = new THREE.DirectionalLight(0xfff6ea, 1.15);
-keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(2048, 2048);
-keyLight.shadow.bias = -0.0003;
-const sc = keyLight.shadow.camera; sc.left=-3; sc.right=3; sc.top=3; sc.bottom=-3; sc.near=0.1; sc.far=15;
-scene.add(keyLight, keyLight.target);
-
-// 2. Fill Light (softer cool light from left to soften shadows)
-const fillLight = new THREE.DirectionalLight(0xcde0f8, 0.45);
-scene.add(fillLight);
-
-// 3. Rim / Back Light (behind and above pointing toward camera for edge specular contour)
-const rimLight = new THREE.DirectionalLight(0xffffff, 0.65);
-scene.add(rimLight, rimLight.target);
-
-// Dark gray room materials
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x242830, roughness: 0.88, metalness: 0.05 });
-const backMat = new THREE.MeshStandardMaterial({ color: 0x1b1f25, roughness: 0.92, metalness: 0.04 });
-const floorMat = new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.82, metalness: 0.08 });
-let wallGroup = new THREE.Group(); scene.add(wallGroup);
-
-function rebuildWallMeshes(){
-  scene.remove(wallGroup); wallGroup = new THREE.Group();
-  const {hx,hy,d} = box;
-  const mk = (w,hh,mat,pos,rot) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w,hh), mat);
-    m.position.copy(pos); m.rotation.set(...rot); m.receiveShadow = true; wallGroup.add(m);
-  };
-  mk(2*hx, 2*hy, backMat, new V(0,0,-d), [0,0,0]);
-  mk(d, 2*hy, wallMat, new V(-hx,0,-d/2), [0, Math.PI/2, 0]);
-  mk(d, 2*hy, wallMat, new V( hx,0,-d/2), [0,-Math.PI/2, 0]);
-  mk(2*hx, d, floorMat, new V(0,-hy,-d/2), [-Math.PI/2,0,0]); // dark floor
-  mk(2*hx, d, wallMat, new V(0, hy,-d/2), [ Math.PI/2,0,0]);  // ceiling
-  scene.add(wallGroup);
+function resize(){
+  wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
 }
+window.addEventListener('resize', resize);
+resize();
 
-function roundedCube(s, r, seg){
-  const g = new THREE.BoxGeometry(s,s,s,seg,seg,seg);
-  const p = g.attributes.position, nrm = g.attributes.normal;
-  const v = new V(), c = new V(), k = s/2 - r;
-  for (let i=0;i<p.count;i++){
-    v.fromBufferAttribute(p,i);
-    c.set(THREE.MathUtils.clamp(v.x,-k,k), THREE.MathUtils.clamp(v.y,-k,k), THREE.MathUtils.clamp(v.z,-k,k));
-    v.sub(c).normalize(); nrm.setXYZ(i, v.x, v.y, v.z);
-    v.multiplyScalar(r).add(c); p.setXYZ(i, v.x, v.y, v.z);
-  }
-  return g;
-}
+/* ================= cubes ================= */
 const PALETTE = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x4fbf9f, 0xf3efe6, 0x7a5cc4, 0xff9f43];
 const meshes = [];
 
 function addCube(){
-  // Room scale: 35 cm to 50 cm cubes in a 3-meter tall room
-  const s = 0.36 + Math.random()*0.14;
+  if (bodies.length >= 30) return;
+  const s = 0.36 + Math.random() * 0.14;
   const pos = new V();
   for (let tries = 0; tries < 20; tries++){
-    pos.set((Math.random()-.5)*2*(box.hx - s*0.8), box.hy*(0.6*Math.random() - 0.1), -box.d*0.5);
+    pos.set((Math.random() - 0.5) * 2 * (box.hx - s*0.8), box.hy * (0.6*Math.random() - 0.1), -box.d * 0.5);
     if (!world.crowded(pos, s)) break;
   }
   world.addCube(s, pos,
     new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
-    new V((Math.random()-.5)*0.8, 0, 0));
-  const m = new THREE.Mesh(roundedCube(s, s*0.12, 4),
-    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness:.38 }));
+    new V((Math.random() - 0.5) * 0.8, 0, 0));
+  const m = new THREE.Mesh(RoomEnv.roundedCube(s, s * 0.12, 4),
+    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness: 0.38 }));
   m.castShadow = m.receiveShadow = true;
-  scene.add(m); meshes.push(m);
+  scene.add(m);
+  meshes.push(m);
 }
+
 function reset(){
   for (const m of meshes){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
-  meshes.length = 0; world.clear();
-  for (let i=0;i<3;i++) addCube();
+  meshes.length = 0;
+  world.clear();
+  for (let i = 0; i < 3; i++) addCube();
 }
-
-function resize(){
-  const W = innerWidth, H = innerHeight, aspect = W/H;
-  renderer.setSize(W, H, false);
-  camera.aspect = aspect;
-  // Room is exactly 3.0 meters tall
-  const roomHeight = 3.0;
-  const hy = roomHeight / 2; // 1.5 m
-  const hx = hy * aspect;
-  const roomDepth = 2.4;
-  world.setBox(hx, hy, roomDepth);
-  rebuildWallMeshes();
-
-  const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
-  const dist = Math.max(box.hy/tanH, box.hx/(tanH*aspect));
-  camera.position.set(0,0,dist); camera.lookAt(0,0,-box.d*0.3);
-  camera.updateProjectionMatrix();
-
-  // Fine 3-point light adjustment
-  keyLight.position.set(box.hx*0.85, box.hy*1.3, 1.8);
-  keyLight.target.position.set(0, 0, -box.d*0.5);
-  fillLight.position.set(-box.hx*1.2, -box.hy*0.2, 1.5);
-  rimLight.position.set(0, box.hy*1.4, -box.d*1.2);
-  rimLight.target.position.set(0, -box.hy*0.2, -box.d*0.4);
-}
-addEventListener('resize', resize);
-resize();
 reset();
 
-/* ================= input ================= */
-function screenAngle(){
-  if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
-  return typeof window.orientation === 'number' ? window.orientation : 0;
-}
-function toScreen(x, y, z, out){
-  const a = THREE.MathUtils.degToRad(screenAngle()), c=Math.cos(a), s=Math.sin(a);
-  return out.set(x*c - y*s, x*s + y*c, z);
-}
-let gotMotion = false, lastT = 0;
-const prevOmega = new V(), tmpO = new V(), rawA = new V(), dO = new V();
-function onMotion(e){
-  const g = e.accelerationIncludingGravity;
-  if (!g || g.x == null) return;
-  gotMotion = true;
-  // reading = phone accel − gravity; things inside the phone feel the opposite
-  toScreen(-g.x, -g.y, -g.z, rawA);
-  const L = rawA.length(); if (L > 80) rawA.multiplyScalar(80/L);
-  accel.copy(rawA);
-  const r = e.rotationRate;
-  if (r && r.alpha != null){
-    const k = Math.PI/180;
-    toScreen(r.beta*k, r.gamma*k, r.alpha*k, tmpO);
-    const now = performance.now()/1000, dt = lastT ? Math.min(Math.max(now-lastT, 0.005), 0.1) : 0;
-    lastT = now;
-    omega.lerp(tmpO, 0.6);
-    if (dt){
-      dO.copy(omega).sub(prevOmega).divideScalar(dt);
-      if (dO.length() > 200) dO.setLength(200);
-      omegaDot.lerp(dO, 0.35);
-    }
-    prevOmega.copy(omega);
-  }
-}
+/* ================= motion & input ================= */
+RoomEnv.setupMotionSensors({ world });
 
-const note = document.getElementById('note');
-function showNote(text, ms){
-  note.textContent = text; note.classList.add('show');
-  clearTimeout(showNote.t); if (ms) showNote.t = setTimeout(()=>note.classList.remove('show'), ms);
-}
-
-// Drag to tilt (desktop or no sensors)
-let tiltX = 0, tiltY = 0, dragging = false, lx = 0, ly = 0;
-function dragGravity(){
-  const g = 9.81;
-  accel.set(Math.sin(tiltX)*Math.cos(tiltY)*g, -Math.cos(tiltX)*Math.cos(tiltY)*g, -Math.sin(tiltY)*g);
-}
-renderer.domElement.addEventListener('pointerdown', e => { dragging = true; lx = e.clientX; ly = e.clientY; });
-addEventListener('pointerup', () => dragging = false);
-addEventListener('pointermove', e => {
-  if (!dragging || gotMotion) return;
-  tiltX = THREE.MathUtils.clamp(tiltX + (e.clientX-lx)*0.008, -1.5, 1.5);
-  tiltY = THREE.MathUtils.clamp(tiltY + (e.clientY-ly)*0.008, -1.5, 1.5);
-  lx = e.clientX; ly = e.clientY;
-  dragGravity();
-});
-
-let denied = false;
-document.getElementById('go').addEventListener('click', async () => {
-  try {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
-      const res = await DeviceMotionEvent.requestPermission();
-      if (res !== 'granted') throw new Error('denied');
-    }
-    addEventListener('devicemotion', onMotion);
-  } catch(err){ denied = true; }
-  document.getElementById('intro').remove();
-  setTimeout(() => {
-    if (!gotMotion){
-      document.getElementById('shake').classList.remove('hidden');
-      let embedded = false; try { embedded = window.self !== window.top; } catch(e){ embedded = true; }
-      const msg = denied ? 'Motion access was denied. Drag to tilt the box.'
-        : embedded ? 'This viewer blocks motion sensors. Host the file on an https page to use tilt. Drag to tilt for now.'
-        : !isSecureContext ? 'Motion sensors need an https page. Drag to tilt for now.'
-        : 'No motion data arrived. Drag to tilt the box.';
-      showNote(msg, 7000);
-    }
-  }, 1200);
-});
-document.getElementById('add').addEventListener('click', () => { if (bodies.length < 30) addCube(); });
+document.getElementById('add').addEventListener('click', addCube);
 document.getElementById('reset').addEventListener('click', reset);
 document.getElementById('shake').addEventListener('click', () => {
   for (const b of bodies){
-    b.v.add(new V((Math.random()-.5)*4, Math.random()*3.5, (Math.random()-.3)*2.5));
-    b.w.add(new V((Math.random()-.5)*15, (Math.random()-.5)*15, (Math.random()-.5)*15));
+    b.v.add(new V((Math.random() - 0.5) * 4, Math.random() * 3.5, (Math.random() - 0.3) * 2.5));
+    b.w.add(new V((Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15));
   }
 });
 
-/* ================= loop ================= */
+/* ================= animation loop ================= */
+const tickFps = RoomEnv.createFpsMeter();
 let acc = 0, last = performance.now();
-let fpsCount = 0, fpsLastTime = performance.now();
-const fpsEl = document.getElementById('fps');
+
 function frame(now){
-  fpsCount++;
-  if (now - fpsLastTime >= 400){
-    fpsEl.textContent = `${Math.round((fpsCount * 1000) / (now - fpsLastTime))} FPS`;
-    fpsCount = 0;
-    fpsLastTime = now;
-  }
-  acc += Math.min((now-last)/1000, 0.1); last = now;
+  tickFps(now);
+  acc += Math.min((now - last) / 1000, 0.1);
+  last = now;
   let n = 0;
   while (acc >= world.dt && n < 3){ world.step(); acc -= world.dt; n++; }
   if (n === 3) acc = 0;
-  for (let i=0;i<bodies.length;i++){ meshes[i].position.copy(bodies[i].x); meshes[i].quaternion.copy(bodies[i].q); }
+
+  for (let i = 0; i < bodies.length; i++){
+    meshes[i].position.copy(bodies[i].x);
+    meshes[i].quaternion.copy(bodies[i].q);
+  }
+
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
 })();
 </script>
 </body>

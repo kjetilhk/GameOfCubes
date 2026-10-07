@@ -15,7 +15,9 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
 ├── index.html          # Test suite landing page (catalog of tests)
 ├── AGENTS.md           # Developer and agent guidance
 ├── src/
-│   └── xpbd.js         # Core XPBD physics engine (Müller et al.)
+│   ├── xpbd.js         # Core XPBD physics engine (Müller et al.)
+│   ├── room.js         # Shared 3.0m room setup, 3-point lighting, sensors, and FPS meter
+│   └── common.css      # Shared responsive UI styling tokens, HUD, and badges
 └── tests/
     ├── test1/
     │   └── index.html  # Test 1: Cube Box (mobile XPBD rigid bodies)
@@ -26,8 +28,9 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
 ```
 
 The core physics engine lives in `src/xpbd.js` without DOM or rendering dependencies. It exports `XPBD` (and alias `CubePhysics`) to the global scope (`window`/`globalThis`) and to CommonJS (`module.exports`).
+Shared rendering, lighting, device sensors, and UI utilities live in `src/room.js` and `src/common.css`.
 
-Each test in `tests/` is a self-contained environment loading three.js and `../../src/xpbd.js`. There is no build step, package manager, bundler, or complex runner. Keep it lightweight and accessible directly via static file servers.
+Each test in `tests/` is a self-contained environment loading three.js, `../../src/xpbd.js`, `../../src/room.js`, and `../../src/common.css`. There is no build step, package manager, bundler, or complex runner. Keep it lightweight and accessible directly via static file servers.
 
 The only external dependencies across tests are:
 - three.js **r128**, loaded as a UMD script from cdnjs (`THREE` global).
@@ -59,13 +62,13 @@ XPBD rigid bodies with no DOM or rendering code, based on Müller et al., "Detai
 ### Test 1: Cube Box (`tests/test1/index.html`)
 
 A mobile-first browser toy and test scene. The phone screen represents the front glass of a small box holding loose cubes. Tilting slides them under gravity, shaking rattles them, and twisting induces rotational inertia and fictitious forces. On desktop or when motion sensors are inactive, dragging tilts the box.
-- Loads `../../src/xpbd.js` for physics.
-- App script handles three.js scene, wall planes (`rebuildWallMeshes`), rounded cube meshes (`roundedCube`), DeviceMotion sensor integration, drag-to-tilt desktop fallback, and loop accumulator.
+- Loads `../../src/xpbd.js` for physics and `../../src/room.js` for room environment.
+- Handles cube spawning, rigid body collision responses, and live FPS meter.
 
 ### Test 2: Cloth Simulation (`tests/test2/index.html`)
 
 Interactive XPBD cotton cloth sheet in the box.
-- Dynamic $24 \times 24$ grid of particles connected by inextensible structural warp and weft constraints with compliant shear, allowing natural catenary draping and folding without springy paper curling.
+- High-resolution dynamic $48 \times 48$ grid of particles (2,304 vertices, 8,930 constraints) connected by inextensible structural warp and weft constraints with compliant shear, allowing fine natural catenary draping and detailed folding without springy paper curling.
 - Textured with a procedural interwoven warp-and-weft cotton canvas texture and bump relief map for authentic textile appearance under 3-point lighting.
 - Top corners pinned with visual pin markers; togglable via "Unpin / Pin Top" button.
 - Cloth self-collision toggle ("Self Collision: Off / On") using zero-allocation spatial hashing, preventing overlapping folds from penetrating.

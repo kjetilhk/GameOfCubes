@@ -356,16 +356,17 @@ function solveTetVolume(c, h){
 }
 
 // ---------- particle self-collision (spatial hash) ----------
-const SPATIAL_HASH_SIZE = 4096;
+const SPATIAL_HASH_SIZE = 8192;
 const SPATIAL_HASH_MASK = SPATIAL_HASH_SIZE - 1;
 const hashHead = new Int32Array(SPATIAL_HASH_SIZE);
-let hashNext = new Int32Array(1024);
+let hashNext = new Int32Array(2048);
+const K1 = 73856093, K2 = 19349663, K3 = 83492791;
 
 function solveParticleSelfCollisions(particles){
   const n = particles.length;
   if (n < 2) return;
   if (hashNext.length < n){
-    hashNext = new Int32Array(Math.max(n * 2, 1024));
+    hashNext = new Int32Array(Math.max(n * 2, 2048));
   }
 
   let maxR = 0.02;
@@ -381,7 +382,7 @@ function solveParticleSelfCollisions(particles){
     const ix = Math.floor(p.x.x * invCell);
     const iy = Math.floor(p.x.y * invCell);
     const iz = Math.floor(p.x.z * invCell);
-    const bucket = (((ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791)) & 0x7fffffff) & SPATIAL_HASH_MASK;
+    const bucket = (((ix * K1) ^ (iy * K2) ^ (iz * K3)) & 0x7fffffff) & SPATIAL_HASH_MASK;
     hashNext[i] = hashHead[bucket];
     hashHead[bucket] = i;
   }
@@ -391,11 +392,14 @@ function solveParticleSelfCollisions(particles){
     const ix = Math.floor(p1.x.x * invCell);
     const iy = Math.floor(p1.x.y * invCell);
     const iz = Math.floor(p1.x.z * invCell);
+    const hx = ix * K1, hy = iy * K2, hz = iz * K3;
 
     for (let ox = -1; ox <= 1; ox++){
+      const cx = hx + ox * K1;
       for (let oy = -1; oy <= 1; oy++){
+        const cy = cx ^ (hy + oy * K2);
         for (let oz = -1; oz <= 1; oz++){
-          const bucket = ((((ix + ox) * 73856093) ^ ((iy + oy) * 19349663) ^ ((iz + oz) * 83492791)) & 0x7fffffff) & SPATIAL_HASH_MASK;
+          const bucket = ((cy ^ (hz + oz * K3)) & 0x7fffffff) & SPATIAL_HASH_MASK;
           let j = hashHead[bucket];
           while (j !== -1){
             if (j > i){
