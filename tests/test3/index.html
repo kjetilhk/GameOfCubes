@@ -18,7 +18,7 @@
 <div id="note"></div>
 <div id="hud">
   <a id="back" href="../../">← Tests</a>
-  <button id="stiff">Softer</button>
+  <button id="stiff">Stiffer</button>
   <button id="wire">Wireframe</button>
   <button id="cube">Add Cube</button>
   <button id="shake" class="hidden">Shake</button>
@@ -59,7 +59,7 @@ resize();
 let activeTetMesh = null;
 let tetVisualMesh = null;
 let showWire = false;
-let softMode = false;
+let softMode = true;
 
 function buildTetVisualMesh(tm){
   if (tetVisualMesh) { scene.remove(tetVisualMesh); tetVisualMesh.geometry.dispose(); }
@@ -70,9 +70,11 @@ function buildTetVisualMesh(tm){
   geom.setIndex(tm.surfaceIndices);
 
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x4fbf9f,
-    roughness: 0.25,
-    metalness: 0.1,
+    color: 0x38bdf8,
+    roughness: 0.1,
+    metalness: 0.04,
+    transparent: true,
+    opacity: 0.88,
     wireframe: showWire
   });
 
@@ -121,14 +123,14 @@ function initScene(){
   cubeMeshes.length = 0;
   world.clear();
 
-  // High-resolution continuum soft body: 6x6x6 grid (625 tetrahedra, 990 elastic edges, 216 particles)
-  // volCompliance = 0 enforces strict hydrostatic incompressibility so it squishes & bulges without deflating/shrinking
-  const edgeComp = softMode ? 0.008 : 0.002;
+  // High-resolution continuum soft body: 8x8x8 grid (1,715 tetrahedra, 2,520 elastic edges, 512 particles)
+  // Strict hydrostatic incompressibility (volCompliance=0) preserves volume while edge compliance allows fluid water-like flow
+  const edgeComp = softMode ? 0.12 : 0.005;
   activeTetMesh = world.addTetMesh({
-    nx: 6, ny: 6, nz: 6,
+    nx: 8, ny: 8, nz: 8,
     sizeX: 0.85, sizeY: 0.85, sizeZ: 0.85,
     center: new V(0, -box.hy * 0.25, -box.d * 0.5),
-    mass: 16.0,
+    mass: 14.0,
     edgeCompliance: edgeComp,
     volCompliance: 0.0
   });
@@ -190,12 +192,12 @@ RoomEnv.setupMotionSensors({
 document.getElementById('stiff').addEventListener('click', () => {
   softMode = !softMode;
   document.getElementById('stiff').textContent = softMode ? 'Stiffer' : 'Softer';
-  const edgeComp = softMode ? 0.008 : 0.002;
+  const edgeComp = softMode ? 0.12 : 0.005;
   if (activeTetMesh) {
     for (const c of activeTetMesh.edgeConstraints) c.compliance = edgeComp;
     for (const c of activeTetMesh.volumeConstraints) c.compliance = 0.0;
   }
-  RoomEnv.showNote(softMode ? 'Elasticity: Extra soft & jelly' : 'Elasticity: Natural soft rubber', 1500);
+  RoomEnv.showNote(softMode ? 'Elasticity: Water / Fluid (extra soft)' : 'Elasticity: Firm rubber', 1500);
 });
 
 document.getElementById('wire').addEventListener('click', () => {
