@@ -3,667 +3,358 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Cube Box</title>
+<title>XPBD Dynamics Engine — Test Suite</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#2b3a4a; --ink:#f3efe6; --muted:#b9c4cf; --panel:rgba(20,28,38,.72); --btn:#f2b632; --btn-ink:#1d2632;
-  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+:root {
+  --bg: #131a22;
+  --bg-gradient: radial-gradient(circle at 50% 10%, #1d2937 0%, #10161e 100%);
+  --surface: rgba(26, 36, 48, 0.7);
+  --surface-border: rgba(255, 255, 255, 0.08);
+  --ink: #f3efe6;
+  --muted: #95a5b5;
+  --accent: #f2b632;
+  --accent-ink: #131a22;
+  --badge-active-bg: rgba(79, 191, 159, 0.16);
+  --badge-active-color: #4fbf9f;
+  --badge-planned-bg: rgba(185, 196, 207, 0.12);
+  --badge-planned-color: #95a5b5;
+  box-sizing: border-box;
 }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1b2530; --panel:rgba(10,14,20,.78); } }
-:root[data-theme="dark"]{ --bg:#1b2530; --panel:rgba(10,14,20,.78); }
-html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
-html,body{margin:0;overflow:hidden;background:var(--bg);touch-action:none;overscroll-behavior:none}
-body{height:100%;font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none}
-canvas{position:fixed;inset:0;display:block;width:100%;height:100%}
-#intro{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(18,26,35,.55);z-index:5}
-#intro .card{max-width:22rem;background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:22px;padding:26px 24px 22px}
-#intro h1{font-size:2.4rem;line-height:1;margin:0 0 .6rem;font-weight:700;letter-spacing:-.02em}
-#intro p{margin:0 0 1.2rem;color:var(--muted);line-height:1.45;font-size:1rem}
-button{font:inherit;border:0;cursor:pointer}
-button:focus-visible{outline:3px solid #fff;outline-offset:3px}
-#go{background:var(--btn);color:var(--btn-ink);font-weight:700;font-size:1.1rem;padding:.8rem 1.4rem;border-radius:999px;width:100%}
-#hud{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;justify-content:center;z-index:4;pointer-events:none}
-#hud button{pointer-events:auto;background:var(--panel);color:var(--ink);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:.55rem 1rem;border-radius:999px;font-size:.95rem}
-#hud button.hidden{display:none}
-#note{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--panel);padding:.45rem .9rem;border-radius:999px;font-size:.85rem;color:var(--muted);z-index:4;max-width:90%;text-align:center;opacity:0;transition:opacity .4s}
-#note.show{opacity:1}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #ebf0f5;
+    --bg-gradient: radial-gradient(circle at 50% 10%, #ffffff 0%, #dce4ec 100%);
+    --surface: rgba(255, 255, 255, 0.85);
+    --surface-border: rgba(0, 0, 0, 0.08);
+    --ink: #1c2530;
+    --muted: #5d6e7f;
+    --accent: #e09f12;
+    --accent-ink: #ffffff;
+    --badge-active-bg: rgba(30, 142, 110, 0.15);
+    --badge-active-color: #12795a;
+    --badge-planned-bg: rgba(93, 110, 127, 0.12);
+    --badge-planned-color: #5d6e7f;
+  }
+}
+
+*, *::before, *::after { box-sizing: inherit; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  background-image: var(--bg-gradient);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 20px calc(40px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.container {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+header {
+  padding: 8px 4px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.brand-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin-bottom: 12px;
+}
+
+.intro {
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.section-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 12px;
+  padding-left: 2px;
+}
+
+.tests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.test-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 20px;
+  padding: 22px 24px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.test-card.active-test {
+  border-color: rgba(242, 182, 50, 0.35);
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.35);
+}
+
+.test-card.active-test:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.test-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.test-number {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(242, 182, 50, 0.12);
+  padding: 4px 9px;
+  border-radius: 8px;
+}
+
+.test-name {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.badge.active {
+  background: var(--badge-active-bg);
+  color: var(--badge-active-color);
+}
+
+.badge.planned {
+  background: var(--badge-planned-bg);
+  color: var(--badge-planned-color);
+}
+
+.test-desc {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pill {
+  font-size: 0.76rem;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  border: 1px solid var(--surface-border);
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.launch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 10px 20px;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.launch-btn:hover {
+  filter: brightness(1.08);
+  transform: scale(1.02);
+}
+
+.launch-btn:active {
+  transform: scale(0.98);
+}
+
+.dimmed-card {
+  opacity: 0.65;
+}
+
+footer {
+  margin-top: 16px;
+  padding: 16px 4px;
+  border-top: 1px solid var(--surface-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+footer a {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+footer a:hover {
+  color: var(--accent);
+}
 </style>
 </head>
 <body>
-<div id="intro"><div class="card">
-  <h1>Cube Box</h1>
-  <p>Your phone is a box of cubes. Tilt it and they slide downhill, shake it and they rattle, twist it and they lag behind.</p>
-  <button id="go">Start</button>
-</div></div>
-<div id="note"></div>
-<div id="hud">
-  <button id="add">Add cube</button>
-  <button id="shake" class="hidden">Shake</button>
-  <button id="reset">Reset</button>
+<div class="container">
+  <header>
+    <div class="brand">
+      <span class="brand-dot"></span>
+      Dynamics Laboratory
+    </div>
+    <h1>XPBD Engine Tests</h1>
+    <p class="intro">
+      Research testbed for Extended Position-Based Dynamics (XPBD) simulation. Interactive test environments exploring 6DOF rigid body mechanics, contact resolution, friction, and inertial forces.
+    </p>
+  </header>
+
+  <main>
+    <div class="section-label">Available Tests</div>
+    <div class="tests-list">
+
+      <!-- Test 1 -->
+      <article class="test-card active-test">
+        <div class="card-top">
+          <div class="test-title-group">
+            <span class="test-number">01</span>
+            <h2 class="test-name">Cube Box</h2>
+          </div>
+          <span class="badge active">Live</span>
+        </div>
+        <p class="test-desc">
+          Mobile-first 3D glass box filled with cubes. Evaluates SAT face-manifold clipping, edge-contact resolution, static/dynamic Coulomb friction, and sensor-driven fictitious forces (Euler, centrifugal, and Coriolis forces).
+        </p>
+        <div class="pill-group">
+          <span class="pill">3 Cubes (max 30)</span>
+          <span class="pill">15 Substeps @ 60 Hz</span>
+          <span class="pill">SAT Manifold Clipping</span>
+          <span class="pill">Coulomb Friction</span>
+          <span class="pill">DeviceMotion API</span>
+        </div>
+        <div class="card-actions">
+          <a class="launch-btn" href="./tests/test1/">Launch Test 1 &rarr;</a>
+        </div>
+      </article>
+
+      <!-- Test 2 (Upcoming) -->
+      <article class="test-card dimmed-card">
+        <div class="card-top">
+          <div class="test-title-group">
+            <span class="test-number">02</span>
+            <h2 class="test-name">Stacking & Creep Benchmark</h2>
+          </div>
+          <span class="badge planned">Planned</span>
+        </div>
+        <p class="test-desc">
+          Vertical towers and pyramids testing long-term resting contact stability, position iteration convergence, and creep elimination under accumulated mass.
+        </p>
+        <div class="pill-group">
+          <span class="pill">Tower Stacking</span>
+          <span class="pill">Normal Pre-Pass</span>
+          <span class="pill">Zero Drift</span>
+        </div>
+      </article>
+
+      <!-- Test 3 (Upcoming) -->
+      <article class="test-card dimmed-card">
+        <div class="card-top">
+          <div class="test-title-group">
+            <span class="test-number">03</span>
+            <h2 class="test-name">Restitution & Rest Contacts</h2>
+          </div>
+          <span class="badge planned">Planned</span>
+        </div>
+        <p class="test-desc">
+          Restitution thresholds and velocity solver behavior comparing high-velocity bounces against micro-collision settling without jitter.
+        </p>
+        <div class="pill-group">
+          <span class="pill">Restitution Threshold</span>
+          <span class="pill">Velocity Solver</span>
+          <span class="pill">Jitter Suppression</span>
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <footer>
+    <div>Based on Müller et al. XPBD (2020) &bull; SI Units</div>
+    <div><a href="https://github.com/kjetilhk/GameOfCubes" target="_blank" rel="noopener">GitHub Repository</a></div>
+  </footer>
 </div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-/* ================= physics: XPBD rigid cubes in a box =================
-   Müller et al. 2020, "Detailed Rigid Body Simulation with Extended Position
-   Based Dynamics": many small substeps, each a position solve (contacts and
-   static friction) followed by a velocity solve (dynamic friction, restitution).
-   Exposed as CubePhysics.World; no DOM or rendering in here.
-   SI units. Screen frame: x right, y up, z out of the glass; the box spans
-   z ∈ [-d, 0]. Contact normals point from body b (or a wall) toward body a. */
-const CubePhysics = (() => {
-const V = THREE.Vector3, Q = THREE.Quaternion;
-const SQRT3 = Math.sqrt(3);
-
-const DEFAULTS = {
-  dt: 1/60, substeps: 15,
-  positionIterations: 2, velocityIterations: 2,
-  muStatic: 0.55, muDynamic: 0.4, restitution: 0.35,
-  density: 700,                 // kg/m³, about wood
-  linearDamping: 0.3,           // 1/s
-  angularDamping: 1.0,          // 1/s
-  maxSpeed: 4,                  // m/s, guards against sensor spikes
-  maxSpin: 250,                 // rad/s
-  maxPushSpeed: 1.5,            // m/s, cap on depenetration per substep
-  contactMargin: 0.001          // m: near contacts are collected, solved only if penetrating
-};
-
-class Body {
-  constructor(size, density){
-    this.size = size; this.h = size/2;
-    const m = density*size*size*size;
-    this.invM = 1/m;
-    this.invI = 6/(m*size*size);          // cube inertia is isotropic: m s²/6
-    this.x = new V(); this.px = new V(); this.v = new V();
-    this.q = new Q(); this.pq = new Q(); this.w = new V();
-    this.qInv = new Q();
-    this.axes = [new V(1,0,0), new V(0,1,0), new V(0,0,1)];  // world-space local axes
-  }
-  sync(){
-    this.qInv.copy(this.q).conjugate();
-    this.axes[0].set(1,0,0).applyQuaternion(this.q);
-    this.axes[1].set(0,1,0).applyQuaternion(this.q);
-    this.axes[2].set(0,0,1).applyQuaternion(this.q);
-  }
-  toLocal(p, out){ return out.copy(p).sub(this.x).applyQuaternion(this.qInv); }
-  toWorld(l, out){ return out.copy(l).applyQuaternion(this.q).add(this.x); }
-  toWorldPrev(l, out){ return out.copy(l).applyQuaternion(this.pq).add(this.px); }
-}
-
-// ---------- scratch (the hot path never allocates) ----------
-const t1 = new V(), t2 = new V(), t3 = new V(), tq = new Q();
-const P1 = new V(), P2 = new V(), P1p = new V(), P2p = new V();
-const r1 = new V(), r2 = new V(), dir = new V(), dp = new V(), va = new V(), dv = new V();
-
-// ---------- generic position / velocity corrections ----------
-function genInvMass(b, r, n){
-  if (!b) return 0;
-  t3.crossVectors(r, n);
-  return b.invM + b.invI*t3.lengthSq();
-}
-function applyCorrection(b, r, p, sign){        // positional impulse p at offset r
-  if (!b) return;
-  b.x.addScaledVector(p, sign*b.invM);
-  t3.crossVectors(r, p).multiplyScalar(sign*b.invI);
-  tq.set(t3.x, t3.y, t3.z, 0).multiply(b.q);
-  b.q.x += .5*tq.x; b.q.y += .5*tq.y; b.q.z += .5*tq.z; b.q.w += .5*tq.w;
-  b.q.normalize();
-}
-function applyImpulse(b, r, p, sign){            // velocity impulse p at offset r
-  if (!b) return;
-  b.v.addScaledVector(p, sign*b.invM);
-  t3.crossVectors(r, p).multiplyScalar(sign*b.invI);
-  b.w.add(t3);
-}
-function pointVelocity(b, r, out){ return out.crossVectors(b.w, r).add(b.v); }
-
-// ---------- contacts (pooled) ----------
-// a: body pushed along +n; b: other body or null for a wall.
-// la/lb: contact points in body-local coordinates; wp: world point on a wall.
-const pool = [];
-let nContacts = 0;
-let margin = 0;   // contacts are collected this far before touching; solved only when penetrating
-function addContact(a, b, pa, pb, n){
-  if (nContacts === pool.length)
-    pool.push({ a:null, b:null, n:new V(), la:new V(), lb:new V(), wp:new V(), lam:0, vn0:0, e:0, jt:new V() });
-  const c = pool[nContacts++];
-  c.a = a; c.b = b; c.n.copy(n); c.lam = 0;
-  a.toLocal(pa, c.la);
-  if (b) b.toLocal(pb, c.lb); else c.wp.copy(pb);
-  // normal relative velocity before the solve, for restitution
-  pointVelocity(a, r1.subVectors(pa, a.x), va);
-  if (b) va.sub(pointVelocity(b, r2.subVectors(pb, b.x), t1));
-  c.vn0 = va.dot(n);
-}
-
-// ---------- cube vs walls: corners against six planes ----------
-const corner = new V(), wallPt = new V();
-function collideWalls(a, walls){
-  for (let i = 0; i < 8; i++){
-    corner.set(i&1 ? a.h : -a.h, i&2 ? a.h : -a.h, i&4 ? a.h : -a.h).applyQuaternion(a.q).add(a.x);
-    for (const w of walls){
-      const pen = w.o - w.n.dot(corner);
-      if (pen > -margin) addContact(a, null, corner, wallPt.copy(corner).addScaledVector(w.n, pen), w.n);
-    }
-  }
-}
-
-// ---------- cube vs cube: SAT + contact manifold ----------
-// Face contacts clip the incident face against the reference face (up to 8
-// points, so a resting cube gets a stable patch, not a single wobbling corner).
-// Edge axes are only used when clearly better than a face axis, which keeps the
-// normal from flipping between substeps.
-const D = new V(), L = new V(), N = new V(), F = new V(), U = new V(), W = new V();
-const absC = [[0,0,0],[0,0,0],[0,0,0]];
-const bufA = Array.from({length:16}, () => new V()), bufB = Array.from({length:16}, () => new V());
-const pA = new V(), pB = new V(), cA = new V(), cB = new V();
-const REL_TOL = 0.95, EPS = 1e-6;
-
-function clipPlane(src, n, dst, axis, origin, off){  // keep (p-origin)·axis <= off
-  let m = 0;
-  for (let i = 0; i < n; i++){
-    const p = src[i], q = src[(i+1) % n];
-    const dp = t1.subVectors(p, origin).dot(axis) - off;
-    const dq = t1.subVectors(q, origin).dot(axis) - off;
-    if (dp <= 0) dst[m++].copy(p);
-    if ((dp < 0 && dq > 0) || (dp > 0 && dq < 0)) dst[m++].lerpVectors(p, q, dp/(dp - dq));
-  }
-  return m;
-}
-
-// ref: body owning the reference face (axis index k, outward normal nRef);
-// inc: other body. Adds contacts with n pointing from b to a.
-function faceContact(ref, k, nRef, inc, A, B, n){
-  // incident face: the face of inc most anti-parallel to nRef
-  let bi = 0, bd = -1;
-  for (let i = 0; i < 3; i++){ const d = Math.abs(inc.axes[i].dot(nRef)); if (d > bd){ bd = d; bi = i; } }
-  F.copy(inc.axes[bi]).multiplyScalar(inc.axes[bi].dot(nRef) > 0 ? -inc.h : inc.h).add(inc.x);
-  U.copy(inc.axes[(bi+1)%3]).multiplyScalar(inc.h);
-  W.copy(inc.axes[(bi+2)%3]).multiplyScalar(inc.h);
-  bufA[0].copy(F).add(U).add(W); bufA[1].copy(F).sub(U).add(W);
-  bufA[2].copy(F).sub(U).sub(W); bufA[3].copy(F).add(U).sub(W);
-  let n4 = 4;
-  const u = ref.axes[(k+1)%3], w = ref.axes[(k+2)%3];
-  n4 = clipPlane(bufA, n4, bufB, u, ref.x, ref.h);
-  U.copy(u).negate(); n4 = clipPlane(bufB, n4, bufA, U, ref.x, ref.h);
-  n4 = clipPlane(bufA, n4, bufB, w, ref.x, ref.h);
-  U.copy(w).negate(); n4 = clipPlane(bufB, n4, bufA, U, ref.x, ref.h);
-  for (let i = 0; i < n4; i++){
-    const p = bufA[i];
-    const depth = ref.h - t1.subVectors(p, ref.x).dot(nRef);
-    if (depth <= -margin) continue;
-    t2.copy(p).addScaledVector(nRef, depth);       // projection onto reference face
-    if (ref === B) addContact(A, B, p, t2, n);
-    else addContact(A, B, t2, p, n);
-  }
-}
-
-function collideBoxes(A, B){
-  D.subVectors(A.x, B.x);                           // B → A
-  const R = (A.h + B.h)*SQRT3 + margin;
-  if (D.lengthSq() > R*R) return;
-  const a = A.axes, b = B.axes;
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) absC[i][j] = Math.abs(a[i].dot(b[j])) + EPS;
-
-  let faceSep = -Infinity, faceBody = 0, faceIdx = 0;
-  for (let i = 0; i < 3; i++){
-    const s = Math.abs(D.dot(a[i])) - A.h - B.h*(absC[i][0] + absC[i][1] + absC[i][2]);
-    if (s > margin) return;
-    if (s > faceSep){ faceSep = s; faceBody = 0; faceIdx = i; }
-  }
-  for (let j = 0; j < 3; j++){
-    const s = Math.abs(D.dot(b[j])) - B.h - A.h*(absC[0][j] + absC[1][j] + absC[2][j]);
-    if (s > margin) return;
-    if (s > REL_TOL*faceSep + 0.02*B.h){ faceSep = s; faceBody = 1; faceIdx = j; }
-  }
-  let edgeSep = -Infinity, ei = 0, ej = 0;
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++){
-    L.crossVectors(a[i], b[j]);
-    const len = L.length();
-    if (len < 1e-4) continue;                      // parallel edges: covered by face axes
-    L.divideScalar(len);
-    const rA = A.h*(Math.abs(a[0].dot(L)) + Math.abs(a[1].dot(L)) + Math.abs(a[2].dot(L)));
-    const rB = B.h*(Math.abs(b[0].dot(L)) + Math.abs(b[1].dot(L)) + Math.abs(b[2].dot(L)));
-    const s = Math.abs(D.dot(L)) - rA - rB;
-    if (s > margin) return;
-    if (s > edgeSep){ edgeSep = s; ei = i; ej = j; }
-  }
-
-  if (edgeSep > REL_TOL*faceSep + 0.02*Math.min(A.h, B.h)){
-    // edge–edge: one contact between the closest points of the two edges
-    N.crossVectors(a[ei], b[ej]).normalize();
-    if (N.dot(D) < 0) N.negate();
-    cA.copy(A.x); cB.copy(B.x);
-    for (let k = 0; k < 3; k++){
-      if (k !== ei) cA.addScaledVector(a[k], a[k].dot(N) > 0 ? -A.h : A.h);  // A's edge nearest B
-      if (k !== ej) cB.addScaledVector(b[k], b[k].dot(N) > 0 ? B.h : -B.h);  // B's edge nearest A
-    }
-    const d1 = a[ei], d2 = b[ej];
-    t1.subVectors(cA, cB);
-    const bb = d1.dot(d2), c = d1.dot(t1), f = d2.dot(t1);
-    const den = 1 - bb*bb;
-    let s = den > 1e-8 ? THREE.MathUtils.clamp((bb*f - c)/den, -A.h, A.h) : 0;
-    const t = THREE.MathUtils.clamp(bb*s + f, -B.h, B.h);
-    s = THREE.MathUtils.clamp(bb*t - c, -A.h, A.h);
-    pA.copy(cA).addScaledVector(d1, s);
-    pB.copy(cB).addScaledVector(d2, t);
-    if (t1.subVectors(pB, pA).dot(N) > -margin) addContact(A, B, pA, pB, N);
-    return;
-  }
-
-  if (faceBody === 1){
-    N.copy(b[faceIdx]); if (N.dot(D) < 0) N.negate();     // B's face toward A
-    faceContact(B, faceIdx, N, A, A, B, N);
-  } else {
-    N.copy(a[faceIdx]); if (N.dot(D) < 0) N.negate();     // n: B → A
-    L.copy(N).negate();                                   // A's face toward B
-    faceContact(A, faceIdx, L, B, A, B, N);
-  }
-}
-
-// ---------- solver passes ----------
-// Contacts are swept in alternating order each substep. With one Gauss–Seidel
-// pass, a fixed order makes resting cubes creep or slowly roll one way.
-let flip = false;
-function solveNormals(maxPush, fwd){
-  for (let k = 0; k < nContacts; k++){
-    const c = pool[fwd ? k : nContacts - 1 - k], a = c.a, b = c.b, n = c.n;
-    a.toWorld(c.la, P1);
-    if (b) b.toWorld(c.lb, P2); else P2.copy(c.wp);
-    let d = t1.subVectors(P2, P1).dot(n);
-    if (d <= 0) continue;
-    d = Math.min(d, maxPush);                      // deep overlaps separate over several substeps
-    r1.subVectors(P1, a.x); if (b) r2.subVectors(P2, b.x);
-    const dl = d/(genInvMass(a, r1, n) + genInvMass(b, r2, n));
-    c.lam += dl;
-    dir.copy(n).multiplyScalar(dl);
-    applyCorrection(a, r1, dir, +1);
-    applyCorrection(b, r2, dir, -1);
-  }
-}
-// static friction: undo the tangential slip of contact points this substep,
-// as long as that takes less than mu_s times the normal correction
-function solveStaticFriction(muS, fwd){
-  for (let k = 0; k < nContacts; k++){
-    const c = pool[fwd ? k : nContacts - 1 - k], a = c.a, b = c.b, n = c.n;
-    if (c.lam <= 0) continue;
-    a.toWorld(c.la, P1); a.toWorldPrev(c.la, P1p);
-    if (b){ b.toWorld(c.lb, P2); b.toWorldPrev(c.lb, P2p); }
-    else { P2.copy(c.wp); P2p.copy(c.wp); }
-    dp.subVectors(P1, P1p).sub(P2).add(P2p);
-    dp.addScaledVector(n, -dp.dot(n));
-    const len = dp.length();
-    if (len < 1e-12) continue;
-    dir.copy(dp).divideScalar(len);
-    r1.subVectors(P1, a.x); if (b) r2.subVectors(P2, b.x);
-    const lt = len/(genInvMass(a, r1, dir) + genInvMass(b, r2, dir));
-    if (lt < muS*c.lam){
-      dir.multiplyScalar(lt);
-      applyCorrection(a, r1, dir, -1);
-      applyCorrection(b, r2, dir, +1);
-    }
-  }
-}
-// Normals first (a few sweeps so a cube's corners agree), then friction, then
-// one more normal sweep to clean up what the friction step pushed in.
-function solvePositions(h, maxPush, iters){
-  for (let it = 0; it < iters; it++) solveNormals(maxPush, (it & 1) === 0 ? !flip : flip);
-  solveStaticFriction(this.muStatic, !flip);
-  solveNormals(maxPush, flip);
-}
-
-// Velocity pass: dynamic friction and restitution. A cube's 4–8 contact points
-// are coupled (friction at the bottom corners also tips the cube), so this runs a
-// few interleaved sweeps. Each contact's friction impulse is accumulated and kept
-// within the Coulomb limit mu * (normal impulse), the normal impulse over this
-// substep being lam/h.
-function relVel(c){
-  contactArms(c);
-  pointVelocity(c.a, r1, va);
-  if (c.b) va.sub(pointVelocity(c.b, r2, t1));
-  return va;
-}
-function solveVelocities(h, gmag){
-  for (let k = 0; k < nContacts; k++){
-    const c = pool[k];
-    c.jt.set(0, 0, 0);
-    if (c.lam <= 0) continue;
-    // restitution only for real impacts, so resting cubes don't hop
-    c.e = Math.abs(relVel(c).dot(c.n)) < 2*gmag*h ? 0 : this.restitution;
-  }
-  for (let it = 0; it < this.velocityIterations; it++){
-    const fwd = (it & 1) === 0 ? !flip : flip;
-    for (let k = 0; k < nContacts; k++){
-      const c = pool[fwd ? k : nContacts - 1 - k];
-      if (c.lam <= 0) continue;
-      const a = c.a, b = c.b, n = c.n;
-      // friction
-      relVel(c);
-      t2.copy(va).addScaledVector(n, -va.dot(n));
-      const vt = t2.length();
-      if (vt > 1e-9){
-        dv.copy(t2).divideScalar(vt);
-        dp.copy(c.jt).addScaledVector(dv, -vt/(genInvMass(a, r1, dv) + genInvMass(b, r2, dv)));
-        const maxJ = this.muDynamic*c.lam/h;
-        if (dp.lengthSq() > maxJ*maxJ) dp.setLength(maxJ);
-        dir.subVectors(dp, c.jt);
-        c.jt.copy(dp);
-        applyImpulse(a, r1, dir, +1);
-        applyImpulse(b, r2, dir, -1);
-      }
-      // normal: drive the normal velocity to zero, or to the bounce velocity
-      relVel(c);
-      const dvn = -va.dot(n) + Math.max(-c.e*c.vn0, 0);
-      if (Math.abs(dvn) < 1e-9) continue;
-      dir.copy(n).multiplyScalar(dvn/(genInvMass(a, r1, n) + genInvMass(b, r2, n)));
-      applyImpulse(a, r1, dir, +1);
-      applyImpulse(b, r2, dir, -1);
-    }
-  }
-}
-function contactArms(c){            // r1, r2: contact offsets from the body centers
-  c.a.toWorld(c.la, P1); r1.subVectors(P1, c.a.x);
-  if (c.b){ c.b.toWorld(c.lb, P2); r2.subVectors(P2, c.b.x); }
-}
-
-// ---------- world ----------
-class World {
-  constructor(opts){
-    Object.assign(this, DEFAULTS, opts);
-    this.bodies = [];
-    this.walls = [];
-    this.box = { hx:0.035, hy:0.07, d:0.045 };   // half width, half height, depth (m)
-    this.accel = new V(0, -9.81, 0);   // apparent acceleration felt inside the phone
-    this.omega = new V();              // phone angular velocity
-    this.omegaDot = new V();           // phone angular acceleration
-    this.center = new V();
-    this.setBox(this.box.hx, this.box.hy, this.box.d);
-  }
-  setBox(hx, hy, d){
-    Object.assign(this.box, { hx, hy, d });
-    // inward normal n, offset o: inside when n·p >= o
-    this.walls = [
-      { n:new V( 1,0,0), o:-hx }, { n:new V(-1,0,0), o:-hx },
-      { n:new V(0, 1,0), o:-hy }, { n:new V(0,-1,0), o:-hy },
-      { n:new V(0,0, 1), o:-d },  { n:new V(0,0,-1), o:0 }      // back wall, glass
-    ];
-    this.center.set(0, 0, -d/2);
-  }
-  addCube(size, pos, quat, vel){
-    const b = new Body(size, this.density);
-    b.x.copy(pos); if (quat) b.q.copy(quat); if (vel) b.v.copy(vel);
-    b.sync();
-    this.bodies.push(b);
-    return b;
-  }
-  clear(){ this.bodies.length = 0; }
-  // true if a cube of this size at pos would overlap an existing cube's bounding sphere
-  crowded(pos, size){
-    for (const b of this.bodies){
-      const r = (b.h + size/2)*SQRT3;
-      if (b.x.distanceToSquared(pos) < r*r) return true;
-    }
-    return false;
-  }
-
-  step(){
-    const h = this.dt/this.substeps;
-    const gmag = Math.max(this.accel.length(), 1);
-    const maxPush = this.maxPushSpeed*h;
-    const linK = Math.max(0, 1 - this.linearDamping*h), angK = Math.max(0, 1 - this.angularDamping*h);
-    const { bodies, omega, omegaDot, accel, center } = this;
-
-    for (let s = 0; s < this.substeps; s++){
-      // integrate: gravity/shake plus fictitious forces from the rotating phone
-      for (const b of bodies){
-        b.px.copy(b.x); b.pq.copy(b.q);
-        t1.subVectors(b.x, center);
-        t2.crossVectors(omegaDot, t1);                            // Euler
-        t3.crossVectors(omega, t1); t3.crossVectors(omega, t3);   // centrifugal
-        b.v.addScaledVector(accel, h).addScaledVector(t2, -h).addScaledVector(t3, -h);
-        t2.crossVectors(omega, b.v); b.v.addScaledVector(t2, -2*h);  // Coriolis
-        b.w.addScaledVector(omegaDot, -h);
-        b.x.addScaledVector(b.v, h);
-        tq.set(b.w.x, b.w.y, b.w.z, 0).multiply(b.q);
-        b.q.x += .5*h*tq.x; b.q.y += .5*h*tq.y; b.q.z += .5*h*tq.z; b.q.w += .5*h*tq.w;
-        b.q.normalize();
-        b.sync();
-      }
-
-      // collide
-      nContacts = 0;
-      margin = this.contactMargin;
-      for (const b of bodies) collideWalls(b, this.walls);
-      for (let i = 0; i < bodies.length; i++)
-        for (let j = i + 1; j < bodies.length; j++) collideBoxes(bodies[i], bodies[j]);
-
-      solvePositions.call(this, h, maxPush, this.positionIterations);
-
-      // velocities from the position change
-      for (const b of bodies){
-        b.v.subVectors(b.x, b.px).divideScalar(h);
-        tq.copy(b.pq).conjugate().premultiply(b.q);
-        b.w.set(tq.x, tq.y, tq.z).multiplyScalar(2/h);
-        if (tq.w < 0) b.w.negate();
-      }
-
-      solveVelocities.call(this, h, gmag);
-      flip = !flip;
-
-      for (const b of bodies){
-        b.v.multiplyScalar(linK); b.w.multiplyScalar(angK);
-        if (b.v.lengthSq() > this.maxSpeed*this.maxSpeed) b.v.setLength(this.maxSpeed);
-        if (b.w.lengthSq() > this.maxSpin*this.maxSpin) b.w.setLength(this.maxSpin);
-      }
-    }
-  }
-}
-
-return { World, Body, DEFAULTS };
-})();
-</script>
-<script>
-(() => {
-const V = THREE.Vector3;
-const world = new CubePhysics.World();
-const { bodies, box, accel, omega, omegaDot } = world;
-
-/* ================= rendering ================= */
-const renderer = new THREE.WebGLRenderer({ antialias:true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.outputEncoding = THREE.sRGBEncoding;
-document.body.prepend(renderer.domElement);
-
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(38, 1, 0.002, 2);
-scene.add(new THREE.HemisphereLight(0xfff4e0, 0x37475a, 0.65));
-const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-sun.castShadow = true;
-sun.shadow.mapSize.set(1024,1024);
-sun.shadow.bias = -0.0004;
-const sc = sun.shadow.camera; sc.left=-.15; sc.right=.15; sc.top=.15; sc.bottom=-.15; sc.near=.01; sc.far=1;
-scene.add(sun, sun.target);
-
-const wallMat = new THREE.MeshStandardMaterial({ color:0x8fa3b5, roughness:.95 });
-const backMat = new THREE.MeshStandardMaterial({ color:0x9fb3c4, roughness:.95 });
-let wallGroup = new THREE.Group(); scene.add(wallGroup);
-
-function rebuildWallMeshes(){
-  scene.remove(wallGroup); wallGroup = new THREE.Group();
-  const {hx,hy,d} = box;
-  const mk = (w,hh,mat,pos,rot) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w,hh), mat);
-    m.position.copy(pos); m.rotation.set(...rot); m.receiveShadow = true; wallGroup.add(m);
-  };
-  mk(2*hx, 2*hy, backMat, new V(0,0,-d), [0,0,0]);
-  mk(d, 2*hy, wallMat, new V(-hx,0,-d/2), [0, Math.PI/2, 0]);
-  mk(d, 2*hy, wallMat, new V( hx,0,-d/2), [0,-Math.PI/2, 0]);
-  mk(2*hx, d, wallMat, new V(0,-hy,-d/2), [-Math.PI/2,0,0]);
-  mk(2*hx, d, wallMat, new V(0, hy,-d/2), [ Math.PI/2,0,0]);
-  scene.add(wallGroup);
-}
-
-function roundedCube(s, r, seg){
-  const g = new THREE.BoxGeometry(s,s,s,seg,seg,seg);
-  const p = g.attributes.position, nrm = g.attributes.normal;
-  const v = new V(), c = new V(), k = s/2 - r;
-  for (let i=0;i<p.count;i++){
-    v.fromBufferAttribute(p,i);
-    c.set(THREE.MathUtils.clamp(v.x,-k,k), THREE.MathUtils.clamp(v.y,-k,k), THREE.MathUtils.clamp(v.z,-k,k));
-    v.sub(c).normalize(); nrm.setXYZ(i, v.x, v.y, v.z);
-    v.multiplyScalar(r).add(c); p.setXYZ(i, v.x, v.y, v.z);
-  }
-  return g;
-}
-const PALETTE = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x4fbf9f, 0xf3efe6, 0x7a5cc4, 0xff9f43];
-const meshes = [];
-
-function addCube(){
-  const s = 0.009 + Math.random()*0.005;
-  // look for a free spot so new cubes don't start inside each other
-  const pos = new V();
-  for (let tries = 0; tries < 20; tries++){
-    pos.set((Math.random()-.5)*2*(box.hx - s), box.hy*(0.8*Math.random() - 0.1), -box.d/2);
-    if (!world.crowded(pos, s)) break;
-  }
-  world.addCube(s, pos,
-    new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
-    new V((Math.random()-.5)*.3, 0, 0));
-  const m = new THREE.Mesh(roundedCube(s, s*0.14, 4),
-    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness:.4 }));
-  m.castShadow = m.receiveShadow = true;
-  scene.add(m); meshes.push(m);
-}
-function reset(){
-  for (const m of meshes){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
-  meshes.length = 0; world.clear();
-  for (let i=0;i<3;i++) addCube();
-}
-
-function resize(){
-  const W = innerWidth, H = innerHeight, aspect = W/H;
-  renderer.setSize(W, H, false);
-  camera.aspect = aspect;
-  // physical-ish box: short side ≈ 7 cm
-  const short = 0.035;
-  if (aspect < 1) world.setBox(short, short/aspect, 0.045);
-  else world.setBox(short*aspect, short, 0.045);
-  rebuildWallMeshes();
-  const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
-  const dist = Math.max(box.hy/tanH, box.hx/(tanH*aspect));
-  camera.position.set(0,0,dist); camera.lookAt(0,0,0);
-  camera.updateProjectionMatrix();
-  sun.position.set(box.hx*0.6, box.hy*1.2, 0.25); sun.target.position.set(0,0,-box.d);
-}
-addEventListener('resize', resize);
-resize();
-reset();
-
-/* ================= input ================= */
-function screenAngle(){
-  if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
-  return typeof window.orientation === 'number' ? window.orientation : 0;
-}
-function toScreen(x, y, z, out){
-  const a = THREE.MathUtils.degToRad(screenAngle()), c=Math.cos(a), s=Math.sin(a);
-  return out.set(x*c - y*s, x*s + y*c, z);
-}
-let gotMotion = false, lastT = 0;
-const prevOmega = new V(), tmpO = new V(), rawA = new V(), dO = new V();
-function onMotion(e){
-  const g = e.accelerationIncludingGravity;
-  if (!g || g.x == null) return;
-  gotMotion = true;
-  // reading = phone accel − gravity; things inside the phone feel the opposite
-  toScreen(-g.x, -g.y, -g.z, rawA);
-  const L = rawA.length(); if (L > 80) rawA.multiplyScalar(80/L);
-  accel.copy(rawA);
-  const r = e.rotationRate;
-  if (r && r.alpha != null){
-    const k = Math.PI/180;
-    toScreen(r.beta*k, r.gamma*k, r.alpha*k, tmpO);
-    const now = performance.now()/1000, dt = lastT ? Math.min(Math.max(now-lastT, 0.005), 0.1) : 0;
-    lastT = now;
-    omega.lerp(tmpO, 0.6);
-    if (dt){
-      dO.copy(omega).sub(prevOmega).divideScalar(dt);
-      if (dO.length() > 200) dO.setLength(200);
-      omegaDot.lerp(dO, 0.35);
-    }
-    prevOmega.copy(omega);
-  }
-}
-
-const note = document.getElementById('note');
-function showNote(text, ms){
-  note.textContent = text; note.classList.add('show');
-  clearTimeout(showNote.t); if (ms) showNote.t = setTimeout(()=>note.classList.remove('show'), ms);
-}
-
-// Drag to tilt (desktop or no sensors)
-let tiltX = 0, tiltY = 0, dragging = false, lx = 0, ly = 0;
-function dragGravity(){
-  const g = 9.81;
-  accel.set(Math.sin(tiltX)*Math.cos(tiltY)*g, -Math.cos(tiltX)*Math.cos(tiltY)*g, -Math.sin(tiltY)*g);
-}
-renderer.domElement.addEventListener('pointerdown', e => { dragging = true; lx = e.clientX; ly = e.clientY; });
-addEventListener('pointerup', () => dragging = false);
-addEventListener('pointermove', e => {
-  if (!dragging || gotMotion) return;
-  tiltX = THREE.MathUtils.clamp(tiltX + (e.clientX-lx)*0.008, -1.5, 1.5);
-  tiltY = THREE.MathUtils.clamp(tiltY + (e.clientY-ly)*0.008, -1.5, 1.5);
-  lx = e.clientX; ly = e.clientY;
-  dragGravity();
-});
-
-let denied = false;
-document.getElementById('go').addEventListener('click', async () => {
-  try {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
-      const res = await DeviceMotionEvent.requestPermission();
-      if (res !== 'granted') throw new Error('denied');
-    }
-    addEventListener('devicemotion', onMotion);
-  } catch(err){ denied = true; }
-  document.getElementById('intro').remove();
-  setTimeout(() => {
-    if (!gotMotion){
-      document.getElementById('shake').classList.remove('hidden');
-      let embedded = false; try { embedded = window.self !== window.top; } catch(e){ embedded = true; }
-      const msg = denied ? 'Motion access was denied. Drag to tilt the box.'
-        : embedded ? 'This viewer blocks motion sensors. Host the file on an https page to use tilt. Drag to tilt for now.'
-        : !isSecureContext ? 'Motion sensors need an https page. Drag to tilt for now.'
-        : 'No motion data arrived. Drag to tilt the box.';
-      showNote(msg, 7000);
-    }
-  }, 1200);
-});
-document.getElementById('add').addEventListener('click', () => { if (bodies.length < 30) addCube(); });
-document.getElementById('reset').addEventListener('click', reset);
-document.getElementById('shake').addEventListener('click', () => {
-  for (const b of bodies){
-    b.v.add(new V((Math.random()-.5)*1.2, Math.random()*1.0, (Math.random()-.3)*0.6));
-    b.w.add(new V((Math.random()-.5)*60, (Math.random()-.5)*60, (Math.random()-.5)*60));
-  }
-});
-
-/* ================= loop ================= */
-let acc = 0, last = performance.now();
-function frame(now){
-  acc += Math.min((now-last)/1000, 0.1); last = now;
-  let n = 0;
-  while (acc >= world.dt && n < 3){ world.step(); acc -= world.dt; n++; }
-  if (n === 3) acc = 0;
-  for (let i=0;i<bodies.length;i++){ meshes[i].position.copy(bodies[i].x); meshes[i].quaternion.copy(bodies[i].q); }
-  renderer.render(scene, camera);
-  requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
-})();
-</script>
 </body>
 </html>
