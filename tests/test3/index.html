@@ -121,14 +121,16 @@ function initScene(){
   cubeMeshes.length = 0;
   world.clear();
 
-  const edgeComp = softMode ? 0.0003 : 0.00003;
+  // High-resolution continuum soft body: 6x6x6 grid (625 tetrahedra, 990 elastic edges, 216 particles)
+  const edgeComp = softMode ? 0.018 : 0.006;
+  const volComp = softMode ? 0.0004 : 0.00015;
   activeTetMesh = world.addTetMesh({
-    nx: 3, ny: 3, nz: 3,
+    nx: 6, ny: 6, nz: 6,
     sizeX: 0.85, sizeY: 0.85, sizeZ: 0.85,
     center: new V(0, -box.hy * 0.25, -box.d * 0.5),
-    mass: 25.0,
+    mass: 16.0,
     edgeCompliance: edgeComp,
-    volCompliance: 0.0
+    volCompliance: volComp
   });
 
   buildTetVisualMesh(activeTetMesh);
@@ -149,7 +151,7 @@ function handlePointer(e, type){
   if (type === 'down'){
     raycaster.setFromCamera(mouseVec, camera);
     if (activeTetMesh) {
-      let closestP = null, minD = 0.35;
+      let closestP = null, minD = 0.25;
       for (const p of activeTetMesh.particles){
         const dist = raycaster.ray.distanceToPoint(p.x);
         if (dist < minD){ minD = dist; closestP = p; }
@@ -188,11 +190,13 @@ RoomEnv.setupMotionSensors({
 document.getElementById('stiff').addEventListener('click', () => {
   softMode = !softMode;
   document.getElementById('stiff').textContent = softMode ? 'Stiffer' : 'Softer';
-  const edgeComp = softMode ? 0.0003 : 0.00003;
+  const edgeComp = softMode ? 0.018 : 0.006;
+  const volComp = softMode ? 0.0004 : 0.00015;
   if (activeTetMesh) {
     for (const c of activeTetMesh.edgeConstraints) c.compliance = edgeComp;
+    for (const c of activeTetMesh.volumeConstraints) c.compliance = volComp;
   }
-  RoomEnv.showNote(softMode ? 'Elasticity: Soft & squishy' : 'Elasticity: Firm & stiff', 1500);
+  RoomEnv.showNote(softMode ? 'Elasticity: Extra soft & wobbly' : 'Elasticity: Natural soft rubber', 1500);
 });
 
 document.getElementById('wire').addEventListener('click', () => {

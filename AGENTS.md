@@ -79,7 +79,7 @@ Interactive XPBD cotton cloth sheet in the box.
 ### Test 3: Soft Body Simulation (`tests/test3/index.html`)
 
 Volumetric continuum mechanics soft body on a 3D tetrahedral mesh.
-- Decomposed into 40 tetrahedra (27 particles in a $3\times3\times3$ grid) with 90 edge constraints and 40 tetrahedral volume preservation constraints.
+- Decomposed into 625 tetrahedra (216 particles in a $6\times6\times6$ grid) with 990 edge constraints and 625 tetrahedral volume preservation constraints.
 - Hydrostatic volume conservation ensures true physical incompressibility: squishing against walls or floor causes realistic lateral bulging.
 - Wireframe mode toggle to inspect interior/surface tetrahedral deformation.
 - Interactive raycaster pointer allows pinching, poking, and stretching the volumetric solid.
