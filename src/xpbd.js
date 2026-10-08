@@ -862,24 +862,22 @@ class World {
           const pen = (w.o + p.radius) - w.n.dot(p.x);
           if (pen > 0){
             p.x.addScaledVector(w.n, pen);
-            // Advance px normally to prevent geometric depenetration from creating upward kinetic velocity
-            p.px.addScaledVector(w.n, pen);
-            // Tangential surface friction against walls and floor
+            // Ensure p.px is not outside the wall so depenetration does not create artificial outward kinetic bounce
+            const pxPen = (w.o + p.radius) - w.n.dot(p.px);
+            if (pxPen > 0) p.px.addScaledVector(w.n, pxPen);
+            // Eliminate normal velocity into the wall: (p.x - p.px)·w.n must be >= 0
+            const nDisp = (p.x.dot(w.n) - p.px.dot(w.n));
+            if (nDisp < 0) p.px.addScaledVector(w.n, nDisp);
+
+            // Tangential dynamic friction (smooth sliding, prevents wall sticking)
             t1.subVectors(p.x, p.px);
-            const normDisp = t1.dot(w.n);
-            t1.addScaledVector(w.n, -normDisp);
+            const normComponent = t1.dot(w.n);
+            t1.addScaledVector(w.n, -normComponent);
             const tLen = t1.length();
             if (tLen > 1e-6){
-              const frictionCoeff = 0.55;
-              const maxFrictionDisp = frictionCoeff * pen;
-              if (tLen < maxFrictionDisp){
-                p.x.sub(t1);
-                p.px.sub(t1);
-              } else {
-                const f = maxFrictionDisp / tLen;
-                p.x.addScaledVector(t1, -f);
-                p.px.addScaledVector(t1, -f);
-              }
+              const mu = p._tetMesh ? 0.05 : 0.25;
+              const f = Math.min(0.5, mu * (pen / (tLen + 1e-5)));
+              p.x.addScaledVector(t1, -f);
             }
           }
         }
