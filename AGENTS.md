@@ -98,9 +98,10 @@ When adding new tests:
 - **Physically Based Rendering (PBR)**:
   - **Tone Mapping**: ACES Filmic (`renderer.toneMapping = THREE.ACESFilmicToneMapping`, `renderer.toneMappingExposure = 1.0`) with sRGB output encoding.
   - **Materials**: `MeshPhysicalMaterial` used for objects: cubes feature physical clearcoat lacquer (`clearcoat: 0.25`), soft body features physical fluid transmission (`transmission: 0.75`, `ior: 1.333`), and cloth uses `MeshStandardMaterial` with woven cotton bump and roughness.
-- **Lighting**: Studio side lighting with dark room ambiance (strictly single Key Light, zero fill lights):
-  - **Key Light**: Primary warm directional light from the front-right side (`0xfff4e6`, intensity 1.6) positioned at $z = 0.05$ (near the front glass) for balanced 3/4 side-key illumination with soft PCF shadow mapping (2048×2048 map, near 0.1, far 15).
-  - **Zero Fill**: No ambient light, no hemisphere light, no fill lights, and `scene.environment = null` so unlit faces receive zero fill.
+- **Lighting**: Studio lighting setup (1 Key Light reduced to 70%, 2 Fill Lights):
+  - **Key Light**: Primary warm directional light from the front-right side (`0xfff4e6`, intensity 1.12, reduced to 70%) positioned at $z = 0.05$ (near the front glass) for balanced 3/4 key illumination with soft PCF shadow mapping (2048×2048 map, near 0.1, far 15).
+  - **Fill Light 1**: Soft cool directional fill from the front-left side (`0xcde0f8`, intensity 0.25, $z = 0.05$) to soften dark shadows.
+  - **Fill Light 2**: Ambient room fill (`0x363d4a` / `0x16191f`, intensity 0.25) providing gentle bounce light for the ceiling and room corners.
 - **Dark Gray Walls Palette**:
   - Walls and ceiling: `0x242830` (roughness 0.85, metalness 0.05).
   - Back wall: `0x1b1f25` (roughness 0.90, metalness 0.04).

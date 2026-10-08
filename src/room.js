@@ -20,10 +20,10 @@ const ROOM_MATERIALS = {
   floor: new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.65, metalness: 0.10 })
 };
 
-/* ================= 2. Studio Lighting (Single Key Light, Zero Fill) ================= */
+/* ================= 2. Studio Lighting (1 Key Light, 2 Fill Lights) ================= */
 function createLighting(scene) {
-  // Single Key Light: warm directional light from the front-right side for 3/4 studio key illumination
-  const key = new THREE.DirectionalLight(0xfff4e6, 1.6);
+  // 1. Key Light: warm primary light from the front-right side, reduced to 70% intensity (1.12)
+  const key = new THREE.DirectionalLight(0xfff4e6, 1.12);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0003;
@@ -33,15 +33,23 @@ function createLighting(scene) {
   sc.near = 0.1; sc.far = 15;
   scene.add(key, key.target);
 
+  // 2. Fill Light 1: cool directional fill from the opposite (left) side to soften shadows
+  const fill1 = new THREE.DirectionalLight(0xcde0f8, 0.25);
+  scene.add(fill1, fill1.target);
+
+  // 3. Fill Light 2: ambient studio room fill so ceiling and shadows have gentle bounce light
+  const fill2 = new THREE.HemisphereLight(0x363d4a, 0x16191f, 0.25);
+  scene.add(fill2);
+
   return {
     key,
-    fill1: null,
-    fill2: null,
-    fill: null,
-    rim: null,
+    fill1,
+    fill2,
+    fill: fill1,      // backwards compatibility alias
+    rim: fill2,       // backwards compatibility alias
     light1: key,
-    light2: null,
-    light3: null
+    light2: fill1,
+    light3: fill2
   };
 }
 
@@ -91,20 +99,28 @@ function updateRoom(camera, renderer, world, lights, oldWallGroup, scene) {
   camera.lookAt(0, 0, -world.box.d * 0.3);
   camera.updateProjectionMatrix();
 
-  // Key light: positioned on the front-right side (z = 0.05) shining across and into the box
-  if (lights && lights.key) {
-    lights.key.position.set(world.box.hx * 1.35, world.box.hy * 0.85, 0.05);
-    lights.key.target.position.set(-world.box.hx * 0.1, -world.box.hy * 0.25, -world.box.d * 0.45);
+  // Studio lighting: Key light from front-right, Fill light 1 from front-left
+  if (lights) {
+    if (lights.key) {
+      lights.key.position.set(world.box.hx * 1.35, world.box.hy * 0.85, 0.05);
+      lights.key.target.position.set(-world.box.hx * 0.1, -world.box.hy * 0.25, -world.box.d * 0.45);
 
-    const maxDim = Math.max(world.box.hx, world.box.hy, world.box.d);
-    const sc = lights.key.shadow.camera;
-    sc.left = -maxDim * 1.6;
-    sc.right = maxDim * 1.6;
-    sc.top = maxDim * 1.6;
-    sc.bottom = -maxDim * 1.6;
-    sc.near = 0.1;
-    sc.far = Math.max(15, maxDim * 5);
-    sc.updateProjectionMatrix();
+      const maxDim = Math.max(world.box.hx, world.box.hy, world.box.d);
+      const sc = lights.key.shadow.camera;
+      sc.left = -maxDim * 1.6;
+      sc.right = maxDim * 1.6;
+      sc.top = maxDim * 1.6;
+      sc.bottom = -maxDim * 1.6;
+      sc.near = 0.1;
+      sc.far = Math.max(15, maxDim * 5);
+      sc.updateProjectionMatrix();
+    }
+
+    const f1 = lights.fill1 || lights.fill;
+    if (f1) {
+      f1.position.set(-world.box.hx * 1.35, world.box.hy * 0.6, 0.05);
+      if (f1.target) f1.target.position.set(world.box.hx * 0.1, -world.box.hy * 0.25, -world.box.d * 0.45);
+    }
   }
 
   // Configure tone mapping and ensure zero ambient/fill environment lighting
