@@ -22,8 +22,8 @@ const ROOM_MATERIALS = {
 
 /* ================= 2. Studio Lighting (1 Key Light, 2 Fill Lights) ================= */
 function createLighting(scene) {
-  // 1. Key Light: warm primary light from the front-right side, reduced to 70% intensity (1.12)
-  const key = new THREE.DirectionalLight(0xfff4e6, 1.12);
+  // 1. Key Light: warm primary light from the front-right side, reduced by 50% (0.56)
+  const key = new THREE.DirectionalLight(0xfff4e6, 0.56);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0003;
@@ -34,12 +34,12 @@ function createLighting(scene) {
   sc.near = 0.1; sc.far = 15;
   scene.add(key, key.target);
 
-  // 2. Fill Light 1: cool directional fill shining into the room to illuminate left wall and shadows
-  const fill1 = new THREE.DirectionalLight(0xcfe0f5, 0.55);
+  // 2. Fill Light 1: cool directional fill shining into the room, reduced by 50% (0.28)
+  const fill1 = new THREE.DirectionalLight(0xcfe0f5, 0.28);
   scene.add(fill1, fill1.target);
 
-  // 3. Fill Light 2: ambient studio room light so shadows, ceiling, and corners are never pitch black
-  const fill2 = new THREE.AmbientLight(0xdde5f0, 0.42);
+  // 3. Fill Light 2: ambient studio room light, reduced by 50% (0.21)
+  const fill2 = new THREE.AmbientLight(0xdde5f0, 0.21);
   scene.add(fill2);
 
   return {

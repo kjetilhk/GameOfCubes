@@ -98,10 +98,10 @@ When adding new tests:
 - **Physically Based Rendering (PBR)**:
   - **Tone Mapping**: ACES Filmic (`renderer.toneMapping = THREE.ACESFilmicToneMapping`, `renderer.toneMappingExposure = 1.0`) with sRGB output encoding.
   - **Materials**: `MeshPhysicalMaterial` used for objects: cubes feature physical clearcoat lacquer (`clearcoat: 0.25`), soft body features physical fluid transmission (`transmission: 0.75`, `ior: 1.333`), and cloth uses `MeshStandardMaterial` with woven cotton bump and roughness.
-- **Lighting**: Studio lighting setup (1 Key Light reduced to 70%, 2 Fill Lights):
-  - **Key Light**: Primary warm directional light from the front-right side (`0xfff4e6`, intensity 1.12, reduced to 70%) positioned at $z = 0.05$ (near the front glass) for balanced 3/4 key illumination with soft PCF shadow mapping (2048×2048 map, near 0.1, far 15).
-  - **Fill Light 1**: Soft cool directional fill from the front-left aperture (`0xcfe0f5`, intensity 0.55, $z = 0.35$) aimed directly at the left wall to soften cast shadows.
-  - **Fill Light 2**: Ambient room fill (`THREE.AmbientLight(0xdde5f0, 0.42)`) ensuring cast shadows, ceiling, and back corners are never pitch black.
+- **Lighting**: Studio lighting setup (1 Key Light, 2 Fill Lights, reduced by 50%):
+  - **Key Light**: Primary warm directional light from the front-right side (`0xfff4e6`, intensity 0.56) positioned at $z = 0.05$ (near the front glass) for balanced 3/4 key illumination with soft PCF shadow mapping (2048×2048 map, near 0.1, far 15).
+  - **Fill Light 1**: Soft cool directional fill from the front-left aperture (`0xcfe0f5`, intensity 0.28, $z = 0.35$) aimed directly at the left wall to soften cast shadows.
+  - **Fill Light 2**: Ambient room fill (`THREE.AmbientLight(0xdde5f0, 0.21)`) ensuring cast shadows, ceiling, and back corners are never pitch black.
 - **Dark Gray Walls Palette**:
   - Walls and ceiling: `0x242830` (roughness 0.85, metalness 0.05).
   - Back wall: `0x1b1f25` (roughness 0.90, metalness 0.04).
