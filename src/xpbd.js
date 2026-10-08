@@ -80,6 +80,7 @@ class Cloth {
     nx = 14, ny = 14,
     width = 0.045, height = 0.045,
     center = new V(0, 0.015, -0.022),
+    plane = 'xy',             // 'xy' (vertical) or 'xz' (horizontal)
     mass = 0.015,
     compliance = 0,           // stretch compliance
     shearCompliance = 0.01,   // diagonal compliance
@@ -94,8 +95,10 @@ class Cloth {
     const particleMass = mass / (nx * ny);
     const dx = width / (nx - 1);
     const dy = height / (ny - 1);
+    const isXZ = plane === 'xz';
     const startX = center.x - width/2;
     const startY = center.y + height/2;
+    const startZ = center.z - height/2;
 
     this.particleMass = particleMass;
     const colRadius = particleRadius !== null && particleRadius !== undefined ? particleRadius : Math.min(dx, dy) * 0.28;
@@ -103,10 +106,18 @@ class Cloth {
     for (let j = 0; j < ny; j++){
       for (let i = 0; i < nx; i++){
         const idx = j * nx + i;
-        const px = startX + i * dx;
-        const py = startY - j * dy;
-        // Subtle out-of-plane catenary wave so fabric hangs with organic 3D drapery
-        const pz = center.z + Math.sin(i / (nx - 1) * Math.PI) * 0.025 * (j / (ny - 1));
+        let px, py, pz;
+        if (isXZ){
+          px = startX + i * dx;
+          // Subtle initial perturbation to break symmetry so cloth drapes naturally into organic folds
+          py = center.y + Math.sin(i / (nx - 1) * Math.PI) * Math.sin(j / (ny - 1) * Math.PI) * 0.005;
+          pz = startZ + j * dy;
+        } else {
+          px = startX + i * dx;
+          py = startY - j * dy;
+          // Subtle out-of-plane catenary wave so fabric hangs with organic 3D drapery
+          pz = center.z + Math.sin(i / (nx - 1) * Math.PI) * 0.025 * (j / (ny - 1));
+        }
         const isPinned = Array.isArray(pinnedCorners) && pinnedCorners.includes(idx);
         const p = new Particle(px, py, pz, isPinned ? 0 : particleMass, colRadius);
         p._cloth = this;
@@ -725,6 +736,7 @@ class World {
     this.volumeConstraints = [];
     this.cloths = [];
     this.tetMeshes = [];
+    this.spheres = [];
     this.walls = [];
     this.box = { hx:1.0, hy:1.5, d:2.2 };   // 3 meters tall (hy = 1.5m), 2.2m depth
     this.accel = new V(0, -9.81, 0);   // apparent acceleration felt inside the box
@@ -742,6 +754,11 @@ class World {
       { n:new V(0,0, 1), o:-d },  { n:new V(0,0,-1), o:0 }      // back wall, glass
     ];
     this.center.set(0, 0, -d/2);
+  }
+  addSphere(radius, center, friction = 0.25){
+    const s = { radius, center: center.clone(), friction };
+    this.spheres.push(s);
+    return s;
   }
   addCube(size, pos, quat, vel){
     const b = new Body(size, this.density);
@@ -782,6 +799,7 @@ class World {
     this.volumeConstraints.length = 0;
     this.cloths.length = 0;
     this.tetMeshes.length = 0;
+    this.spheres.length = 0;
   }
   // true if a cube of this size at pos overlaps an existing cube's bounding sphere
   crowded(pos, size){
@@ -881,6 +899,34 @@ class World {
             }
           }
         }
+        // sphere collision
+        for (const s of this.spheres){
+          const minR = s.radius + p.radius;
+          t1.subVectors(p.x, s.center);
+          const d2 = t1.lengthSq();
+          if (d2 < minR * minR){
+            const d = Math.sqrt(d2);
+            const n = d > 1e-9 ? t1.divideScalar(d) : t1.set(0, 1, 0);
+            const pen = minR - d;
+            p.x.addScaledVector(n, pen);
+
+            const pxDist = (p.px.x - s.center.x)*n.x + (p.px.y - s.center.y)*n.y + (p.px.z - s.center.z)*n.z;
+            if (pxDist < minR) p.px.addScaledVector(n, minR - pxDist);
+
+            const nDisp = (p.x.x - p.px.x)*n.x + (p.x.y - p.px.y)*n.y + (p.x.z - p.px.z)*n.z;
+            if (nDisp < 0) p.px.addScaledVector(n, nDisp);
+
+            t2.subVectors(p.x, p.px);
+            const nComp = t2.dot(n);
+            t2.addScaledVector(n, -nComp);
+            const tLen = t2.length();
+            if (tLen > 1e-6){
+              const mu = s.friction !== undefined ? s.friction : 0.3;
+              const f = Math.min(0.5, mu * (pen / (tLen + 1e-5)));
+              p.x.addScaledVector(t2, -f);
+            }
+          }
+        }
         // cube collision
         for (const b of bodies){
           if (p.x.distanceToSquared(b.x) > (b.h * SQRT3 + p.radius)**2) continue;
@@ -927,6 +973,20 @@ class World {
       nContacts = 0;
       margin = this.contactMargin;
       for (const b of bodies) collideWalls(b, this.walls);
+      for (const b of bodies){
+        for (const s of this.spheres){
+          const minR = s.radius + b.h;
+          t1.subVectors(b.x, s.center);
+          const d2 = t1.lengthSq();
+          if (d2 < minR * minR){
+            const d = Math.sqrt(d2);
+            const n = d > 1e-9 ? t1.divideScalar(d) : t1.set(0, 1, 0);
+            b.x.addScaledVector(n, minR - d);
+            const vn = b.v.dot(n);
+            if (vn < 0) b.v.addScaledVector(n, -vn);
+          }
+        }
+      }
       for (let i = 0; i < bodies.length; i++)
         for (let j = i + 1; j < bodies.length; j++) collideBoxes(bodies[i], bodies[j]);
 

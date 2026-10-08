@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Test 4: Cloth Over Sphere - XPBD Dynamics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../src/common.css">
+</head>
+<body>
+<div id="fps">-- FPS</div>
+<div id="note"></div>
+<div id="hud">
+  <a id="back" href="../../">← Tests</a>
+  <button id="reset">Reset</button>
+  <button id="selfcol" class="active">Self Collision: On</button>
+  <button id="wire">Wireframe</button>
+  <button id="cube">Drop Cube</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="../../src/xpbd.js"></script>
+<script src="../../src/room.js"></script>
+<script>
+(() => {
+'use strict';
+
+const V = THREE.Vector3;
+const world = new XPBD.World({ dt: 1/60, substeps: 16, linearDamping: 0.6 });
+world.selfCollision = true; // Enabled by default as specified
+
+const { bodies, particles, box } = world;
+
+/* ================= rendering & room ================= */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
+const lights = RoomEnv.createLighting(scene);
+let wallGroup = null;
+
+function resize(){
+  wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
+  updateCameraTransform();
+}
+window.addEventListener('resize', resize);
+
+/* ================= 3D Orbit Camera (No Gyro) ================= */
+const orbitTarget = new V(0, 0.05, -1.2);
+let orbitDist = 3.2;
+let orbitYaw = 0.0;
+let orbitPitch = 0.28; // ~16 degrees down-angle for clear top perspective
+
+function updateCameraTransform(){
+  const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
+  const cy = Math.cos(orbitYaw), sy = Math.sin(orbitYaw);
+  camera.position.set(
+    orbitTarget.x + orbitDist * sy * cp,
+    orbitTarget.y + orbitDist * sp,
+    orbitTarget.z + orbitDist * cy * cp
+  );
+  camera.lookAt(orbitTarget);
+}
+resize();
+
+/* ================= Obstacle: 0.7m Diameter Sphere ================= */
+// Sphere 0.7m diameter (radius 0.35m), center 1.5m above floor (floor is at y = -1.5m -> center at y = 0.0m)
+const sphereRadius = 0.35;
+const sphereCenter = new V(0, 0.0, -1.2);
+world.addSphere(sphereRadius, sphereCenter, 0.28);
+
+const sphereMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(sphereRadius, 64, 48),
+  new THREE.MeshPhysicalMaterial({
+    color: 0x242a34,
+    roughness: 0.16,
+    metalness: 0.22,
+    clearcoat: 0.40,
+    clearcoatRoughness: 0.12
+  })
+);
+sphereMesh.position.copy(sphereCenter);
+sphereMesh.castShadow = true;
+sphereMesh.receiveShadow = true;
+scene.add(sphereMesh);
+
+// Studio pedestal stand connecting sphere bottom (y = -0.35) to floor (y = -1.5)
+const pedHeight = 1.5 - sphereRadius; // 1.15m
+const pedRadius = 0.065;
+const pedMesh = new THREE.Mesh(
+  new THREE.CylinderGeometry(pedRadius, pedRadius * 1.35, pedHeight, 32),
+  new THREE.MeshStandardMaterial({
+    color: 0x1a1e26,
+    roughness: 0.65,
+    metalness: 0.12
+  })
+);
+pedMesh.position.set(0, -1.5 + pedHeight / 2, -1.2);
+pedMesh.castShadow = true;
+pedMesh.receiveShadow = true;
+scene.add(pedMesh);
+
+/* ================= Procedural Woven Fabric Textures ================= */
+function createFabricTextures(){
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = size; bCanvas.height = size;
+  const bCtx = bCanvas.getContext('2d');
+
+  ctx.fillStyle = '#b83b32'; // Rich terracotta red fabric
+  ctx.fillRect(0, 0, size, size);
+
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, size, size);
+
+  const threads = 64;
+  const step = size / threads;
+
+  for (let i = 0; i < threads; i++){
+    const pos = i * step;
+    ctx.fillStyle = (i % 2 === 0) ? 'rgba(235, 120, 105, 0.28)' : 'rgba(80, 20, 16, 0.25)';
+    ctx.fillRect(pos, 0, step * 0.8, size);
+
+    ctx.fillStyle = (i % 2 === 1) ? 'rgba(235, 120, 105, 0.28)' : 'rgba(80, 20, 16, 0.25)';
+    ctx.fillRect(0, pos, size, step * 0.8);
+
+    bCtx.fillStyle = (i % 2 === 0) ? '#a0a0a0' : '#606060';
+    bCtx.fillRect(pos, 0, step * 0.8, size);
+    bCtx.fillStyle = (i % 2 === 1) ? '#a0a0a0' : '#606060';
+    bCtx.fillRect(0, pos, size, step * 0.8);
+  }
+
+  // Micro-fiber noise
+  const imgData = ctx.getImageData(0, 0, size, size);
+  const data = imgData.data;
+  for (let i = 0; i < data.length; i += 4){
+    const n = (Math.random() - 0.5) * 16;
+    data[i] = Math.min(255, Math.max(0, data[i] + n));
+    data[i+1] = Math.min(255, Math.max(0, data[i+1] + n));
+    data[i+2] = Math.min(255, Math.max(0, data[i+2] + n));
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(24, 24);
+
+  const bump = new THREE.CanvasTexture(bCanvas);
+  bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
+  bump.repeat.set(24, 24);
+
+  return { map: tex, bumpMap: bump };
+}
+
+const fabricTex = createFabricTextures();
+const clothMat = new THREE.MeshStandardMaterial({
+  color: 0xffffff,
+  map: fabricTex.map,
+  bumpMap: fabricTex.bumpMap,
+  bumpScale: 0.0012,
+  roughness: 0.88,
+  metalness: 0.02,
+  side: THREE.DoubleSide
+});
+
+/* ================= Dynamic Cloth Mesh ================= */
+let activeCloth = null;
+let clothMesh = null;
+
+function buildClothMesh(cloth){
+  if (clothMesh) { scene.remove(clothMesh); clothMesh.geometry.dispose(); }
+
+  const { nx, ny } = cloth;
+  const geom = new THREE.BufferGeometry();
+  const posArr = new Float32Array(nx * ny * 3);
+  const uvs = new Float32Array(nx * ny * 2);
+  const indices = [];
+
+  for (let j = 0; j < ny; j++){
+    for (let i = 0; i < nx; i++){
+      const idx = j * nx + i;
+      uvs[idx * 2] = i / (nx - 1);
+      uvs[idx * 2 + 1] = 1 - j / (ny - 1);
+      if (i < nx - 1 && j < ny - 1){
+        const a = idx, b = idx + 1, c = idx + nx, d = idx + nx + 1;
+        indices.push(a, c, b);
+        indices.push(b, c, d);
+      }
+    }
+  }
+
+  geom.setIndex(indices);
+  geom.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+  clothMesh = new THREE.Mesh(geom, clothMat);
+  clothMesh.castShadow = true;
+  clothMesh.receiveShadow = true;
+  scene.add(clothMesh);
+}
+
+function syncClothMesh(){
+  if (!activeCloth || !clothMesh) return;
+  const posAttr = clothMesh.geometry.attributes.position;
+  const arr = posAttr.array;
+  const parts = activeCloth.particles;
+  for (let i = 0; i < parts.length; i++){
+    const p = parts[i].x;
+    arr[i*3] = p.x;
+    arr[i*3 + 1] = p.y;
+    arr[i*3 + 2] = p.z;
+  }
+  posAttr.needsUpdate = true;
+  clothMesh.geometry.computeVertexNormals();
+}
+
+/* ================= Rigid Dropped Cubes ================= */
+const cubeMeshes = [];
+const PALETTE = [0x5080b0, 0x5a9a78, 0xd06850, 0xcca038, 0x8a6cb0];
+
+function addCube(){
+  if (bodies.length >= 20) return;
+  const s = 0.28;
+  const pos = new V((Math.random() - 0.5) * 0.3, 1.25, -1.2 + (Math.random() - 0.5) * 0.3);
+  world.addCube(s, pos,
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
+    new V((Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4));
+  const m = new THREE.Mesh(RoomEnv.roundedCube(s, s * 0.12, 4),
+    new THREE.MeshPhysicalMaterial({
+      color: PALETTE[bodies.length % PALETTE.length],
+      roughness: 0.28,
+      metalness: 0.04,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.15
+    }));
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m);
+  cubeMeshes.push(m);
+}
+
+/* ================= Scene Initialization ================= */
+let selfColActive = true;
+let wireActive = false;
+
+function initScene(){
+  for (const m of cubeMeshes){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+  cubeMeshes.length = 0;
+  world.clear();
+
+  // Re-add static sphere obstacle: 0.7m diameter (radius 0.35m), center 1.5m above floor
+  world.addSphere(sphereRadius, sphereCenter, 0.28);
+  world.selfCollision = selfColActive;
+
+  // Cloth: 1.5m x 1.5m horizontal plane, starts 1m above sphere center (y = 1.0m)
+  const nx = 36, ny = 36;
+  activeCloth = world.addCloth({
+    nx, ny,
+    width: 1.5, height: 1.5,
+    center: new V(0, 1.0, -1.2),
+    plane: 'xz',
+    mass: 1.2,
+    compliance: 0.000004,     // Inextensible warp and weft
+    shearCompliance: 0.02,    // Natural compliant diagonal shearing
+    bendCompliance: 0,        // Soft textile drape
+    pinnedCorners: []         // Unpinned, falls freely over sphere
+  });
+
+  buildClothMesh(activeCloth);
+  syncClothMesh();
+}
+initScene();
+
+/* ================= Interactive Raycast Grab & Orbit Controls ================= */
+let grabbedParticle = null, grabbedOrigInvM = 0;
+const raycaster = new THREE.Raycaster();
+const mouseVec = new THREE.Vector2();
+const dragPlane = new THREE.Plane();
+const hitPoint = new V();
+
+let isPointerDown = false;
+let isOrbiting = false;
+let lastPointerX = 0, lastPointerY = 0;
+
+window.addEventListener('pointerdown', e => {
+  if (e.target && e.target.closest && (e.target.closest('#hud') || e.target.closest('button') || e.target.closest('a'))) return;
+  isPointerDown = true;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+
+  mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouseVec, camera);
+
+  // Check if clicked near a cloth particle
+  if (activeCloth) {
+    let closestP = null, minD = 0.15;
+    for (const p of activeCloth.particles){
+      const dist = raycaster.ray.distanceToPoint(p.x);
+      if (dist < minD){ minD = dist; closestP = p; }
+    }
+    if (closestP) {
+      grabbedParticle = closestP;
+      grabbedOrigInvM = closestP.invM;
+      closestP.invM = 0;
+
+      // Create plane facing camera through grabbed particle
+      const camDir = new V();
+      camera.getWorldDirection(camDir).negate();
+      dragPlane.setFromNormalAndCoplanarPoint(camDir, grabbedParticle.x);
+      return;
+    }
+  }
+
+  // If no particle clicked, start camera orbit
+  isOrbiting = true;
+});
+
+window.addEventListener('pointermove', e => {
+  if (!isPointerDown) return;
+
+  const dx = e.clientX - lastPointerX;
+  const dy = e.clientY - lastPointerY;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+
+  if (grabbedParticle) {
+    mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouseVec, camera);
+    if (raycaster.ray.intersectPlane(dragPlane, hitPoint)){
+      grabbedParticle.x.copy(hitPoint);
+      grabbedParticle.px.copy(hitPoint);
+      grabbedParticle.v.set(0, 0, 0);
+    }
+  } else if (isOrbiting) {
+    orbitYaw -= dx * 0.006;
+    orbitPitch = THREE.MathUtils.clamp(orbitPitch + dy * 0.006, -0.25, 1.25);
+    updateCameraTransform();
+  }
+});
+
+window.addEventListener('pointerup', () => {
+  isPointerDown = false;
+  isOrbiting = false;
+  if (grabbedParticle) {
+    grabbedParticle.invM = grabbedOrigInvM;
+    grabbedParticle = null;
+  }
+});
+
+window.addEventListener('wheel', e => {
+  orbitDist = THREE.MathUtils.clamp(orbitDist + e.deltaY * 0.0025, 1.6, 5.5);
+  updateCameraTransform();
+}, { passive: true });
+
+/* ================= HUD Button Handlers ================= */
+const selfColBtn = document.getElementById('selfcol');
+selfColBtn.addEventListener('click', () => {
+  selfColActive = !selfColActive;
+  world.selfCollision = selfColActive;
+  selfColBtn.textContent = selfColActive ? 'Self Collision: On' : 'Self Collision: Off';
+  selfColBtn.classList.toggle('active', selfColActive);
+  RoomEnv.showNote(selfColActive ? 'Cloth self-collision enabled' : 'Cloth self-collision disabled', 1500);
+});
+
+const wireBtn = document.getElementById('wire');
+wireBtn.addEventListener('click', () => {
+  wireActive = !wireActive;
+  clothMat.wireframe = wireActive;
+  wireBtn.classList.toggle('active', wireActive);
+  wireBtn.textContent = wireActive ? 'Wireframe: On' : 'Wireframe';
+});
+
+document.getElementById('cube').addEventListener('click', addCube);
+document.getElementById('reset').addEventListener('click', () => {
+  initScene();
+  RoomEnv.showNote('Simulation reset. Cloth dropping over sphere.', 1500);
+});
+
+/* ================= Animation Loop ================= */
+const tickFps = RoomEnv.createFpsMeter();
+let acc = 0, last = performance.now();
+
+function frame(now){
+  tickFps(now);
+  acc += Math.min((now - last) / 1000, 0.1);
+  last = now;
+  let n = 0;
+  while (acc >= world.dt && n < 3){ world.step(); acc -= world.dt; n++; }
+  if (n === 3) acc = 0;
+
+  syncClothMesh();
+  for (let i = 0; i < bodies.length; i++){
+    cubeMeshes[i].position.copy(bodies[i].x);
+    cubeMeshes[i].quaternion.copy(bodies[i].q);
+  }
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+RoomEnv.showNote('Cloth dropping over 0.7m sphere. Drag background to orbit camera, or grab cloth to lift.', 4500);
+
+})();
+</script>
+</body>
+</html>

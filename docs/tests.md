@@ -33,6 +33,18 @@ The repository hosts standalone interactive test scenes located in `tests/`, acc
   - "Add Cube": drops rigid cubes causing impact deformation and cratering.
   - Touch/Mouse Drag: pinch and deform the soft body volume.
 
+### Test 4: Cloth Over Sphere (`tests/test4/index.html`)
+- **Focus**: High-resolution XPBD fabric draping benchmark over curved 3D obstacle geometry ($36 \times 36$, 1,296 vertices, 5,042 constraints).
+- **Scene**: $1.5\,\text{m} \times 1.5\,\text{m}$ horizontal fabric plane falling under downward gravity onto a $0.7\,\text{m}$ diameter polished sphere perched on a studio pedestal ($1.5\,\text{m}$ above floor, center at $y = 0.0\,\text{m}$).
+- **Interactions**:
+  - No gyro / static studio gravity: gravity is fixed downwards $(0, -9.81, 0)\,\text{m/s}^2$ with immediate simulation start (no permission modal).
+  - 3D Orbit Camera: dragging background orbits smoothly around the sphere, mouse wheel zooms in/out.
+  - Touch/Mouse Drag: raycast grab lifts and repositions cloth folds in 3D.
+  - "Self Collision: On / Off": toggles zero-allocation spatial hashing for overlapping pleats (enabled by default).
+  - "Wireframe": toggles mesh wireframe rendering.
+  - "Drop Cube": spawns falling rigid cubes onto the draped cloth.
+  - "Reset": restores the cloth at $1\,\text{m}$ above the sphere center to fall again.
+
 ---
 
 ## Running Locally

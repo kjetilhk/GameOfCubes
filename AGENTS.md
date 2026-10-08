@@ -30,8 +30,10 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
     │   └── index.html  # Test 1: Cube Box (mobile XPBD rigid bodies)
     ├── test2/
     │   └── index.html  # Test 2: Cloth Simulation (compliant XPBD cloth)
-    └── test3/
-        └── index.html  # Test 3: Soft Body Simulation (tet mesh continuum elasticity)
+    ├── test3/
+    │   └── index.html  # Test 3: Soft Body Simulation (tet mesh continuum elasticity)
+    └── test4/
+        └── index.html  # Test 4: Cloth Over Sphere (fabric draping & sphere collision benchmark)
 ```
 
 The core physics engine lives in `src/xpbd.js` without DOM or rendering dependencies. It exports `XPBD` (and alias `CubePhysics`) to the global scope (`window`/`globalThis`) and to CommonJS (`module.exports`).
@@ -89,6 +91,14 @@ Volumetric continuum mechanics soft body on a 3D tetrahedral mesh.
 - Decomposed into 1,715 tetrahedra (512 particles in an $8\times8\times8$ grid) with 2,520 edge constraints and 1,715 tetrahedral volume preservation constraints.
 - Hydrostatic volume conservation ensures true physical incompressibility: squishing against walls or floor causes realistic lateral bulging without volume loss.
 - Water-like extra soft elasticity with translucent fluid shader styling, wireframe mode toggle, interactive raycaster pointer pinching, and rigid cube drop collisions.
+
+### Test 4: Cloth Over Sphere (`tests/test4/index.html`)
+
+Cloth draping and 3D curved obstacle collision benchmark.
+- Horizontal $1.5\,\text{m} \times 1.5\,\text{m}$ fabric sheet falling under gravity onto a $0.7\,\text{m}$ diameter polished sphere perched on a studio pedestal stand ($1.5\,\text{m}$ above floor, sphere center $y = 0.0\,\text{m}$).
+- Cloth starts $1\,\text{m}$ above sphere center ($y = 1.0\,\text{m}$) and falls freely without pinned corners.
+- Active spatial-hash cloth self-collision preventing overlapping folds from penetrating as they flute around the sphere.
+- Fixed downwards gravity with no gyro sensor permission modal; features a 3D orbit camera, wireframe mode toggle, raycast grab & pull, and dynamic rigid cube drop collisions.
 
 ## Adding New Tests
 
