@@ -34,12 +34,12 @@ function createLighting(scene) {
   sc.near = 0.1; sc.far = 15;
   scene.add(key, key.target);
 
-  // Fill Light 1: cool soft light from the left side
-  const fill1 = new THREE.DirectionalLight(0xcde0f8, 0.65);
+  // Fill Light 1: cool subtle light from the left side (reduced to 10% intensity)
+  const fill1 = new THREE.DirectionalLight(0xcde0f8, 0.065);
   scene.add(fill1, fill1.target);
 
-  // Fill Light 2: top-left ambient fill to soften remaining shadows and add specular catchlights
-  const fill2 = new THREE.DirectionalLight(0xdbeafe, 0.55);
+  // Fill Light 2: top-left ambient fill to faintly lift deep shadows and add subtle catchlights (reduced to 10% intensity)
+  const fill2 = new THREE.DirectionalLight(0xdbeafe, 0.055);
   scene.add(fill2, fill2.target);
 
   return {
