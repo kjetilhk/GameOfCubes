@@ -22,11 +22,12 @@ const ROOM_MATERIALS = {
 
 /* ================= 2. Studio Lighting (Single Key Light, Zero Fill) ================= */
 function createLighting(scene) {
-  // Single Key Light: warm directional light from the right side, positioned towards the back for pure side lighting
+  // Single Key Light: warm directional light from the front-right side for 3/4 studio key illumination
   const key = new THREE.DirectionalLight(0xfff4e6, 1.6);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0003;
+  key.shadow.normalBias = 0.02;
   const sc = key.shadow.camera;
   sc.left = -4; sc.right = 4; sc.top = 4; sc.bottom = -4;
   sc.near = 0.1; sc.far = 15;
@@ -90,9 +91,9 @@ function updateRoom(camera, renderer, world, lights, oldWallGroup, scene) {
   camera.lookAt(0, 0, -world.box.d * 0.3);
   camera.updateProjectionMatrix();
 
-  // Key light: positioned on the right side, rotated 20 degrees forward for side-key illumination
+  // Key light: positioned on the front-right side (z = 0.05) shining across and into the box
   if (lights && lights.key) {
-    lights.key.position.set(world.box.hx * 1.55, world.box.hy * 0.7, -world.box.d * 0.30);
+    lights.key.position.set(world.box.hx * 1.35, world.box.hy * 0.85, 0.05);
     lights.key.target.position.set(-world.box.hx * 0.1, -world.box.hy * 0.25, -world.box.d * 0.45);
 
     const maxDim = Math.max(world.box.hx, world.box.hy, world.box.d);
