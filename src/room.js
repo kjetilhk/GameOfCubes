@@ -20,46 +20,7 @@ const ROOM_MATERIALS = {
   floor: new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.65, metalness: 0.10 })
 };
 
-/* ================= 2. Studio Lighting (Single Key Light) & IBL Environment ================= */
-function createStudioEnvironment(renderer) {
-  const pmremGenerator = new THREE.PMREMGenerator(renderer);
-  const envScene = new THREE.Scene();
-
-  // Dark studio room box
-  const roomGeo = new THREE.BoxGeometry(10, 10, 10);
-  const roomMat = new THREE.MeshBasicMaterial({ color: 0x14171d, side: THREE.BackSide });
-  const room = new THREE.Mesh(roomGeo, roomMat);
-  envScene.add(room);
-
-  // Warm key light bounce panel on the right / back for specular IBL reflections
-  const keyGeo = new THREE.PlaneGeometry(6, 6);
-  const keyMat = new THREE.MeshBasicMaterial({ color: 0xffedd5 });
-  const keyPanel = new THREE.Mesh(keyGeo, keyMat);
-  keyPanel.position.set(4.8, 2.0, -2.5);
-  keyPanel.rotation.y = -Math.PI / 2;
-  envScene.add(keyPanel);
-
-  // Subtle floor bounce panel
-  const floorGeo = new THREE.PlaneGeometry(8, 8);
-  const floorMat = new THREE.MeshBasicMaterial({ color: 0x1c2028 });
-  const floorPanel = new THREE.Mesh(floorGeo, floorMat);
-  floorPanel.position.set(0, -4.8, 0);
-  floorPanel.rotation.x = -Math.PI / 2;
-  envScene.add(floorPanel);
-
-  const envMap = pmremGenerator.fromScene(envScene, 0.04).texture;
-  pmremGenerator.dispose();
-
-  roomGeo.dispose();
-  roomMat.dispose();
-  keyGeo.dispose();
-  keyMat.dispose();
-  floorGeo.dispose();
-  floorMat.dispose();
-
-  return envMap;
-}
-
+/* ================= 2. Studio Lighting (Single Key Light, Zero Fill) ================= */
 function createLighting(scene) {
   // Single Key Light: warm directional light from the right side, positioned towards the back for pure side lighting
   const key = new THREE.DirectionalLight(0xfff4e6, 1.6);
@@ -145,11 +106,13 @@ function updateRoom(camera, renderer, world, lights, oldWallGroup, scene) {
     sc.updateProjectionMatrix();
   }
 
-  // Initialize PBR environment & tone mapping if not yet attached
-  if (renderer && scene && !scene.environment) {
+  // Configure tone mapping and ensure zero ambient/fill environment lighting
+  if (renderer) {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
-    scene.environment = createStudioEnvironment(renderer);
+  }
+  if (scene) {
+    scene.environment = null;
   }
 
   return newWallGroup;
@@ -316,7 +279,6 @@ function roundedCube(size, radius, segments = 4) {
 // Export to global scope
 global.RoomEnv = {
   ROOM_MATERIALS,
-  createStudioEnvironment,
   createLighting,
   buildWallMeshes,
   updateRoom,
