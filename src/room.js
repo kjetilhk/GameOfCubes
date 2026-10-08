@@ -90,9 +90,9 @@ function updateRoom(camera, renderer, world, lights, oldWallGroup, scene) {
   camera.lookAt(0, 0, -world.box.d * 0.3);
   camera.updateProjectionMatrix();
 
-  // Key light: positioned on the right side, placed towards the back so the scene is purely side lit
+  // Key light: positioned on the right side, rotated 20 degrees forward for side-key illumination
   if (lights && lights.key) {
-    lights.key.position.set(world.box.hx * 1.6, world.box.hy * 0.7, -world.box.d * 0.65);
+    lights.key.position.set(world.box.hx * 1.55, world.box.hy * 0.7, -world.box.d * 0.30);
     lights.key.target.position.set(-world.box.hx * 0.1, -world.box.hy * 0.25, -world.box.d * 0.45);
 
     const maxDim = Math.max(world.box.hx, world.box.hy, world.box.d);

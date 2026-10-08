@@ -99,7 +99,7 @@ When adding new tests:
   - **Tone Mapping**: ACES Filmic (`renderer.toneMapping = THREE.ACESFilmicToneMapping`, `renderer.toneMappingExposure = 1.0`) with sRGB output encoding.
   - **Materials**: `MeshPhysicalMaterial` used for objects: cubes feature physical clearcoat lacquer (`clearcoat: 0.25`), cloth features physical micro-fiber sheen (`sheen: 0.45`), and soft body features physical fluid transmission (`transmission: 0.75`, `ior: 1.333`).
 - **Lighting**: Studio side lighting with dark room ambiance (strictly single Key Light, zero fill lights):
-  - **Key Light**: Primary warm directional light from the right side (`0xfff4e6`, intensity 1.6) positioned towards the back ($z = -d \times 0.65$) for pure side-raking illumination with soft PCF shadow mapping (2048×2048 map, near 0.1, far 15).
+  - **Key Light**: Primary warm directional light from the right side (`0xfff4e6`, intensity 1.6) rotated 20 degrees forward ($z = -d \times 0.30$) for side-key illumination with soft PCF shadow mapping (2048×2048 map, near 0.1, far 15).
   - **Zero Fill**: No ambient light, no hemisphere light, no fill lights, and `scene.environment = null` so unlit faces receive zero fill.
 - **Dark Gray Walls Palette**:
   - Walls and ceiling: `0x242830` (roughness 0.85, metalness 0.05).
