@@ -24,8 +24,8 @@ const ROOM_MATERIALS = {
 function createLighting(scene) {
   // Exactly 3 studio lights: 1 Key Light from the right side, and 2 Fill Lights
 
-  // Key Light: warm primary light from the right side, casting soft PCF shadows
-  const key = new THREE.DirectionalLight(0xfff4e6, 1.3);
+  // 1. Key Light: warm primary light from the right side, casting soft PCF shadows
+  const key = new THREE.DirectionalLight(0xfff4e6, 1.15);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0003;
@@ -34,13 +34,13 @@ function createLighting(scene) {
   sc.near = 0.1; sc.far = 15;
   scene.add(key, key.target);
 
-  // Fill Light 1: cool subtle light from the left side (reduced to 10% intensity)
-  const fill1 = new THREE.DirectionalLight(0xcde0f8, 0.065);
+  // 2. Fill Light 1: cool soft directional fill from the left side
+  const fill1 = new THREE.DirectionalLight(0xcde0f8, 0.35);
   scene.add(fill1, fill1.target);
 
-  // Fill Light 2: top-left ambient fill to faintly lift deep shadows and add subtle catchlights (reduced to 10% intensity)
-  const fill2 = new THREE.DirectionalLight(0xdbeafe, 0.055);
-  scene.add(fill2, fill2.target);
+  // 3. Fill Light 2: ambient studio room fill so ceiling and corners have natural bounce light
+  const fill2 = new THREE.HemisphereLight(0x3e4756, 0x181b22, 0.40);
+  scene.add(fill2);
 
   return {
     key,
@@ -100,24 +100,17 @@ function updateRoom(camera, renderer, world, lights, oldWallGroup, scene) {
   camera.lookAt(0, 0, -world.box.d * 0.3);
   camera.updateProjectionMatrix();
 
-  // Position 1 key light from the right side, and 2 fill lights
+  // Position 1 key light from the right side, and fill light from the left side
   if (lights) {
-    // Key light: positioned on the right side shining across to the left (true studio side light)
-    lights.key.position.set(world.box.hx * 2.2, world.box.hy * 0.6, -world.box.d * 0.35);
-    lights.key.target.position.set(-world.box.hx * 0.1, -world.box.hy * 0.2, -world.box.d * 0.5);
+    // Key light: positioned high on the right side shining across to the left
+    lights.key.position.set(world.box.hx * 1.3, world.box.hy * 1.1, 0.8);
+    lights.key.target.position.set(-world.box.hx * 0.1, -world.box.hy * 0.25, -world.box.d * 0.45);
 
     // Fill light 1: from the left side, softening shadows
     const f1 = lights.fill1 || lights.fill;
     if (f1) {
-      f1.position.set(-world.box.hx * 2.0, world.box.hy * 0.3, -world.box.d * 0.4);
-      if (f1.target) f1.target.position.set(0, -world.box.hy * 0.2, -world.box.d * 0.5);
-    }
-
-    // Fill light 2: from overhead / top-left, lighting top surfaces
-    const f2 = lights.fill2 || lights.rim;
-    if (f2) {
-      f2.position.set(-world.box.hx * 0.4, world.box.hy * 1.8, -world.box.d * 0.5);
-      if (f2.target) f2.target.position.set(0, -world.box.hy * 0.3, -world.box.d * 0.5);
+      f1.position.set(-world.box.hx * 1.3, world.box.hy * 0.6, 0.8);
+      if (f1.target) f1.target.position.set(0, -world.box.hy * 0.25, -world.box.d * 0.45);
     }
   }
 
