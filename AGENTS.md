@@ -97,7 +97,7 @@ When adding new tests:
 - **Room Dimensions**: The test room is **3.0 meters tall** across all tests (`roomHeight = 3.0` m, half-height `hy = 1.5` m, depth `d = 2.4` m). Horizontal half-width is derived from aspect ratio (`hx = hy * aspect`) so the room fits vertically on screen at true 3m scale.
 - **Physically Based Rendering (PBR)**:
   - **Tone Mapping**: ACES Filmic (`renderer.toneMapping = THREE.ACESFilmicToneMapping`, `renderer.toneMappingExposure = 1.0`) with sRGB output encoding.
-  - **Materials**: `MeshPhysicalMaterial` used for objects: cubes feature physical clearcoat lacquer (`clearcoat: 0.25`), cloth features physical micro-fiber sheen (`sheen: 0.45`), and soft body features physical fluid transmission (`transmission: 0.75`, `ior: 1.333`).
+  - **Materials**: `MeshPhysicalMaterial` used for objects: cubes feature physical clearcoat lacquer (`clearcoat: 0.25`), soft body features physical fluid transmission (`transmission: 0.75`, `ior: 1.333`), and cloth uses `MeshStandardMaterial` with woven cotton bump and roughness.
 - **Lighting**: Studio side lighting with dark room ambiance (strictly single Key Light, zero fill lights):
   - **Key Light**: Primary warm directional light from the front-right side (`0xfff4e6`, intensity 1.6) positioned at $z = 0.05$ (near the front glass) for balanced 3/4 side-key illumination with soft PCF shadow mapping (2048×2048 map, near 0.1, far 15).
   - **Zero Fill**: No ambient light, no hemisphere light, no fill lights, and `scene.environment = null` so unlit faces receive zero fill.

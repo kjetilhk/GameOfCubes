@@ -149,16 +149,13 @@ function createCottonTextures(){
 }
 
 const cottonTex = createCottonTextures();
-const clothMat = new THREE.MeshPhysicalMaterial({
+const clothMat = new THREE.MeshStandardMaterial({
   color: 0xf6f0e6,
   map: cottonTex.map,
   bumpMap: cottonTex.bumpMap,
-  bumpScale: 0.0008,
-  roughness: 0.88,
+  bumpScale: 0.001,
+  roughness: 0.90,
   metalness: 0.0,
-  sheen: 0.45,
-  sheenRoughness: 0.4,
-  sheenColor: new THREE.Color(0xf6f0e6),
   side: THREE.DoubleSide
 });
 
@@ -282,6 +279,7 @@ function initScene(){
   });
 
   buildClothMesh(activeCloth);
+  syncClothMesh();
   document.getElementById('pins').textContent = pinsActive ? 'Unpin' : 'Pin Top';
 }
 initScene();
