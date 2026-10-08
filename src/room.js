@@ -33,12 +33,12 @@ function createLighting(scene) {
   sc.near = 0.1; sc.far = 15;
   scene.add(key, key.target);
 
-  // 2. Fill Light 1: cool directional fill from the opposite (left) side to soften shadows (+30%: 0.325)
-  const fill1 = new THREE.DirectionalLight(0xcde0f8, 0.325);
+  // 2. Fill Light 1: cool directional fill from the opposite (left) side to clearly illuminate shadows
+  const fill1 = new THREE.DirectionalLight(0xcfe0f5, 0.65);
   scene.add(fill1, fill1.target);
 
-  // 3. Fill Light 2: ambient studio room fill so ceiling and shadows have gentle bounce light (+30%: 0.325)
-  const fill2 = new THREE.HemisphereLight(0x363d4a, 0x16191f, 0.325);
+  // 3. Fill Light 2: ambient studio room bounce so ceiling, walls, and shadows are cleanly visible
+  const fill2 = new THREE.HemisphereLight(0x6a788c, 0x303642, 0.50);
   scene.add(fill2);
 
   return {
