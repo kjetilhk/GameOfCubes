@@ -102,22 +102,22 @@ function updateRoom(camera, renderer, world, lights, oldWallGroup, scene) {
 
   // Position 1 key light from the right side, and 2 fill lights
   if (lights) {
-    // Key light: positioned high on the right side shining into the room
-    lights.key.position.set(world.box.hx * 1.5, world.box.hy * 0.7, 1.2);
-    lights.key.target.position.set(0, -world.box.hy * 0.15, -world.box.d * 0.4);
+    // Key light: positioned on the right side shining across to the left (true studio side light)
+    lights.key.position.set(world.box.hx * 2.2, world.box.hy * 0.6, -world.box.d * 0.35);
+    lights.key.target.position.set(-world.box.hx * 0.1, -world.box.hy * 0.2, -world.box.d * 0.5);
 
-    // Fill light 1: from the left side
+    // Fill light 1: from the left side, softening shadows
     const f1 = lights.fill1 || lights.fill;
     if (f1) {
-      f1.position.set(-world.box.hx * 1.4, world.box.hy * 0.3, 1.2);
-      if (f1.target) f1.target.position.set(0, -world.box.hy * 0.15, -world.box.d * 0.4);
+      f1.position.set(-world.box.hx * 2.0, world.box.hy * 0.3, -world.box.d * 0.4);
+      if (f1.target) f1.target.position.set(0, -world.box.hy * 0.2, -world.box.d * 0.5);
     }
 
-    // Fill light 2: from high top-left / overhead
+    // Fill light 2: from overhead / top-left, lighting top surfaces
     const f2 = lights.fill2 || lights.rim;
     if (f2) {
-      f2.position.set(-world.box.hx * 0.6, world.box.hy * 1.4, 0.6);
-      if (f2.target) f2.target.position.set(0, -world.box.hy * 0.2, -world.box.d * 0.4);
+      f2.position.set(-world.box.hx * 0.4, world.box.hy * 1.8, -world.box.d * 0.5);
+      if (f2.target) f2.target.position.set(0, -world.box.hy * 0.3, -world.box.d * 0.5);
     }
   }
 
