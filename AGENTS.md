@@ -95,12 +95,16 @@ When adding new tests:
 
 - **Units are SI**: meters, kilograms, seconds.
 - **Room Dimensions**: The test room is **3.0 meters tall** across all tests (`roomHeight = 3.0` m, half-height `hy = 1.5` m, depth `d = 2.4` m). Horizontal half-width is derived from aspect ratio (`hx = hy * aspect`) so the room fits vertically on screen at true 3m scale.
+- **Physically Based Rendering (PBR)**:
+  - **Tone Mapping**: ACES Filmic (`renderer.toneMapping = THREE.ACESFilmicToneMapping`, `renderer.toneMappingExposure = 1.0`) with sRGB output encoding.
+  - **Image-Based Lighting (IBL)**: Procedural studio environment map generated via `PMREMGenerator` assigned to `scene.environment` for authentic microfacet specular reflections and subtle diffuse bounce.
+  - **Materials**: `MeshPhysicalMaterial` used for objects: cubes feature physical clearcoat lacquer (`clearcoat: 0.25`), cloth features physical micro-fiber sheen (`sheen: 0.45`), and soft body features physical fluid transmission (`transmission: 0.75`, `ior: 1.333`).
 - **Lighting**: Studio side lighting with dark room ambiance (single Key Light, clean ceiling without visual fixtures):
-  - **Key Light**: Primary warm directional light from the right side (`0xfff4e6`, intensity 1.5) positioned towards the back ($z = -d \times 0.65$) for pure side-raking illumination with soft PCF shadow mapping (2048×2048 map, near 0.1, far 15). No front camera lights or fill lights.
+  - **Key Light**: Primary warm directional light from the right side (`0xfff4e6`, intensity 1.6) positioned towards the back ($z = -d \times 0.65$) for pure side-raking illumination with soft PCF shadow mapping (2048×2048 map, near 0.1, far 15). No front camera lights or fill lights.
 - **Dark Gray Walls Palette**:
-  - Walls and ceiling: `0x242830` (roughness 0.88, metalness 0.05).
-  - Back wall: `0x1b1f25` (roughness 0.92, metalness 0.04).
-  - Floor: `0x16191f` (roughness 0.82, metalness 0.08).
+  - Walls and ceiling: `0x242830` (roughness 0.85, metalness 0.05).
+  - Back wall: `0x1b1f25` (roughness 0.90, metalness 0.04).
+  - Floor: `0x16191f` (roughness 0.65, metalness 0.10, soft PBR floor sheen).
 - **Object Scales (calibrated to 3m room)**:
   - Test 1 rigid cubes: 36–50 cm (`s = 0.36 + Math.random()*0.14`).
   - Test 2 cloth: 1.6 m × 1.6 m sheet, mass 1.5 kg, pin radius 0.04 m, dropped cubes 38 cm.

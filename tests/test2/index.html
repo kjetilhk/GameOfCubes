@@ -149,13 +149,16 @@ function createCottonTextures(){
 }
 
 const cottonTex = createCottonTextures();
-const clothMat = new THREE.MeshStandardMaterial({
+const clothMat = new THREE.MeshPhysicalMaterial({
   color: 0xf6f0e6,
   map: cottonTex.map,
   bumpMap: cottonTex.bumpMap,
   bumpScale: 0.0008,
-  roughness: 0.94,
+  roughness: 0.88,
   metalness: 0.0,
+  sheen: 0.45,
+  sheenRoughness: 0.4,
+  sheenColor: new THREE.Color(0xf6f0e6),
   side: THREE.DoubleSide
 });
 
@@ -163,7 +166,7 @@ const clothMat = new THREE.MeshStandardMaterial({
 let activeCloth = null;
 let clothMesh = null;
 const pinMarkers = [];
-const pinMat = new THREE.MeshStandardMaterial({ color: 0xd4a047, roughness: 0.35, metalness: 0.5 });
+const pinMat = new THREE.MeshPhysicalMaterial({ color: 0xd4a047, roughness: 0.22, metalness: 0.85, clearcoat: 0.15 });
 const pinGeom = new THREE.SphereGeometry(0.04, 16, 16);
 
 function buildClothMesh(cloth){
@@ -243,7 +246,13 @@ function addCube(){
     new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
     new V((Math.random() - 0.5) * 0.8, 0, 0));
   const m = new THREE.Mesh(RoomEnv.roundedCube(s, s * 0.12, 4),
-    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness: 0.38 }));
+    new THREE.MeshPhysicalMaterial({
+      color: PALETTE[bodies.length % PALETTE.length],
+      roughness: 0.28,
+      metalness: 0.04,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.15
+    }));
   m.castShadow = m.receiveShadow = true;
   scene.add(m);
   cubeMeshes.push(m);

@@ -69,7 +69,13 @@ function addCube(){
     new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
     new V((Math.random() - 0.5) * 0.8, 0, 0));
   const m = new THREE.Mesh(RoomEnv.roundedCube(s, s * 0.12, 4),
-    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness: 0.38 }));
+    new THREE.MeshPhysicalMaterial({
+      color: PALETTE[bodies.length % PALETTE.length],
+      roughness: 0.28,
+      metalness: 0.04,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.15
+    }));
   m.castShadow = m.receiveShadow = true;
   scene.add(m);
   meshes.push(m);

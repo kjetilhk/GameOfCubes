@@ -69,12 +69,16 @@ function buildTetVisualMesh(tm){
   geom.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
   geom.setIndex(tm.surfaceIndices);
 
-  const mat = new THREE.MeshStandardMaterial({
+  const mat = new THREE.MeshPhysicalMaterial({
     color: 0x38bdf8,
-    roughness: 0.1,
-    metalness: 0.04,
+    roughness: 0.12,
+    metalness: 0.02,
+    transmission: 0.75,
+    ior: 1.333,
     transparent: true,
     opacity: 0.88,
+    clearcoat: 0.35,
+    clearcoatRoughness: 0.1,
     wireframe: showWire
   });
 
@@ -111,7 +115,13 @@ function addCube(){
     new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
     new V((Math.random() - 0.5) * 0.8, 0, 0));
   const m = new THREE.Mesh(RoomEnv.roundedCube(s, s * 0.12, 4),
-    new THREE.MeshStandardMaterial({ color: PALETTE[bodies.length % PALETTE.length], roughness: 0.38 }));
+    new THREE.MeshPhysicalMaterial({
+      color: PALETTE[bodies.length % PALETTE.length],
+      roughness: 0.28,
+      metalness: 0.04,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.15
+    }));
   m.castShadow = m.receiveShadow = true;
   scene.add(m);
   cubeMeshes.push(m);
