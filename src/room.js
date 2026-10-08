@@ -28,17 +28,18 @@ function createLighting(scene) {
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0003;
   key.shadow.normalBias = 0.02;
+  key.shadow.radius = 2.5;
   const sc = key.shadow.camera;
   sc.left = -4; sc.right = 4; sc.top = 4; sc.bottom = -4;
   sc.near = 0.1; sc.far = 15;
   scene.add(key, key.target);
 
-  // 2. Fill Light 1: cool directional fill from the opposite (left) side to clearly illuminate shadows
-  const fill1 = new THREE.DirectionalLight(0xcfe0f5, 0.65);
+  // 2. Fill Light 1: cool directional fill shining into the room to illuminate left wall and shadows
+  const fill1 = new THREE.DirectionalLight(0xcfe0f5, 0.55);
   scene.add(fill1, fill1.target);
 
-  // 3. Fill Light 2: ambient studio room bounce so ceiling, walls, and shadows are cleanly visible
-  const fill2 = new THREE.HemisphereLight(0x6a788c, 0x303642, 0.50);
+  // 3. Fill Light 2: ambient studio room light so shadows, ceiling, and corners are never pitch black
+  const fill2 = new THREE.AmbientLight(0xdde5f0, 0.42);
   scene.add(fill2);
 
   return {
@@ -118,8 +119,8 @@ function updateRoom(camera, renderer, world, lights, oldWallGroup, scene) {
 
     const f1 = lights.fill1 || lights.fill;
     if (f1) {
-      f1.position.set(-world.box.hx * 1.35, world.box.hy * 0.6, 0.05);
-      if (f1.target) f1.target.position.set(world.box.hx * 0.1, -world.box.hy * 0.25, -world.box.d * 0.45);
+      f1.position.set(-world.box.hx * 0.7, world.box.hy * 0.7, 0.35);
+      if (f1.target) f1.target.position.set(-world.box.hx * 0.3, -world.box.hy * 0.25, -world.box.d * 0.5);
     }
   }
 
