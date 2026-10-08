@@ -20,37 +20,27 @@ const ROOM_MATERIALS = {
   floor: new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.82, metalness: 0.08 })
 };
 
-/* ================= 2. Studio Lighting (1 Key Light, 2 Fill Lights) ================= */
+/* ================= 2. Studio Lighting (Single Key Light) ================= */
 function createLighting(scene) {
-  // Exactly 3 studio lights: 1 Key Light from the right side, and 2 Fill Lights
-
-  // 1. Key Light: warm primary light from the right side, casting soft PCF shadows
-  const key = new THREE.DirectionalLight(0xfff4e6, 1.25);
+  // Single Key Light: warm directional light from the right side, positioned towards the back for pure side lighting
+  const key = new THREE.DirectionalLight(0xfff4e6, 1.5);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0003;
   const sc = key.shadow.camera;
-  sc.left = -3; sc.right = 3; sc.top = 3; sc.bottom = -3;
+  sc.left = -4; sc.right = 4; sc.top = 4; sc.bottom = -4;
   sc.near = 0.1; sc.far = 15;
   scene.add(key, key.target);
 
-  // 2. Fill Light 1: cool soft directional fill from the left side
-  const fill1 = new THREE.DirectionalLight(0xcde0f8, 0.28);
-  scene.add(fill1, fill1.target);
-
-  // 3. Fill Light 2: ambient studio room fill so ceiling and corners have natural bounce light
-  const fill2 = new THREE.HemisphereLight(0x363d4a, 0x16191f, 0.30);
-  scene.add(fill2);
-
   return {
     key,
-    fill1,
-    fill2,
-    fill: fill1,      // backwards compatibility alias
-    rim: fill2,       // backwards compatibility alias
+    fill1: null,
+    fill2: null,
+    fill: null,
+    rim: null,
     light1: key,
-    light2: fill1,
-    light3: fill2
+    light2: null,
+    light3: null
   };
 }
 
@@ -100,18 +90,20 @@ function updateRoom(camera, renderer, world, lights, oldWallGroup, scene) {
   camera.lookAt(0, 0, -world.box.d * 0.3);
   camera.updateProjectionMatrix();
 
-  // Position 1 key light from the right side, and fill light from the left side (depth-aligned to eliminate front light)
-  if (lights) {
-    // Key light: positioned high on the right side at depth z = -d*0.35, shining across to the left
-    lights.key.position.set(world.box.hx * 1.6, world.box.hy * 0.9, -world.box.d * 0.35);
-    lights.key.target.position.set(-world.box.hx * 0.1, -world.box.hy * 0.25, -world.box.d * 0.5);
+  // Key light: positioned on the right side, placed towards the back so the scene is purely side lit
+  if (lights && lights.key) {
+    lights.key.position.set(world.box.hx * 1.6, world.box.hy * 0.7, -world.box.d * 0.65);
+    lights.key.target.position.set(-world.box.hx * 0.1, -world.box.hy * 0.25, -world.box.d * 0.45);
 
-    // Fill light 1: from the left side at depth z = -d*0.35
-    const f1 = lights.fill1 || lights.fill;
-    if (f1) {
-      f1.position.set(-world.box.hx * 1.6, world.box.hy * 0.5, -world.box.d * 0.35);
-      if (f1.target) f1.target.position.set(0, -world.box.hy * 0.25, -world.box.d * 0.5);
-    }
+    const maxDim = Math.max(world.box.hx, world.box.hy, world.box.d);
+    const sc = lights.key.shadow.camera;
+    sc.left = -maxDim * 1.6;
+    sc.right = maxDim * 1.6;
+    sc.top = maxDim * 1.6;
+    sc.bottom = -maxDim * 1.6;
+    sc.near = 0.1;
+    sc.far = Math.max(15, maxDim * 5);
+    sc.updateProjectionMatrix();
   }
 
   return newWallGroup;
