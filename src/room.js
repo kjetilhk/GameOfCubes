@@ -17,19 +17,15 @@ const V = THREE.Vector3;
 const ROOM_MATERIALS = {
   wall: new THREE.MeshStandardMaterial({ color: 0x242830, roughness: 0.88, metalness: 0.05 }),
   back: new THREE.MeshStandardMaterial({ color: 0x1b1f25, roughness: 0.92, metalness: 0.04 }),
-  floor: new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.82, metalness: 0.08 }),
-  ceilingBezel: new THREE.MeshStandardMaterial({ color: 0x12151b, roughness: 0.6, metalness: 0.1 }),
-  lampWarm: new THREE.MeshStandardMaterial({ color: 0xfff5e6, emissive: 0xffedd5, emissiveIntensity: 1.3, roughness: 0.2 }),
-  lampCool: new THREE.MeshStandardMaterial({ color: 0xcde0f8, emissive: 0xbfdbfe, emissiveIntensity: 1.1, roughness: 0.2 }),
-  lampNeutral: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf8fafc, emissiveIntensity: 1.2, roughness: 0.2 })
+  floor: new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.82, metalness: 0.08 })
 };
 
-/* ================= 2. Studio 3-Point Lighting (3 Lights) ================= */
+/* ================= 2. Studio Lighting (1 Key Light, 2 Fill Lights) ================= */
 function createLighting(scene) {
-  // Exactly 3 lights in the scene: Key, Fill, and Rim
+  // Exactly 3 studio lights: 1 Key Light from the right side, and 2 Fill Lights
 
-  // 1. Key Light: warm primary light casting soft PCF shadows from the right
-  const key = new THREE.DirectionalLight(0xfff5e6, 1.25);
+  // Key Light: warm primary light from the right side, casting soft PCF shadows
+  const key = new THREE.DirectionalLight(0xfff4e6, 1.3);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0003;
@@ -38,15 +34,24 @@ function createLighting(scene) {
   sc.near = 0.1; sc.far = 15;
   scene.add(key, key.target);
 
-  // 2. Fill Light: soft cool secondary light from the left
-  const fill = new THREE.DirectionalLight(0xcde0f8, 0.75);
-  scene.add(fill);
+  // Fill Light 1: cool soft light from the left side
+  const fill1 = new THREE.DirectionalLight(0xcde0f8, 0.65);
+  scene.add(fill1, fill1.target);
 
-  // 3. Rim / Back Light: crisp rear accent light for edge contour and specular catchlights
-  const rim = new THREE.DirectionalLight(0xffffff, 0.85);
-  scene.add(rim, rim.target);
+  // Fill Light 2: top-left ambient fill to soften remaining shadows and add specular catchlights
+  const fill2 = new THREE.DirectionalLight(0xdbeafe, 0.55);
+  scene.add(fill2, fill2.target);
 
-  return { key, fill, rim, light1: key, light2: fill, light3: rim };
+  return {
+    key,
+    fill1,
+    fill2,
+    fill: fill1,      // backwards compatibility alias
+    rim: fill2,       // backwards compatibility alias
+    light1: key,
+    light2: fill1,
+    light3: fill2
+  };
 }
 
 /* ================= 3. Room Wall Meshes ================= */
@@ -68,19 +73,6 @@ function buildWallMeshes(scene, box, oldGroup = null) {
   mk(d, 2*hy, ROOM_MATERIALS.wall, new V( hx, 0, -d/2), [0, -Math.PI/2, 0]);
   mk(2*hx, d, ROOM_MATERIALS.floor, new V(0, -hy, -d/2), [-Math.PI/2, 0, 0]); // floor
   mk(2*hx, d, ROOM_MATERIALS.wall, new V(0,  hy, -d/2), [ Math.PI/2, 0, 0]); // ceiling
-
-  // 3 ceiling lights embedded in the ceiling (Left Fill, Center Rim, Right Key)
-  const lampW = Math.min(0.26, hx * 0.32);
-  const lampL = 0.42;
-  const lampConfigs = [
-    { pos: new V(-hx * 0.52, hy - 0.002, -d * 0.42), mat: ROOM_MATERIALS.lampCool },
-    { pos: new V(0,          hy - 0.002, -d * 0.65), mat: ROOM_MATERIALS.lampNeutral },
-    { pos: new V( hx * 0.52, hy - 0.002, -d * 0.42), mat: ROOM_MATERIALS.lampWarm }
-  ];
-  for (let i = 0; i < 3; i++){
-    mk(lampW + 0.04, lampL + 0.04, ROOM_MATERIALS.ceilingBezel, lampConfigs[i].pos, [Math.PI/2, 0, 0]);
-    mk(lampW, lampL, lampConfigs[i].mat, new V(lampConfigs[i].pos.x, hy - 0.003, lampConfigs[i].pos.z), [Math.PI/2, 0, 0]);
-  }
 
   scene.add(wallGroup);
   return wallGroup;
@@ -108,13 +100,25 @@ function updateRoom(camera, renderer, world, lights, oldWallGroup, scene) {
   camera.lookAt(0, 0, -world.box.d * 0.3);
   camera.updateProjectionMatrix();
 
-  // Position 3-point lights relative to room boundaries
+  // Position 1 key light from the right side, and 2 fill lights
   if (lights) {
-    lights.key.position.set(world.box.hx * 0.85, world.box.hy * 1.3, 1.8);
-    lights.key.target.position.set(0, 0, -world.box.d * 0.5);
-    lights.fill.position.set(-world.box.hx * 1.2, -world.box.hy * 0.2, 1.5);
-    lights.rim.position.set(0, world.box.hy * 1.4, -world.box.d * 1.2);
-    lights.rim.target.position.set(0, -world.box.hy * 0.2, -world.box.d * 0.4);
+    // Key light: positioned high on the right side shining into the room
+    lights.key.position.set(world.box.hx * 1.5, world.box.hy * 0.7, 1.2);
+    lights.key.target.position.set(0, -world.box.hy * 0.15, -world.box.d * 0.4);
+
+    // Fill light 1: from the left side
+    const f1 = lights.fill1 || lights.fill;
+    if (f1) {
+      f1.position.set(-world.box.hx * 1.4, world.box.hy * 0.3, 1.2);
+      if (f1.target) f1.target.position.set(0, -world.box.hy * 0.15, -world.box.d * 0.4);
+    }
+
+    // Fill light 2: from high top-left / overhead
+    const f2 = lights.fill2 || lights.rim;
+    if (f2) {
+      f2.position.set(-world.box.hx * 0.6, world.box.hy * 1.4, 0.6);
+      if (f2.target) f2.target.position.set(0, -world.box.hy * 0.2, -world.box.d * 0.4);
+    }
   }
 
   return newWallGroup;
