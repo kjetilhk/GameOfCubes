@@ -14,6 +14,13 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
 .
 ├── index.html          # Test suite landing page (catalog of tests)
 ├── AGENTS.md           # Developer and agent guidance
+├── docs/               # Technical documentation
+│   ├── README.md       # Documentation index
+│   ├── xpbd.md         # XPBD physics engine reference
+│   ├── testroom.md     # 3.0m room, PBR, lighting, sensors
+│   ├── cloth.md        # Cloth simulation reference
+│   ├── softbody.md     # Soft body continuum mechanics reference
+│   └── tests.md        # Test suite catalog & developer guide
 ├── src/
 │   ├── xpbd.js         # Core XPBD physics engine (Müller et al.)
 │   ├── room.js         # Shared 3.0m room setup, 3-point lighting, sensors, and FPS meter
