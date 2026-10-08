@@ -129,7 +129,7 @@ When adding new tests:
 
 - **Desktop**:
   - Run `python3 -m http.server` and visit `http://localhost:8000` to view the tests catalog.
-  - Visit `http://localhost:8000/tests/test1/` to run Test 1. Drag to tilt.
+  - Visit `http://localhost:8000/tests/test1/` to run Test 1. Use the 3D ViewCube in the top-right to control gravity (click faces/presets, drag to rotate) or drag on screen to tilt.
 - **Phone**:
   - Motion sensors require **HTTPS** and a top-level page (they do not work inside iframes). Host on GitHub Pages and test on physical devices (iOS and Android).
 - **Headless**:

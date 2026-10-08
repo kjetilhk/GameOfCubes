@@ -97,8 +97,58 @@ Implemented via `RoomEnv.setupMotionSensors(options)`:
 
 ---
 
-## 6. Shared Utilities
+## 6. Interactive Desktop ViewCube (Gravity Controller)
 
-- **FPS Meter (`RoomEnv.createFpsMeter()`)**: Rolling 500ms frame counter updating the `#fps` HUD element.
+Implemented via `RoomEnv.createViewCube(options)` and auto-initialized by `RoomEnv.setupMotionSensors()`:
+
+When viewed on desktop computers or environments without mobile motion sensors (`devicemotion`), an interactive 3D **ViewCube** widget is rendered in the top-right corner to control the simulation's gravity direction in real time:
+
+```
+    ┌──────────────────────┐
+    │  ⌂  [ FLOOR (DOWN) ] │  ← Home reset button & active direction badge
+    ├──────────────────────┤
+    │                      │
+    │     ┌──────┐         │
+    │    ╱ TOP  ╱│         │  ← 3D Canvas with axonometric CAD cube
+    │   ┌──────┬─┤         │    - Inset face panels with 3-point shading
+    │   │FRONT │R│         │    - Face hover highlights & direct clicking
+    │   │  ●→  │─┘         │    - Internal glowing gravity vector arrow
+    │   └──────┘           │    - Free 3D trackball dragging
+    │                      │
+    ├──────────────────────┤
+    │ [Floor] [Left] [Right│  ← Quick 1-click direction presets
+    │ [Ceil]  [Front][Back]│
+    │    [ 0-G Float ]     │  ← Weightless zero-gravity toggle
+    └──────────────────────┘
+```
+
+### Features:
+1. **Interactive 3D Isometric Cube Canvas**:
+   - High-DPI Canvas 2D rendering ($96 \times 96$ CSS px) with axonometric projection ($\text{pitch} = 22^\circ, \text{yaw} = -32^\circ$).
+   - Inset beveled face panels with directional shading matching the room's 3-point lighting.
+   - Hover detection via point-in-polygon math: hovering over any face highlights it in warm amber gold (`#f2b632`).
+   - Clicking any visible face smoothly animates (slerp) the cube to make that face the active floor.
+2. **Free 3D Trackball Dragging**:
+   - Dragging directly on the cube orbits the orientation freely in all 3 dimensions using virtual camera basis vectors.
+   - Gravity updates continuously in real time as the cube is manipulated.
+3. **Internal Gravity Arrow**:
+   - An internal glowing vector arrow shows the true 3D direction of gravitational pull inside the room.
+4. **Quick Presets & Zero-G**:
+   - One-click preset chips for `Floor`, `Left`, `Right`, `Ceil`, `Front`, `Back`, and `0-G Float`.
+   - `0-G Float` sets $\mathbf{g} = (0, 0, 0)$, enabling weightless physics experiments.
+5. **Home Reset Button (`⌂`)**:
+   - Instantly snaps gravity back to default floor downward pull $(0, -9.81, 0)\,\text{m/s}^2$.
+6. **Two-Way Synchronization**:
+   - Dragging the main room canvas rotates the ViewCube in sync.
+   - Dragging the ViewCube updates the room's synthetic tilt angles (`tiltX`, `tiltY`).
+7. **Mobile Auto-Hide**:
+   - Automatically hidden when real mobile hardware motion sensors (`devicemotion`) are detected, keeping phone viewports clean.
+
+---
+
+## 7. Shared Utilities
+
+- **FPS Meter (`RoomEnv.createFpsMeter()`)**: Rolling frame counter updating the `#fps` HUD pill.
 - **Toast Notifications (`RoomEnv.showNote(text, ms)`)**: Responsive toast notifications for sensor permissions, self-collision state, and hints.
+- **Desktop ViewCube (`RoomEnv.createViewCube({ world, onGravityChange })`)**: 3D gravity gizmo and direction controller.
 - **Beveled Rounded Cube Geometry (`RoomEnv.roundedCube(size, radius, segments)`)**: Generates true beveled cubes whose rounded edges catch PBR clearcoat specular glints.

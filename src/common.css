@@ -187,3 +187,134 @@ button:focus-visible, a:focus-visible {
   z-index: 4;
   pointer-events: none;
 }
+
+/* ================= ViewCube Desktop Gravity Controller ================= */
+#viewcube-container {
+  position: fixed;
+  top: calc(48px + env(safe-area-inset-top, 0px));
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 4;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+  gap: 5px;
+}
+
+#viewcube-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 96px;
+  gap: 6px;
+}
+
+#viewcube-home {
+  background: var(--panel);
+  color: var(--ink);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+
+#viewcube-home:hover {
+  background: var(--btn);
+  color: var(--btn-ink);
+  transform: scale(1.08);
+}
+
+#viewcube-badge {
+  flex: 1;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--panel);
+  padding: 4px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#viewcube-canvas {
+  width: 96px;
+  height: 96px;
+  cursor: grab;
+  touch-action: none;
+  border-radius: 14px;
+  background: rgba(16, 22, 30, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  display: block;
+}
+
+#viewcube-canvas:hover {
+  border-color: rgba(242, 182, 50, 0.4);
+}
+
+#viewcube-canvas:active {
+  cursor: grabbing;
+}
+
+#viewcube-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  width: 96px;
+}
+
+.viewcube-btn {
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 4px 0;
+  text-align: center;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  line-height: 1.1;
+}
+
+.viewcube-btn:hover {
+  background: rgba(242, 182, 50, 0.25);
+  color: var(--ink);
+  border-color: rgba(242, 182, 50, 0.5);
+}
+
+.viewcube-btn.active {
+  background: var(--btn);
+  color: var(--btn-ink);
+  font-weight: 700;
+  border-color: transparent;
+}
+
+.viewcube-btn.full-width {
+  grid-column: span 3;
+}
+
