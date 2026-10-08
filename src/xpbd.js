@@ -417,7 +417,8 @@ function solveParticleSelfCollisions(particles){
               const p2 = particles[j];
               let skip = false;
               if (p1._cloth && p1._cloth === p2._cloth){
-                if (Math.abs(p1._cx - p2._cx) <= 1 && Math.abs(p1._cy - p2._cy) <= 1) skip = true;
+                const gdx = Math.abs(p1._cx - p2._cx), gdy = Math.abs(p1._cy - p2._cy);
+                if ((gdx <= 2 && gdy <= 2) || (gdx + gdy <= 3)) skip = true;
               } else if (p1._tetMesh && p1._tetMesh === p2._tetMesh){
                 if (Math.abs(p1._tx - p2._tx) <= 1 && Math.abs(p1._ty - p2._ty) <= 1 && Math.abs(p1._tz - p2._tz) <= 1) skip = true;
               }
@@ -434,8 +435,8 @@ function solveParticleSelfCollisions(particles){
                   const w1 = p1.invM, w2 = p2.invM;
                   const wSum = w1 + w2;
                   if (wSum > 0){
-                    const s1 = pen * (w1 / wSum);
-                    const s2 = pen * (w2 / wSum);
+                    const s1 = pen * 0.5 * (w1 / wSum);
+                    const s2 = pen * 0.5 * (w2 / wSum);
                     p1.x.x += nx * s1; p1.x.y += ny * s1; p1.x.z += nz * s1;
                     p2.x.x -= nx * s2; p2.x.y -= ny * s2; p2.x.z -= nz * s2;
                     p1.px.x += nx * s1; p1.px.y += ny * s1; p1.px.z += nz * s1;
@@ -922,7 +923,7 @@ class World {
             const tLen = t2.length();
             if (tLen > 1e-6){
               const mu = s.friction !== undefined ? s.friction : 0.3;
-              const f = Math.min(0.5, mu * (pen / (tLen + 1e-5)));
+              const f = Math.min(0.2, mu * (pen / (tLen + 1e-5)));
               p.x.addScaledVector(t2, -f);
             }
           }
@@ -964,7 +965,7 @@ class World {
         t1.divideScalar(len);
         t2.subVectors(p1.v, p2.v);
         const vn = t2.dot(t1);
-        const dv = -0.04 * vn;
+        const dv = -0.20 * vn;
         if (w1 > 0) p1.v.addScaledVector(t1, dv * (w1 / wSum));
         if (w2 > 0) p2.v.addScaledVector(t1, -dv * (w2 / wSum));
       }

@@ -34,7 +34,7 @@ The repository hosts standalone interactive test scenes located in `tests/`, acc
   - Touch/Mouse Drag: pinch and deform the soft body volume.
 
 ### Test 4: Cloth Over Sphere (`tests/test4/index.html`)
-- **Focus**: High-resolution XPBD fabric draping benchmark over curved 3D obstacle geometry ($36 \times 36$, 1,296 vertices, 5,042 constraints).
+- **Focus**: High-resolution XPBD fabric draping benchmark over curved 3D obstacle geometry ($48 \times 48$, 2,304 vertices, 8,930 constraints).
 - **Scene**: $1.5\,\text{m} \times 1.5\,\text{m}$ horizontal fabric plane falling under downward gravity onto a $0.7\,\text{m}$ diameter polished sphere perched on a studio pedestal ($1.5\,\text{m}$ above floor, center at $y = 0.0\,\text{m}$).
 - **Interactions**:
   - No gyro / static studio gravity: gravity is fixed downwards $(0, -9.81, 0)\,\text{m/s}^2$ with immediate simulation start (no permission modal).

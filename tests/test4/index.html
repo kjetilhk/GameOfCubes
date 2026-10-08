@@ -27,7 +27,7 @@
 'use strict';
 
 const V = THREE.Vector3;
-const world = new XPBD.World({ dt: 1/60, substeps: 16, linearDamping: 0.6 });
+const world = new XPBD.World({ dt: 1/60, substeps: 24, linearDamping: 0.8 });
 world.selfCollision = true; // Enabled by default as specified
 
 const { bodies, particles, box } = world;
@@ -262,13 +262,13 @@ function initScene(){
   world.selfCollision = selfColActive;
 
   // Cloth: 1.5m x 1.5m horizontal plane, starts 1m above sphere center (y = 1.0m)
-  const nx = 36, ny = 36;
+  const nx = 48, ny = 48;
   activeCloth = world.addCloth({
     nx, ny,
     width: 1.5, height: 1.5,
     center: new V(0, 1.0, -1.2),
     plane: 'xz',
-    mass: 1.2,
+    mass: 1.5,
     compliance: 0.000004,     // Inextensible warp and weft
     shearCompliance: 0.02,    // Natural compliant diagonal shearing
     bendCompliance: 0,        // Soft textile drape

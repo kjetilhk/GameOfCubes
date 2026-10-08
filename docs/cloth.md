@@ -70,8 +70,8 @@ To maintain the project's zero-external-dependency requirement, Test 2 dynamical
 
 Test 4 ([`tests/test4/index.html`](file:///c:/Projects/GameOfCubes/tests/test4/index.html)) provides the classical computer graphics cloth draping benchmark:
 
-- **Horizontal Plane Geometry (`plane: 'xz'`)**: A $1.5\,\text{m} \times 1.5\,\text{m}$ sheet ($36 \times 36$ particles, 1,296 vertices, 5,042 constraints) is created horizontally at $y = 1.0\,\text{m}$, centered above the sphere.
+- **Horizontal Plane Geometry (`plane: 'xz'`)**: A $1.5\,\text{m} \times 1.5\,\text{m}$ sheet ($48 \times 48$ particles, 2,304 vertices, 8,930 constraints) is created horizontally at $y = 1.0\,\text{m}$, centered above the sphere.
 - **Curved Obstacle ($0.7\,\text{m}$ Sphere)**: An analytical sphere ($R = 0.35\,\text{m}$, center $(0, 0, -1.2)\,\text{m}$, $1.5\,\text{m}$ above the floor) is solved during substep particle collisions.
 - **Self-Collision Active by Default**: Zero-allocation 3D spatial hashing resolves fold-on-fold contact as the draping fabric forms radial pleats and flutes down the sphere's sides.
-- **Static Studio Physics (No Gyro)**: Gravity is fixed downwards at $(0, -9.81, 0)\,\text{m/s}^2$ without motion sensors or permission modals.
+- **High Simulation Quality**: Runs with 24 substeps and calibrated internal constraint damping, eliminating tension chatter and flutter.
 - **3D Orbit Camera**: Dragging outside the cloth orbits the camera in 3D around the pedestal to observe drapery from all angles.
