@@ -17,16 +17,19 @@ const V = THREE.Vector3;
 const ROOM_MATERIALS = {
   wall: new THREE.MeshStandardMaterial({ color: 0x242830, roughness: 0.88, metalness: 0.05 }),
   back: new THREE.MeshStandardMaterial({ color: 0x1b1f25, roughness: 0.92, metalness: 0.04 }),
-  floor: new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.82, metalness: 0.08 })
+  floor: new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.82, metalness: 0.08 }),
+  ceilingBezel: new THREE.MeshStandardMaterial({ color: 0x12151b, roughness: 0.6, metalness: 0.1 }),
+  lampWarm: new THREE.MeshStandardMaterial({ color: 0xfff5e6, emissive: 0xffedd5, emissiveIntensity: 1.3, roughness: 0.2 }),
+  lampCool: new THREE.MeshStandardMaterial({ color: 0xcde0f8, emissive: 0xbfdbfe, emissiveIntensity: 1.1, roughness: 0.2 }),
+  lampNeutral: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf8fafc, emissiveIntensity: 1.2, roughness: 0.2 })
 };
 
-/* ================= 2. Studio 3-Point Lighting ================= */
+/* ================= 2. Studio 3-Point Lighting (3 Lights) ================= */
 function createLighting(scene) {
-  const hemi = new THREE.HemisphereLight(0x404856, 0x15181e, 0.45);
-  scene.add(hemi);
+  // Exactly 3 lights in the scene: Key, Fill, and Rim
 
-  // Key Light: warm primary light casting soft PCF shadows
-  const key = new THREE.DirectionalLight(0xfff6ea, 1.15);
+  // 1. Key Light: warm primary light casting soft PCF shadows from the right
+  const key = new THREE.DirectionalLight(0xfff5e6, 1.25);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.bias = -0.0003;
@@ -35,15 +38,15 @@ function createLighting(scene) {
   sc.near = 0.1; sc.far = 15;
   scene.add(key, key.target);
 
-  // Fill Light: soft cool light from the left
-  const fill = new THREE.DirectionalLight(0xcde0f8, 0.45);
+  // 2. Fill Light: soft cool secondary light from the left
+  const fill = new THREE.DirectionalLight(0xcde0f8, 0.75);
   scene.add(fill);
 
-  // Rim / Back Light: crisp rear edge contour
-  const rim = new THREE.DirectionalLight(0xffffff, 0.65);
+  // 3. Rim / Back Light: crisp rear accent light for edge contour and specular catchlights
+  const rim = new THREE.DirectionalLight(0xffffff, 0.85);
   scene.add(rim, rim.target);
 
-  return { hemi, key, fill, rim };
+  return { key, fill, rim, light1: key, light2: fill, light3: rim };
 }
 
 /* ================= 3. Room Wall Meshes ================= */
@@ -65,6 +68,19 @@ function buildWallMeshes(scene, box, oldGroup = null) {
   mk(d, 2*hy, ROOM_MATERIALS.wall, new V( hx, 0, -d/2), [0, -Math.PI/2, 0]);
   mk(2*hx, d, ROOM_MATERIALS.floor, new V(0, -hy, -d/2), [-Math.PI/2, 0, 0]); // floor
   mk(2*hx, d, ROOM_MATERIALS.wall, new V(0,  hy, -d/2), [ Math.PI/2, 0, 0]); // ceiling
+
+  // 3 ceiling lights embedded in the ceiling (Left Fill, Center Rim, Right Key)
+  const lampW = Math.min(0.26, hx * 0.32);
+  const lampL = 0.42;
+  const lampConfigs = [
+    { pos: new V(-hx * 0.52, hy - 0.002, -d * 0.42), mat: ROOM_MATERIALS.lampCool },
+    { pos: new V(0,          hy - 0.002, -d * 0.65), mat: ROOM_MATERIALS.lampNeutral },
+    { pos: new V( hx * 0.52, hy - 0.002, -d * 0.42), mat: ROOM_MATERIALS.lampWarm }
+  ];
+  for (let i = 0; i < 3; i++){
+    mk(lampW + 0.04, lampL + 0.04, ROOM_MATERIALS.ceilingBezel, lampConfigs[i].pos, [Math.PI/2, 0, 0]);
+    mk(lampW, lampL, lampConfigs[i].mat, new V(lampConfigs[i].pos.x, hy - 0.003, lampConfigs[i].pos.z), [Math.PI/2, 0, 0]);
+  }
 
   scene.add(wallGroup);
   return wallGroup;

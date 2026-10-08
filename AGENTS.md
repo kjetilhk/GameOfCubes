@@ -95,11 +95,11 @@ When adding new tests:
 
 - **Units are SI**: meters, kilograms, seconds.
 - **Room Dimensions**: The test room is **3.0 meters tall** across all tests (`roomHeight = 3.0` m, half-height `hy = 1.5` m, depth `d = 2.4` m). Horizontal half-width is derived from aspect ratio (`hx = hy * aspect`) so the room fits vertically on screen at true 3m scale.
-- **Lighting**: Studio **3-point lighting** with dark room ambiance:
-  - **Key Light**: High-right warm directional light (`0xfff6ea`, intensity 1.15) with soft PCF shadow mapping (2048×2048 map, bounds `[-3, 3]`, near 0.1, far 15).
-  - **Fill Light**: Softer cool directional light (`0xcde0f8`, intensity 0.45) from the left to soften shadows.
-  - **Rim / Back Light**: High-rear directional light (`0xffffff`, intensity 0.65) oriented toward the camera for crisp edge highlights.
-  - **Hemisphere Light**: Subtle fill (`0x404856` / `0x15181e`, intensity 0.45) for dark ambiance.
+- **Lighting**: Studio **3-point lighting** with dark room ambiance (exactly 3 lights in the scene):
+  - **Light 1 (Key Light)**: High-right warm directional light (`0xfff5e6`, intensity 1.25) with soft PCF shadow mapping (2048×2048 map, bounds `[-3, 3]`, near 0.1, far 15).
+  - **Light 2 (Fill Light)**: High-left cool directional light (`0xcde0f8`, intensity 0.75) to soften shadows and add secondary specular reflections.
+  - **Light 3 (Rim / Back Light)**: High-rear directional light (`0xffffff`, intensity 0.85) for crisp edge contour highlights.
+  - **3 Ceiling Light Fixtures**: Visually embedded in the ceiling above the 3 lights with matching emissive color tones.
 - **Dark Gray Walls Palette**:
   - Walls and ceiling: `0x242830` (roughness 0.88, metalness 0.05).
   - Back wall: `0x1b1f25` (roughness 0.92, metalness 0.04).
