@@ -61,6 +61,16 @@ npx serve -l 8000
 
 Open `http://localhost:8000` to view the test catalog, or navigate directly to `http://localhost:8000/tests/test1/`.
 
+### Automated Headless Verification
+
+Run the automated physics verification suite directly in Node.js (zero dependencies):
+
+```bash
+node tests/verify.js
+```
+
+Verifies resting stability, static friction thresholds, volume conservation, non-tunneling boundary collision, and multi-instance concurrency isolation.
+
 ---
 
 ## Mobile Sensor Testing & Permissions

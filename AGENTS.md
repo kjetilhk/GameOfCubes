@@ -23,9 +23,11 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
 │   └── tests.md        # Test suite catalog & developer guide
 ├── src/
 │   ├── xpbd.js         # Core XPBD physics engine (Müller et al.)
-│   ├── room.js         # Shared 3.0m room setup, 3-point lighting, sensors, and FPS meter
+│   ├── viewcube.js     # Standalone 3D isometric CAD ViewCube gravity controller
+│   ├── room.js         # Shared 3.0m room setup, 3-point lighting, spawner, dragger, and FPS meter
 │   └── common.css      # Shared responsive UI styling tokens, HUD, and badges
 └── tests/
+    ├── verify.js       # Headless automated Node.js physics verification suite
     ├── test1/
     │   └── index.html  # Test 1: Cube Box (mobile XPBD rigid bodies)
     ├── test2/
@@ -37,7 +39,7 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
 ```
 
 The core physics engine lives in `src/xpbd.js` without DOM or rendering dependencies. It exports `XPBD` (and alias `CubePhysics`) to the global scope (`window`/`globalThis`) and to CommonJS (`module.exports`).
-Shared rendering, lighting, device sensors, and UI utilities live in `src/room.js` and `src/common.css`.
+Shared rendering, lighting, device sensors, and UI utilities live in `src/room.js`, `src/viewcube.js`, and `src/common.css`.
 
 Each test in `tests/` is a self-contained environment loading three.js, `../../src/xpbd.js`, `../../src/room.js`, and `../../src/common.css`. There is no build step, package manager, bundler, or complex runner. Keep it lightweight and accessible directly via static file servers.
 
@@ -142,8 +144,12 @@ When adding new tests:
   - Visit `http://localhost:8000/tests/test1/` to run Test 1. Use the 3D ViewCube in the top-right to control gravity (click faces/presets, drag to rotate) or drag on screen to tilt.
 - **Phone**:
   - Motion sensors require **HTTPS** and a top-level page (they do not work inside iframes). Host on GitHub Pages and test on physical devices (iOS and Android).
-- **Headless**:
-  - Physics modules have no DOM dependencies and can be extracted and run headlessly in Node with `three@0.128.0` to measure stability, overlap, and performance.
+- **Headless & Automated Verification**:
+  - Run the automated physics verification suite:
+    ```bash
+    node tests/verify.js
+    ```
+    Verifies resting stability, 18° static friction threshold, hydrostatic volume conservation, non-tunneling boundary collision, and multi-instance concurrency isolation.
 - **Physics verification checklist**:
   - A single cube on a level floor stays perfectly still without slow spin.
   - A cube on a floor tilted ~18° does not slide (μs = 0.55).

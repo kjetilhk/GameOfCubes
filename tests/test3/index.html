@@ -27,6 +27,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="../../src/xpbd.js"></script>
+<script src="../../src/viewcube.js"></script>
 <script src="../../src/room.js"></script>
 <script>
 (() => {
@@ -104,37 +105,21 @@ function syncTetVisualMesh(){
 }
 
 /* ================= rigid cubes ================= */
-const PALETTE = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x7a5cc4];
-const cubeMeshes = [];
-
-function addCube(){
-  if (bodies.length >= 8) return;
-  const s = 0.38;
-  const pos = new V((Math.random() - 0.5) * box.hx * 0.6, box.hy * 0.7, -box.d * 0.5);
-  world.addCube(s, pos,
-    new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
-    new V((Math.random() - 0.5) * 0.8, 0, 0));
-  const m = new THREE.Mesh(RoomEnv.roundedCube(s, s * 0.12, 4),
-    new THREE.MeshPhysicalMaterial({
-      color: PALETTE[bodies.length % PALETTE.length],
-      roughness: 0.28,
-      metalness: 0.04,
-      clearcoat: 0.25,
-      clearcoatRoughness: 0.15
-    }));
-  m.castShadow = m.receiveShadow = true;
-  scene.add(m);
-  cubeMeshes.push(m);
-}
+const cubeSpawner = RoomEnv.createCubeSpawner({
+  scene,
+  world,
+  palette: [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x7a5cc4],
+  maxCubes: 8,
+  sizeRange: 0.38,
+  spawnPos: (b) => new V((Math.random() - 0.5) * b.hx * 0.6, b.hy * 0.7, -b.d * 0.5)
+});
 
 /* ================= scene init ================= */
 function initScene(){
-  for (const m of cubeMeshes){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
-  cubeMeshes.length = 0;
+  cubeSpawner.clear();
   world.clear();
 
   // High-resolution continuum soft body: 8x8x8 grid (1,715 tetrahedra, 2,520 elastic edges, 512 particles)
-  // Strict hydrostatic incompressibility (volCompliance=0) preserves volume while edge compliance allows fluid water-like flow
   const edgeComp = softMode ? 0.12 : 0.005;
   activeTetMesh = world.addTetMesh({
     nx: 8, ny: 8, nz: 8,
@@ -151,56 +136,20 @@ function initScene(){
 initScene();
 
 /* ================= input & raycast interaction ================= */
-let grabbedParticle = null, grabbedOrigInvM = 0;
-const raycaster = new THREE.Raycaster();
-const mouseVec = new THREE.Vector2();
-const planeZ = new THREE.Plane(new V(0, 0, 1), box.d / 2);
-const hitPoint = new V();
-
-function handlePointer(e, type){
-  mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
-  mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
-
-  if (type === 'down'){
-    raycaster.setFromCamera(mouseVec, camera);
-    if (activeTetMesh) {
-      let closestP = null, minD = 0.25;
-      for (const p of activeTetMesh.particles){
-        const dist = raycaster.ray.distanceToPoint(p.x);
-        if (dist < minD){ minD = dist; closestP = p; }
-      }
-      if (closestP) {
-        grabbedParticle = closestP;
-        grabbedOrigInvM = closestP.invM;
-        closestP.invM = 0;
-        return true;
-      }
-    }
-  } else if (type === 'up'){
-    if (grabbedParticle) {
-      grabbedParticle.invM = grabbedOrigInvM;
-      grabbedParticle = null;
-    }
-  } else if (type === 'move' && grabbedParticle){
-    raycaster.setFromCamera(mouseVec, camera);
-    planeZ.constant = -grabbedParticle.x.z;
-    if (raycaster.ray.intersectPlane(planeZ, hitPoint)){
-      grabbedParticle.x.copy(hitPoint);
-      grabbedParticle.px.copy(hitPoint);
-      grabbedParticle.v.set(0, 0, 0);
-    }
-    return true;
-  }
-  return false;
-}
+const dragger = RoomEnv.createParticleDragger({
+  camera,
+  world,
+  getTargetParticles: () => activeTetMesh ? activeTetMesh.particles : null,
+  pickRadius: 0.25
+});
 
 RoomEnv.setupMotionSensors({
   world,
-  onPointerDrag: handlePointer
+  onPointerDrag: dragger.handlePointer
 });
 
 /* ================= HUD button listeners ================= */
-document.getElementById('stiff').addEventListener('click', () => {
+function toggleStiffness() {
   softMode = !softMode;
   document.getElementById('stiff').textContent = softMode ? 'Stiffer' : 'Softer';
   const edgeComp = softMode ? 0.12 : 0.005;
@@ -209,17 +158,15 @@ document.getElementById('stiff').addEventListener('click', () => {
     for (const c of activeTetMesh.volumeConstraints) c.compliance = 0.0;
   }
   RoomEnv.showNote(softMode ? 'Elasticity: Water / Fluid (extra soft)' : 'Elasticity: Firm rubber', 1500);
-});
+}
 
-document.getElementById('wire').addEventListener('click', () => {
+function toggleWireframe() {
   showWire = !showWire;
   document.getElementById('wire').classList.toggle('active', showWire);
   if (tetVisualMesh) tetVisualMesh.material.wireframe = showWire;
-});
+}
 
-document.getElementById('cube').addEventListener('click', addCube);
-document.getElementById('reset').addEventListener('click', initScene);
-document.getElementById('shake').addEventListener('click', () => {
+function shake() {
   for (const p of particles){
     if (p.invM > 0){
       p.v.add(new V((Math.random() - 0.5) * 4, Math.random() * 3.5, (Math.random() - 0.5) * 2));
@@ -229,6 +176,20 @@ document.getElementById('shake').addEventListener('click', () => {
     b.v.add(new V((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.3) * 2));
     b.w.add(new V((Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15));
   }
+}
+
+document.getElementById('stiff').addEventListener('click', toggleStiffness);
+document.getElementById('wire').addEventListener('click', toggleWireframe);
+document.getElementById('cube').addEventListener('click', () => cubeSpawner.spawnCube());
+document.getElementById('reset').addEventListener('click', initScene);
+document.getElementById('shake').addEventListener('click', shake);
+
+// Desktop keyboard shortcuts
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); cubeSpawner.spawnCube(); }
+  else if (e.key === 'w' || e.key === 'W') toggleWireframe();
+  else if (e.key === 's' || e.key === 'S') toggleStiffness();
+  else if (e.key === 'r' || e.key === 'R') initScene();
 });
 
 /* ================= animation loop ================= */
@@ -244,10 +205,7 @@ function frame(now){
   if (n === 3) acc = 0;
 
   syncTetVisualMesh();
-  for (let i = 0; i < bodies.length; i++){
-    cubeMeshes[i].position.copy(bodies[i].x);
-    cubeMeshes[i].quaternion.copy(bodies[i].q);
-  }
+  cubeSpawner.sync();
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);

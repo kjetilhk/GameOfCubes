@@ -25,6 +25,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="../../src/xpbd.js"></script>
+<script src="../../src/viewcube.js"></script>
 <script src="../../src/room.js"></script>
 <script>
 (() => {
@@ -32,7 +33,7 @@
 
 const V = THREE.Vector3;
 const world = new XPBD.World();
-const { bodies, box } = world;
+const { bodies } = world;
 
 /* ================= rendering & room ================= */
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -54,51 +55,40 @@ window.addEventListener('resize', resize);
 resize();
 
 /* ================= cubes ================= */
-const PALETTE = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x4fbf9f, 0xf3efe6, 0x7a5cc4, 0xff9f43];
-const meshes = [];
-
-function addCube(){
-  if (bodies.length >= 30) return;
-  const s = 0.36 + Math.random() * 0.14;
-  const pos = new V();
-  for (let tries = 0; tries < 20; tries++){
-    pos.set((Math.random() - 0.5) * 2 * (box.hx - s*0.8), box.hy * (0.6*Math.random() - 0.1), -box.d * 0.5);
-    if (!world.crowded(pos, s)) break;
-  }
-  world.addCube(s, pos,
-    new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
-    new V((Math.random() - 0.5) * 0.8, 0, 0));
-  const m = new THREE.Mesh(RoomEnv.roundedCube(s, s * 0.12, 4),
-    new THREE.MeshPhysicalMaterial({
-      color: PALETTE[bodies.length % PALETTE.length],
-      roughness: 0.28,
-      metalness: 0.04,
-      clearcoat: 0.25,
-      clearcoatRoughness: 0.15
-    }));
-  m.castShadow = m.receiveShadow = true;
-  scene.add(m);
-  meshes.push(m);
-}
+const cubeSpawner = RoomEnv.createCubeSpawner({
+  scene,
+  world,
+  palette: [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x4fbf9f, 0xf3efe6, 0x7a5cc4, 0xff9f43],
+  maxCubes: 30,
+  sizeRange: [0.36, 0.50]
+});
 
 function reset(){
-  for (const m of meshes){ scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
-  meshes.length = 0;
+  cubeSpawner.clear();
   world.clear();
-  for (let i = 0; i < 3; i++) addCube();
+  for (let i = 0; i < 3; i++) cubeSpawner.spawnCube();
 }
 reset();
 
-/* ================= motion & input ================= */
-RoomEnv.setupMotionSensors({ world });
-
-document.getElementById('add').addEventListener('click', addCube);
-document.getElementById('reset').addEventListener('click', reset);
-document.getElementById('shake').addEventListener('click', () => {
+function shake(){
   for (const b of bodies){
     b.v.add(new V((Math.random() - 0.5) * 4, Math.random() * 3.5, (Math.random() - 0.3) * 2.5));
     b.w.add(new V((Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15));
   }
+}
+
+/* ================= motion & input ================= */
+RoomEnv.setupMotionSensors({ world });
+
+document.getElementById('add').addEventListener('click', () => cubeSpawner.spawnCube());
+document.getElementById('reset').addEventListener('click', reset);
+document.getElementById('shake').addEventListener('click', shake);
+
+// Desktop keyboard shortcuts
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); cubeSpawner.spawnCube(); }
+  else if (e.key === 'r' || e.key === 'R') reset();
+  else if (e.key === 's' || e.key === 'S') shake();
 });
 
 /* ================= animation loop ================= */
@@ -113,10 +103,7 @@ function frame(now){
   while (acc >= world.dt && n < 3){ world.step(); acc -= world.dt; n++; }
   if (n === 3) acc = 0;
 
-  for (let i = 0; i < bodies.length; i++){
-    meshes[i].position.copy(bodies[i].x);
-    meshes[i].quaternion.copy(bodies[i].q);
-  }
+  cubeSpawner.sync();
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);

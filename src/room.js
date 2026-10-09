@@ -1,6 +1,7 @@
 /* ================= Shared Room Environment & Utilities =================
    3.0m studio room setup, 3-point lighting, wall meshes, DeviceMotion sensors,
-   drag-to-tilt desktop fallback, FPS meter, and notification toasts.
+   drag-to-tilt desktop fallback, FPS meter, particle dragger, cube spawner,
+   procedural fabric textures, orbit camera, and notification toasts.
    ======================================================================== */
 
 (function(global) {
@@ -56,7 +57,13 @@ function createLighting(scene) {
 
 /* ================= 3. Room Wall Meshes ================= */
 function buildWallMeshes(scene, box, oldGroup = null) {
-  if (oldGroup) scene.remove(oldGroup);
+  if (oldGroup) {
+    oldGroup.traverse(child => {
+      if (child.isMesh && child.geometry) child.geometry.dispose();
+    });
+    scene.remove(oldGroup);
+  }
+
   const wallGroup = new THREE.Group();
   const { hx, hy, d } = box;
 
@@ -172,6 +179,13 @@ function screenAngle() {
 function toScreen(x, y, z, out) {
   const a = THREE.MathUtils.degToRad(screenAngle()), c = Math.cos(a), s = Math.sin(a);
   return out.set(x*c - y*s, x*s + y*c, z);
+}
+
+function createViewCube(opts) {
+  if (global.ViewCube && typeof global.ViewCube.create === 'function') {
+    return global.ViewCube.create(opts);
+  }
+  return null;
 }
 
 function setupMotionSensors({ world, onStart = null, onPointerDrag = null }) {
@@ -305,489 +319,7 @@ function setupMotionSensors({ world, onStart = null, onPointerDrag = null }) {
   };
 }
 
-/* ================= 8. Interactive Desktop ViewCube (Gravity Controller) ================= */
-function createViewCube({ world, onGravityChange = null, parent = document.body }) {
-  if (!document || !parent) return null;
-
-  // Root container
-  const container = document.createElement('div');
-  container.id = 'viewcube-container';
-
-  // Header row: Home reset button + Active face badge
-  const header = document.createElement('div');
-  header.id = 'viewcube-header';
-
-  const homeBtn = document.createElement('button');
-  homeBtn.id = 'viewcube-home';
-  homeBtn.title = 'Reset Gravity (Floor)';
-  homeBtn.setAttribute('aria-label', 'Reset gravity to floor');
-  homeBtn.innerHTML = '⌂';
-
-  const badge = document.createElement('span');
-  badge.id = 'viewcube-badge';
-  badge.textContent = 'FLOOR';
-
-  header.appendChild(homeBtn);
-  header.appendChild(badge);
-  container.appendChild(header);
-
-  // 3D Isometric Canvas
-  const canvas = document.createElement('canvas');
-  canvas.id = 'viewcube-canvas';
-  const size = 96;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = size * dpr;
-  canvas.height = size * dpr;
-  canvas.style.width = size + 'px';
-  canvas.style.height = size + 'px';
-  const ctx = canvas.getContext('2d');
-  container.appendChild(canvas);
-
-  // Presets grid (2 rows x 3 cols + full width Zero-G)
-  const presets = document.createElement('div');
-  presets.id = 'viewcube-presets';
-  const presetDefs = [
-    { key: 'BOTTOM', label: 'Floor' },
-    { key: 'LEFT',   label: 'Left' },
-    { key: 'RIGHT',  label: 'Right' },
-    { key: 'TOP',    label: 'Ceil' },
-    { key: 'FRONT',  label: 'Front' },
-    { key: 'BACK',   label: 'Back' },
-    { key: 'ZEROG',  label: '0-G Float', full: true }
-  ];
-
-  const presetBtns = {};
-  presetDefs.forEach(p => {
-    const btn = document.createElement('button');
-    btn.className = 'viewcube-btn' + (p.full ? ' full-width' : '');
-    btn.textContent = p.label;
-    btn.setAttribute('data-face', p.key);
-    if (p.key === 'BOTTOM') btn.classList.add('active');
-    presets.appendChild(btn);
-    presetBtns[p.key] = btn;
-  });
-  container.appendChild(presets);
-
-  parent.appendChild(container);
-
-  // Prevent event bubbling to Three.js canvas or parent
-  ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'click', 'dblclick'].forEach(evt => {
-    container.addEventListener(evt, e => e.stopPropagation());
-  });
-
-  // Cube Geometry: half-size s = 27 (fits with margins inside 96x96 viewport)
-  const s = 27;
-  const verts = [
-    [-s, -s, -s], [s, -s, -s], [s, s, -s], [-s, s, -s],
-    [-s, -s, s], [s, -s, s], [s, s, s], [-s, s, s]
-  ];
-
-  // Faces definitions: qTarget makes that face become the active floor / gravity direction
-  const FACES = [
-    { name: 'BOTTOM', label: 'FLOOR',   idx: [0, 1, 5, 4], n: new V( 0, -1,  0), qTarget: new THREE.Quaternion(0, 0, 0, 1),                                              gTarget: new V( 0, -9.81,  0) },
-    { name: 'TOP',    label: 'CEILING', idx: [7, 6, 2, 3], n: new V( 0,  1,  0), qTarget: new THREE.Quaternion().setFromAxisAngle(new V(1, 0, 0), Math.PI),            gTarget: new V( 0,  9.81,  0) },
-    { name: 'LEFT',   label: 'LEFT',    idx: [0, 4, 7, 3], n: new V(-1,  0,  0), qTarget: new THREE.Quaternion().setFromAxisAngle(new V(0, 0, 1),  Math.PI / 2),        gTarget: new V(-9.81,  0,  0) },
-    { name: 'RIGHT',  label: 'RIGHT',   idx: [5, 1, 2, 6], n: new V( 1,  0,  0), qTarget: new THREE.Quaternion().setFromAxisAngle(new V(0, 0, 1), -Math.PI / 2),        gTarget: new V( 9.81,  0,  0) },
-    { name: 'FRONT',  label: 'FRONT',   idx: [4, 5, 6, 7], n: new V( 0,  0,  1), qTarget: new THREE.Quaternion().setFromAxisAngle(new V(1, 0, 0),  Math.PI / 2),        gTarget: new V( 0,  0,  9.81) },
-    { name: 'BACK',   label: 'BACK',    idx: [1, 0, 3, 2], n: new V( 0,  0, -1), qTarget: new THREE.Quaternion().setFromAxisAngle(new V(1, 0, 0), -Math.PI / 2),        gTarget: new V( 0,  0, -9.81) }
-  ];
-
-  const faceMap = {};
-  FACES.forEach(f => { faceMap[f.name] = f; });
-
-  // Camera angles (Axonometric/Isometric CAD view)
-  const pitch = 22 * Math.PI / 180;
-  const yaw = -32 * Math.PI / 180;
-  const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
-  const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
-
-  function camTransform(p) {
-    // 1. Yaw around Y
-    const x1 = p[0] * cosY + p[2] * sinY;
-    const y1 = p[1];
-    const z1 = -p[0] * sinY + p[2] * cosY;
-    // 2. Pitch around X
-    const x2 = x1;
-    const y2 = y1 * cosP - z1 * sinP;
-    const z2 = y1 * sinP + z1 * cosP;
-    return [x2, y2, z2];
-  }
-
-  // Camera basis vectors in world space for intuitive trackball drag
-  const camRight = new V(cosY, 0, -sinY);
-  const camUp    = new V(-sinY * sinP, cosP, -cosY * sinP);
-
-  // Directional shading lights in camera space
-  const keyL = [0.5, 0.8, 0.4];
-  const kLen = Math.hypot(...keyL);
-  const uKey = keyL.map(v => v / kLen);
-
-  const fillL = [-0.6, 0.3, 0.3];
-  const fLen = Math.hypot(...fillL);
-  const uFill = fillL.map(v => v / fLen);
-
-  // State
-  const orientation = new THREE.Quaternion();
-  let targetQ = null;
-  let isZeroG = false;
-  let hoveredFace = null;
-  let activeFace = 'BOTTOM';
-  let isDragging = false;
-  let dragMoved = false;
-  let lastPtrX = 0, lastPtrY = 0;
-  let visibleFaces = [];
-
-  const tmpVec = new V();
-  function quatRotate(q, x, y, z) {
-    tmpVec.set(x, y, z).applyQuaternion(q);
-    return [tmpVec.x, tmpVec.y, tmpVec.z];
-  }
-
-  function setActivePreset(key) {
-    Object.keys(presetBtns).forEach(k => {
-      presetBtns[k].classList.toggle('active', k === key);
-    });
-  }
-
-  function applyGravity() {
-    if (isZeroG) {
-      world.accel.set(0, 0, 0);
-      badge.textContent = '0-G FLOAT';
-      setActivePreset('ZEROG');
-    } else {
-      tmpVec.set(0, -1, 0).applyQuaternion(orientation).multiplyScalar(9.81);
-      world.accel.copy(tmpVec);
-
-      let bestFace = 'CUSTOM';
-      let maxDot = -Infinity;
-      const curDir = tmpVec.clone().normalize();
-      for (const f of FACES) {
-        const dot = curDir.dot(f.gTarget.clone().normalize());
-        if (dot > maxDot) {
-          maxDot = dot;
-          if (dot > 0.92) bestFace = f.name;
-        }
-      }
-      activeFace = bestFace;
-      if (bestFace !== 'CUSTOM') {
-        badge.textContent = faceMap[bestFace].label;
-        setActivePreset(bestFace);
-      } else {
-        badge.textContent = 'TILTED';
-        setActivePreset(null);
-      }
-    }
-    if (onGravityChange) onGravityChange(world.accel);
-  }
-
-  function render() {
-    if (targetQ) {
-      orientation.slerp(targetQ, 0.22);
-      if (orientation.angleTo(targetQ) < 0.005) {
-        orientation.copy(targetQ);
-        targetQ = null;
-      }
-      applyGravity();
-    }
-
-    ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.scale(dpr, dpr);
-
-    const cx = size / 2, cy = size / 2;
-
-    // Transform vertices
-    const projVerts = verts.map(v => {
-      const worldP = quatRotate(orientation, v[0], v[1], v[2]);
-      const camP = camTransform(worldP);
-      return {
-        x: cx + camP[0],
-        y: cy - camP[1],
-        z: camP[2]
-      };
-    });
-
-    // Check faces visibility & depth
-    visibleFaces = [];
-    for (const f of FACES) {
-      const worldN = quatRotate(orientation, f.n.x, f.n.y, f.n.z);
-      const camN = camTransform(worldN);
-      if (camN[2] > 0.001) {
-        const pts = f.idx.map(i => projVerts[i]);
-        const cenX = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) / 4;
-        const cenY = (pts[0].y + pts[1].y + pts[2].y + pts[3].y) / 4;
-        const insetPts = pts.map(p => ({
-          x: cenX + (p.x - cenX) * 0.88,
-          y: cenY + (p.y - cenY) * 0.88
-        }));
-        const dotKey = Math.max(0, camN[0]*uKey[0] + camN[1]*uKey[1] + camN[2]*uKey[2]);
-        const dotFill = Math.max(0, camN[0]*uFill[0] + camN[1]*uFill[1] + camN[2]*uFill[2]);
-        const light = 0.28 + 0.52 * dotKey + 0.20 * dotFill;
-
-        visibleFaces.push({
-          name: f.name,
-          label: f.label,
-          z: camN[2],
-          outerPts: pts,
-          pts: insetPts,
-          cenX,
-          cenY,
-          light,
-          isActive: !isZeroG && activeFace === f.name,
-          isHovered: hoveredFace === f.name
-        });
-      }
-    }
-
-    // Sort back-to-front
-    visibleFaces.sort((a, b) => a.z - b.z);
-
-    // Chassis silhouette
-    for (const f of visibleFaces) {
-      ctx.beginPath();
-      ctx.moveTo(f.outerPts[0].x, f.outerPts[0].y);
-      for (let i = 1; i < 4; i++) ctx.lineTo(f.outerPts[i].x, f.outerPts[i].y);
-      ctx.closePath();
-      ctx.fillStyle = '#141a22';
-      ctx.fill();
-    }
-
-    // Inset face panels
-    for (const f of visibleFaces) {
-      ctx.beginPath();
-      ctx.moveTo(f.pts[0].x, f.pts[0].y);
-      for (let i = 1; i < 4; i++) ctx.lineTo(f.pts[i].x, f.pts[i].y);
-      ctx.closePath();
-
-      if (f.isHovered) {
-        ctx.fillStyle = '#f2b632';
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5;
-      } else if (f.isActive) {
-        const r = Math.round(50 * f.light + 40);
-        const g = Math.round(75 * f.light + 40);
-        const b = Math.round(110 * f.light + 50);
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.strokeStyle = '#f2b632';
-        ctx.lineWidth = 1.5;
-      } else {
-        const r = Math.round(40 * f.light + 15);
-        const g = Math.round(52 * f.light + 18);
-        const b = Math.round(72 * f.light + 25);
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-        ctx.lineWidth = 1.0;
-      }
-      ctx.fill();
-      ctx.stroke();
-
-      // Label text
-      ctx.font = 'bold 9.5px "Bricolage Grotesque", system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = f.isHovered ? '#121820' : (f.isActive ? '#fff' : '#cbd5e1');
-      ctx.fillText(f.label, f.cenX, f.cenY);
-    }
-
-    // Center glowing gravity arrow
-    if (!isZeroG) {
-      const gLen = world.accel.length();
-      if (gLen > 0.05) {
-        const gDir = world.accel.clone().normalize();
-        const camG = camTransform([gDir.x, gDir.y, gDir.z]);
-        const arrowLen = 34;
-        const ax = cx + camG[0] * arrowLen;
-        const ay = cy - camG[1] * arrowLen;
-
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(ax, ay);
-        ctx.strokeStyle = '#f2b632';
-        ctx.lineWidth = 2.2;
-        ctx.shadowColor = 'rgba(242, 182, 50, 0.7)';
-        ctx.shadowBlur = 6;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        ctx.beginPath();
-        ctx.arc(ax, ay, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff';
-        ctx.fill();
-      }
-    } else {
-      ctx.beginPath();
-      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(200, 220, 255, 0.85)';
-      ctx.shadowColor = 'rgba(150, 200, 255, 0.8)';
-      ctx.shadowBlur = 8;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-
-    ctx.restore();
-    requestAnimationFrame(render);
-  }
-  requestAnimationFrame(render);
-
-  function pointInPoly(px, py, poly) {
-    let inside = false;
-    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-      const xi = poly[i].x, yi = poly[i].y;
-      const xj = poly[j].x, yj = poly[j].y;
-      const intersect = ((yi > py) !== (yj > py)) &&
-        (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
-      if (intersect) inside = !inside;
-    }
-    return inside;
-  }
-
-  function getFaceAt(clientX, clientY) {
-    const rect = canvas.getBoundingClientRect();
-    const px = clientX - rect.left;
-    const py = clientY - rect.top;
-    for (let i = visibleFaces.length - 1; i >= 0; i--) {
-      const f = visibleFaces[i];
-      if (pointInPoly(px, py, f.pts)) return f;
-    }
-    return null;
-  }
-
-  canvas.addEventListener('pointermove', e => {
-    if (isDragging) {
-      const dx = e.clientX - lastPtrX;
-      const dy = e.clientY - lastPtrY;
-      lastPtrX = e.clientX;
-      lastPtrY = e.clientY;
-      if (Math.hypot(dx, dy) > 1) dragMoved = true;
-
-      isZeroG = false;
-      targetQ = null;
-
-      const qYaw = new THREE.Quaternion().setFromAxisAngle(camUp, dx * 0.022);
-      const qPitch = new THREE.Quaternion().setFromAxisAngle(camRight, dy * 0.022);
-      const deltaQ = qYaw.multiply(qPitch);
-      orientation.premultiply(deltaQ).normalize();
-      applyGravity();
-      return;
-    }
-
-    const face = getFaceAt(e.clientX, e.clientY);
-    const newHover = face ? face.name : null;
-    if (newHover !== hoveredFace) {
-      hoveredFace = newHover;
-      canvas.style.cursor = hoveredFace ? 'pointer' : 'grab';
-    }
-  });
-
-  canvas.addEventListener('pointerdown', e => {
-    isDragging = true;
-    dragMoved = false;
-    lastPtrX = e.clientX;
-    lastPtrY = e.clientY;
-    canvas.setPointerCapture(e.pointerId);
-  });
-
-  canvas.addEventListener('pointerup', e => {
-    if (isDragging) {
-      canvas.releasePointerCapture(e.pointerId);
-      isDragging = false;
-      if (!dragMoved) {
-        const face = getFaceAt(e.clientX, e.clientY);
-        if (face && faceMap[face.name]) {
-          snapToFace(face.name);
-        }
-      }
-    }
-  });
-
-  canvas.addEventListener('pointerleave', () => {
-    if (!isDragging) {
-      hoveredFace = null;
-      canvas.style.cursor = 'grab';
-    }
-  });
-
-  function snapToFace(faceName) {
-    isZeroG = false;
-    const f = faceMap[faceName];
-    if (f) {
-      targetQ = f.qTarget.clone();
-      activeFace = faceName;
-      badge.textContent = f.label;
-      setActivePreset(faceName);
-      applyGravity();
-    }
-  }
-
-  function setZeroG() {
-    isZeroG = true;
-    targetQ = null;
-    applyGravity();
-  }
-
-  function resetHome() {
-    snapToFace('BOTTOM');
-  }
-
-  homeBtn.addEventListener('click', resetHome);
-
-  presets.addEventListener('click', e => {
-    const btn = e.target.closest('.viewcube-btn');
-    if (!btn) return;
-    const faceKey = btn.getAttribute('data-face') || (btn.dataset && btn.dataset.face);
-    if (faceKey === 'ZEROG') {
-      setZeroG();
-    } else {
-      snapToFace(faceKey);
-    }
-  });
-
-  function syncFromWorld() {
-    if (isDragging || targetQ) return;
-    const g = world.accel;
-    const len = g.length();
-    if (len < 0.1) {
-      isZeroG = true;
-      setActivePreset('ZEROG');
-      badge.textContent = '0-G FLOAT';
-      return;
-    }
-    isZeroG = false;
-    const dir = g.clone().normalize();
-    orientation.setFromUnitVectors(new V(0, -1, 0), dir);
-
-    let bestFace = 'CUSTOM';
-    let maxDot = -Infinity;
-    for (const f of FACES) {
-      const dot = dir.dot(f.gTarget.clone().normalize());
-      if (dot > maxDot) {
-        maxDot = dot;
-        if (dot > 0.92) bestFace = f.name;
-      }
-    }
-    activeFace = bestFace;
-    if (bestFace !== 'CUSTOM') {
-      badge.textContent = faceMap[bestFace].label;
-      setActivePreset(bestFace);
-    } else {
-      badge.textContent = 'TILTED';
-      setActivePreset(null);
-    }
-  }
-
-  return {
-    container,
-    canvas,
-    snapToFace,
-    setZeroG,
-    resetHome,
-    syncFromWorld,
-    hide: () => { container.style.display = 'none'; },
-    show: () => { container.style.display = 'flex'; }
-  };
-}
-
-/* ================= 9. Beveled Rounded Cube Geometry ================= */
+/* ================= 8. Beveled Rounded Cube Geometry ================= */
 function roundedCube(size, radius, segments = 4) {
   const g = new THREE.BoxGeometry(size, size, size, segments, segments, segments);
   const pos = g.attributes.position, nrm = g.attributes.normal;
@@ -803,6 +335,340 @@ function roundedCube(size, radius, segments = 4) {
   return g;
 }
 
+/* ================= 9. Reusable Cube Spawner Utility ================= */
+function createCubeSpawner({
+  scene,
+  world,
+  palette = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x4fbf9f, 0xf3efe6, 0x7a5cc4, 0xff9f43],
+  maxCubes = 30,
+  sizeRange = [0.36, 0.50],
+  spawnPos = null,
+  materialProps = { roughness: 0.28, metalness: 0.04, clearcoat: 0.25, clearcoatRoughness: 0.15 }
+}) {
+  const meshes = [];
+  const geometryCache = new Map();
+
+  function getGeometry(s) {
+    const key = Math.round(s * 1000) / 1000;
+    if (!geometryCache.has(key)) {
+      geometryCache.set(key, roundedCube(s, s * 0.12, 4));
+    }
+    return geometryCache.get(key);
+  }
+
+  function spawnCube(customSize = null, customPos = null) {
+    if (world.bodies.length >= maxCubes) return null;
+    const s = customSize !== null ? customSize : (
+      typeof sizeRange === 'number' ? sizeRange : sizeRange[0] + Math.random() * (sizeRange[1] - sizeRange[0])
+    );
+    const pos = customPos ? customPos.clone() : new V();
+    if (!customPos) {
+      if (spawnPos) {
+        pos.copy(spawnPos(world.box, s));
+      } else {
+        for (let tries = 0; tries < 20; tries++) {
+          pos.set(
+            (Math.random() - 0.5) * 2 * (world.box.hx - s * 0.8),
+            world.box.hy * (0.6 * Math.random() - 0.1),
+            -world.box.d * 0.5
+          );
+          if (!world.crowded(pos, s)) break;
+        }
+      }
+    }
+    const body = world.addCube(
+      s,
+      pos,
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6, Math.random()*6, Math.random()*6)),
+      new V((Math.random() - 0.5) * 0.8, 0, 0)
+    );
+
+    const geom = getGeometry(s);
+    const mat = new THREE.MeshPhysicalMaterial(Object.assign({
+      color: palette[world.bodies.length % palette.length]
+    }, materialProps));
+
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.position.copy(pos);
+    scene.add(mesh);
+    meshes.push(mesh);
+    return { body, mesh };
+  }
+
+  function sync() {
+    const n = Math.min(meshes.length, world.bodies.length);
+    for (let i = 0; i < n; i++) {
+      meshes[i].position.copy(world.bodies[i].x);
+      meshes[i].quaternion.copy(world.bodies[i].q);
+    }
+  }
+
+  function clear() {
+    for (const m of meshes) {
+      scene.remove(m);
+      m.material.dispose();
+    }
+    meshes.length = 0;
+  }
+
+  function dispose() {
+    clear();
+    for (const g of geometryCache.values()) g.dispose();
+    geometryCache.clear();
+  }
+
+  return {
+    meshes,
+    spawnCube,
+    sync,
+    clear,
+    dispose
+  };
+}
+
+/* ================= 10. Reusable Particle Raycast Dragger ================= */
+function createParticleDragger({ camera, world, getTargetParticles, pickRadius = 0.25 }) {
+  let grabbedParticle = null, origInvM = 0;
+  const raycaster = new THREE.Raycaster();
+  const mouseVec = new THREE.Vector2();
+  const planeZ = new THREE.Plane(new V(0, 0, 1), 0);
+  const hitPoint = new V();
+
+  function handlePointer(e, type) {
+    mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+    if (type === 'down') {
+      raycaster.setFromCamera(mouseVec, camera);
+      const particles = getTargetParticles ? getTargetParticles() : (world ? world.particles : []);
+      if (particles && particles.length) {
+        let closestP = null, minD = pickRadius;
+        for (const p of particles) {
+          const dist = raycaster.ray.distanceToPoint(p.x);
+          if (dist < minD) { minD = dist; closestP = p; }
+        }
+        if (closestP) {
+          grabbedParticle = closestP;
+          origInvM = closestP.invM;
+          closestP.invM = 0;
+          return true;
+        }
+      }
+    } else if (type === 'up') {
+      if (grabbedParticle) {
+        grabbedParticle.invM = origInvM;
+        grabbedParticle = null;
+        return true;
+      }
+    } else if (type === 'move' && grabbedParticle) {
+      raycaster.setFromCamera(mouseVec, camera);
+      planeZ.constant = -grabbedParticle.x.z;
+      if (raycaster.ray.intersectPlane(planeZ, hitPoint)) {
+        grabbedParticle.x.copy(hitPoint);
+        grabbedParticle.px.copy(hitPoint);
+        grabbedParticle.v.set(0, 0, 0);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  return {
+    handlePointer,
+    getGrabbedParticle: () => grabbedParticle,
+    isDragging: () => grabbedParticle !== null
+  };
+}
+
+/* ================= 11. Procedural Woven Fabric Texture Generator ================= */
+function createFabricTextures({
+  color = '#ede5d8',
+  threads = 32,
+  size = 512,
+  repeat = 30,
+  isTerracotta = false
+} = {}) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = bCanvas.height = size;
+  const bCtx = bCanvas.getContext('2d');
+
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, size, size);
+
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, size, size);
+
+  const step = size / threads;
+
+  if (isTerracotta) {
+    for (let i = 0; i < threads; i++) {
+      const pos = i * step;
+      ctx.fillStyle = (i % 2 === 0) ? 'rgba(235, 120, 105, 0.28)' : 'rgba(80, 20, 16, 0.25)';
+      ctx.fillRect(pos, 0, step * 0.8, size);
+
+      ctx.fillStyle = (i % 2 === 1) ? 'rgba(235, 120, 105, 0.28)' : 'rgba(80, 20, 16, 0.25)';
+      ctx.fillRect(0, pos, size, step * 0.8);
+
+      bCtx.fillStyle = (i % 2 === 0) ? '#a0a0a0' : '#606060';
+      bCtx.fillRect(pos, 0, step * 0.8, size);
+      bCtx.fillStyle = (i % 2 === 1) ? '#a0a0a0' : '#606060';
+      bCtx.fillRect(0, pos, size, step * 0.8);
+    }
+  } else {
+    for (let y = 0; y < size; y += step) {
+      for (let x = 0; x < size; x += step) {
+        const cx = Math.floor(x / step);
+        const cy = Math.floor(y / step);
+        const warpOnTop = (cx + cy) % 2 === 0;
+        const lum = ((cx * 17 + cy * 11) % 19) - 9;
+        const baseR = 238 + lum, baseG = 230 + lum, baseB = 218 + lum;
+
+        if (warpOnTop) {
+          const grad = ctx.createLinearGradient(x, 0, x + step, 0);
+          grad.addColorStop(0, `rgb(${baseR - 32}, ${baseG - 32}, ${baseB - 32})`);
+          grad.addColorStop(0.2, `rgb(${baseR + 6}, ${baseG + 6}, ${baseB + 6})`);
+          grad.addColorStop(0.5, `rgb(${baseR + 18}, ${baseG + 18}, ${baseB + 18})`);
+          grad.addColorStop(0.8, `rgb(${baseR + 6}, ${baseG + 6}, ${baseB + 6})`);
+          grad.addColorStop(1, `rgb(${baseR - 32}, ${baseG - 32}, ${baseB - 32})`);
+          ctx.fillStyle = grad;
+          ctx.fillRect(x + 1, y, step - 2, step);
+
+          const bGrad = bCtx.createLinearGradient(x, 0, x + step, 0);
+          bGrad.addColorStop(0, '#484848');
+          bGrad.addColorStop(0.5, '#ffffff');
+          bGrad.addColorStop(1, '#484848');
+          bCtx.fillStyle = bGrad;
+          bCtx.fillRect(x + 1, y, step - 2, step);
+        } else {
+          const grad = ctx.createLinearGradient(0, y, 0, y + step);
+          grad.addColorStop(0, `rgb(${baseR - 32}, ${baseG - 32}, ${baseB - 32})`);
+          grad.addColorStop(0.2, `rgb(${baseR + 6}, ${baseG + 6}, ${baseB + 6})`);
+          grad.addColorStop(0.5, `rgb(${baseR + 18}, ${baseG + 18}, ${baseB + 18})`);
+          grad.addColorStop(0.8, `rgb(${baseR + 6}, ${baseG + 6}, ${baseB + 6})`);
+          grad.addColorStop(1, `rgb(${baseR - 32}, ${baseG - 32}, ${baseB - 32})`);
+          ctx.fillStyle = grad;
+          ctx.fillRect(x, y + 1, step, step - 2);
+
+          const bGrad = bCtx.createLinearGradient(0, y, 0, y + step);
+          bGrad.addColorStop(0, '#484848');
+          bGrad.addColorStop(0.5, '#ffffff');
+          bGrad.addColorStop(1, '#484848');
+          bCtx.fillStyle = bGrad;
+          bCtx.fillRect(x, y + 1, step, step - 2);
+        }
+      }
+    }
+  }
+
+  // Micro-grain fiber fuzz
+  const imgData = ctx.getImageData(0, 0, size, size);
+  const data = imgData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 14;
+    data[i] = Math.min(255, Math.max(0, data[i] + n));
+    data[i+1] = Math.min(255, Math.max(0, data[i+1] + n));
+    data[i+2] = Math.min(255, Math.max(0, data[i+2] + n));
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const bData = bCtx.getImageData(0, 0, size, size);
+  const bd = bData.data;
+  for (let i = 0; i < bd.length; i += 4) {
+    const n = (Math.random() - 0.5) * 22;
+    const v = Math.min(255, Math.max(0, bd[i] + n));
+    bd[i] = bd[i+1] = bd[i+2] = v;
+  }
+  bCtx.putImageData(bData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeat, repeat);
+
+  const bump = new THREE.CanvasTexture(bCanvas);
+  bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
+  bump.repeat.set(repeat, repeat);
+
+  return { map: tex, bumpMap: bump };
+}
+
+/* ================= 12. Lightweight 3D Orbit Controls ================= */
+function createOrbitControls(camera, target = new V(0, 0, -1.2), {
+  dist = 3.2,
+  pitch = 0.28,
+  yaw = 0.0,
+  minDist = 1.0,
+  maxDist = 8.0,
+  minPitch = -1.2,
+  maxPitch = 1.4,
+  onPointerDrag = null
+} = {}) {
+  let orbitDist = dist;
+  let orbitPitch = pitch;
+  let orbitYaw = yaw;
+  let dragging = false;
+  let lx = 0, ly = 0;
+
+  function update() {
+    const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
+    const cy = Math.cos(orbitYaw), sy = Math.sin(orbitYaw);
+    camera.position.set(
+      target.x + orbitDist * sy * cp,
+      target.y + orbitDist * sp,
+      target.z + orbitDist * cy * cp
+    );
+    camera.lookAt(target);
+  }
+
+  window.addEventListener('pointerdown', e => {
+    if (e.target && e.target.closest && (e.target.closest('#hud') || e.target.closest('#intro'))) return;
+    if (onPointerDrag && onPointerDrag(e, 'down')) return;
+    dragging = true;
+    lx = e.clientX;
+    ly = e.clientY;
+  });
+
+  window.addEventListener('pointerup', e => {
+    if (onPointerDrag) onPointerDrag(e, 'up');
+    dragging = false;
+  });
+
+  window.addEventListener('pointermove', e => {
+    if (onPointerDrag && onPointerDrag(e, 'move')) return;
+    if (!dragging) return;
+    const dx = e.clientX - lx;
+    const dy = e.clientY - ly;
+    lx = e.clientX;
+    ly = e.clientY;
+    orbitYaw -= dx * 0.007;
+    orbitPitch = THREE.MathUtils.clamp(orbitPitch + dy * 0.007, minPitch, maxPitch);
+    update();
+  });
+
+  window.addEventListener('wheel', e => {
+    orbitDist = THREE.MathUtils.clamp(orbitDist + e.deltaY * 0.002, minDist, maxDist);
+    update();
+  }, { passive: true });
+
+  update();
+
+  return {
+    update,
+    getParams: () => ({ dist: orbitDist, pitch: orbitPitch, yaw: orbitYaw }),
+    setParams: (d, p, y) => {
+      if (d != null) orbitDist = d;
+      if (p != null) orbitPitch = p;
+      if (y != null) orbitYaw = y;
+      update();
+    }
+  };
+}
+
 // Export to global scope
 global.RoomEnv = {
   ROOM_MATERIALS,
@@ -813,7 +679,11 @@ global.RoomEnv = {
   createFpsMeter,
   setupMotionSensors,
   createViewCube,
-  roundedCube
+  roundedCube,
+  createCubeSpawner,
+  createParticleDragger,
+  createFabricTextures,
+  createOrbitControls
 };
 
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
