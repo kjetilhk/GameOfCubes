@@ -20,6 +20,15 @@ const _v1 = new V();
 const _v2 = new V();
 const _v3 = new V();
 const _v4 = new V();
+const _mountWorldPos = new V();
+const _pointVel = new V();
+const _relMount = new V();
+const _suspForceVec = new V();
+const _suspTorque = new V();
+const _wheelHeading = new V();
+const _wheelSideDir = new V();
+const _driveForceVec = new V();
+const _sideForceVec = new V();
 const _q1 = new Q();
 const _up = new V(0, 1, 0);
 const _forward = new V(0, 0, -1);
@@ -564,8 +573,8 @@ class RCCar {
       const mount = wheel.mount;
 
       // 1. World position of wheel top mount
-      body.toWorld(mount.localPos, _v1);
-      const mountWorldPos = _v1;
+      body.toWorld(mount.localPos, _mountWorldPos);
+      const mountWorldPos = _mountWorldPos;
 
       // 2. Query contact surface (Floor and dynamic rigid bodies)
       let hitY = floorY;
@@ -599,30 +608,30 @@ class RCCar {
         const springForce = springCompression * this.suspensionStiffness;
 
         // Suspension Damper Force (F_d = -c * v_rel)
-        const pointVel = _v3.crossVectors(body.w, _v4.subVectors(mountWorldPos, body.x)).add(body.v);
-        const compressVel = -pointVel.dot(upDir);
+        _relMount.subVectors(mountWorldPos, body.x);
+        _pointVel.crossVectors(body.w, _relMount).add(body.v);
+        const compressVel = -_pointVel.dot(upDir);
         const dampingForce = compressVel * this.suspensionDamping;
 
         const totalSuspensionForce = Math.max(0, springForce + dampingForce);
 
         // Apply suspension force to chassis vertically opposing gravity
-        const suspForceVec = _v3.set(0, 1, 0).multiplyScalar(totalSuspensionForce * dt * body.invM);
-        body.v.add(suspForceVec);
+        _suspForceVec.set(0, 1, 0).multiplyScalar(totalSuspensionForce * dt * body.invM);
+        body.v.add(_suspForceVec);
 
         // Suspension torque on chassis (produces authentic squat, dive, and body roll!)
-        _v4.subVectors(mountWorldPos, body.x);
-        const suspTorque = _v2.crossVectors(_v4, _v3.set(0, 1, 0).multiplyScalar(totalSuspensionForce * dt));
-        body.w.addScaledVector(suspTorque, body.invI);
+        _suspTorque.crossVectors(_relMount, _up).multiplyScalar(totalSuspensionForce * dt);
+        body.w.addScaledVector(_suspTorque, body.invI);
 
         // 3. Tire Traction: Longitudinal & Lateral
-        const wheelHeading = _v3.copy(forwardDir);
+        _wheelHeading.copy(forwardDir);
         if (mount.isFront) {
-          wheelHeading.applyAxisAngle(upDir, -this.currentSteerAngle);
+          _wheelHeading.applyAxisAngle(upDir, -this.currentSteerAngle);
         }
-        const wheelSideDir = _v2.crossVectors(upDir, wheelHeading).normalize();
+        _wheelSideDir.crossVectors(upDir, _wheelHeading).normalize();
 
-        const wheelLongSpeed = pointVel.dot(wheelHeading);
-        const wheelLatSpeed = pointVel.dot(wheelSideDir);
+        const wheelLongSpeed = _pointVel.dot(_wheelHeading);
+        const wheelLatSpeed = _pointVel.dot(_wheelSideDir);
 
         // Longitudinal Motor / Brake Force
         let driveThrust = 0;
@@ -632,16 +641,16 @@ class RCCar {
           // 4WD torque distribution
           driveThrust = this.throttle * this.engineForce * 0.25;
         } else {
-          driveThrust = -wheelLongSpeed * 50.0; // firm idle rolling resistance
+          driveThrust = -wheelLongSpeed * 25.0; // firm resting rolling resistance
         }
 
-        const driveForceVec = _v4.copy(wheelHeading).multiplyScalar(driveThrust * dt * body.invM);
-        body.v.add(driveForceVec);
+        _driveForceVec.copy(_wheelHeading).multiplyScalar(driveThrust * dt * body.invM);
+        body.v.add(_driveForceVec);
 
         // Lateral Tire Grip (cornering traction)
         const sideGripForce = -wheelLatSpeed * (this.tireFrictionSide * 40.0);
-        const sideForceVec = _v4.copy(wheelSideDir).multiplyScalar(sideGripForce * dt * body.invM);
-        body.v.add(sideForceVec);
+        _sideForceVec.copy(_wheelSideDir).multiplyScalar(sideGripForce * dt * body.invM);
+        body.v.add(_sideForceVec);
 
         // Update wheel spin rotation angle (negative around X rolls forward)
         const angularDelta = (wheelLongSpeed / this.wheelRadius) * dt;
@@ -658,9 +667,9 @@ class RCCar {
 
     // Zero-velocity resting lock when no throttle is applied and buggy is settled
     if (Math.abs(this.throttle) < 0.01 && !this.isBraking && groundedWheelCount >= 2) {
-      body.v.x *= 0.82;
-      body.v.z *= 0.82;
-      if (Math.hypot(body.v.x, body.v.z) < 0.06) {
+      body.v.x *= 0.80;
+      body.v.z *= 0.80;
+      if (Math.hypot(body.v.x, body.v.z) < 0.04) {
         body.v.x = 0;
         body.v.z = 0;
         body.w.set(0, 0, 0);
