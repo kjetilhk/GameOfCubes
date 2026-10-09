@@ -31,6 +31,8 @@ const _driveForce = new V();
 const _sideForce = new V();
 const _tireForceTotal = new V();
 const _tireTorque = new V();
+const _tireYawTorque = new V();
+const _downforceVec = new V();
 const _q1 = new Q();
 const _up = new V(0, 1, 0);
 const _forward = new V(0, 0, -1);
@@ -103,17 +105,17 @@ class RCCar {
     // Dimensions & Geometry Configuration
     this.scale = options.scale || 1.0;
     this.wheelbase = (options.wheelbase || 0.70) * this.scale;   // Front to rear distance
-    this.trackWidth = (options.trackWidth || 0.82) * this.scale; // Wide stance for double-wide tires
+    this.trackWidth = (options.trackWidth || 0.86) * this.scale; // Wide planted stance for rollover stability
     this.wheelRadius = (options.wheelRadius || 0.16) * this.scale;
     this.wheelWidth = (options.wheelWidth || 0.22) * this.scale;  // DOUBLE AS WIDE
     this.chassisSize = (options.chassisSize || 0.40) * this.scale;
     this.chassisMass = options.chassisMass || 4.2; // kg
 
-    // Suspension Parameters (Long-travel, soft & bouncy)
+    // Suspension Parameters (Long-travel, planted & bouncy)
     this.suspensionRestLength = (options.suspensionRestLength || 0.32) * this.scale; // Longer travel rest
     this.suspensionTravel = (options.suspensionTravel || 0.22) * this.scale;         // Big bouncy travel
-    this.suspensionStiffness = options.suspensionStiffness || 130.0;                 // Soft & bouncy spring (N/m)
-    this.suspensionDamping = options.suspensionDamping || 7.0;                       // Low damping for visible bounce
+    this.suspensionStiffness = options.suspensionStiffness || 140.0;                 // Planted spring (N/m)
+    this.suspensionDamping = options.suspensionDamping || 8.0;                       // Tuned damping for roll stability
     this.suspensionPreset = 'medium';
 
     // Drivetrain & Handling (High-speed brushless RC buggy dynamics)
@@ -583,9 +585,9 @@ class RCCar {
     const rightDir = _rightDir.set(1, 0, 0).applyQuaternion(body.q);
     const upDir = _upDir.set(0, 1, 0).applyQuaternion(body.q);
 
-    // Speed-sensitive steering (eliminates high-speed twitchiness while keeping full lock at low speed)
+    // Speed-sensitive steering (tapers smoothly at 26 m/s to prevent high-speed twitchy spinouts)
     const fwdSpeed = Math.abs(body.v.dot(forwardDir));
-    const speedDamping = Math.max(0.42, 1.0 - (fwdSpeed / this.maxSpeed) * 0.52);
+    const speedDamping = Math.max(0.35, 1.0 - (fwdSpeed / this.maxSpeed) * 0.55);
     const targetSteerAngle = -this.steering * (this.maxSteerAngle * speedDamping);
     this.currentSteerAngle = THREE.MathUtils.lerp(
       this.currentSteerAngle,
@@ -593,7 +595,20 @@ class RCCar {
       Math.min(1.0, this.steerSpeed * dt)
     );
 
+    // Aerodynamic Downforce: front & rear wings generate progressive downforce at speed
+    // Keeps buggy firmly sucked down to the track during high-speed 26 m/s sweeping turns
+    const downforceMag = Math.min(32.0, (fwdSpeed * fwdSpeed) * 0.045);
+    _downforceVec.copy(upDir).multiplyScalar(-downforceMag * dt * body.invM);
+    body.v.add(_downforceVec);
+
     let groundedWheelCount = 0;
+
+    // Compute anti-roll bar (ARB) balance between left and right wheels
+    // Front: wheel[0] = FL, wheel[1] = FR
+    // Rear:  wheel[2] = RL, wheel[3] = RR
+    const frontArbDelta = (this.wheels[0].compression - this.wheels[1].compression);
+    const rearArbDelta = (this.wheels[2].compression - this.wheels[3].compression);
+    const arbStiffness = 45.0; // N per unit compression differential
 
     for (let i = 0; i < 4; i++) {
       const wheel = this.wheels[i];
@@ -650,7 +665,12 @@ class RCCar {
 
         // Bouncy Suspension Spring Force (Hooke's Law: F_s = k * delta_x)
         const springCompression = restLen - wheel.suspensionLength;
-        const springForce = springCompression * this.suspensionStiffness;
+        let springForce = springCompression * this.suspensionStiffness;
+
+        // Anti-roll bar force transfer (stiffens outer compressed suspension & pushes inner down)
+        const isLeft = mount.isLeft;
+        const arbDelta = mount.isFront ? frontArbDelta : rearArbDelta;
+        springForce += (isLeft ? arbDelta : -arbDelta) * arbStiffness;
 
         // Suspension Damper Force (F_d = -c * v_rel)
         _relMount.subVectors(mountWorldPos, body.x);
@@ -714,8 +734,12 @@ class RCCar {
 
         _driveForce.copy(_wheelHeading).multiplyScalar(driveThrust);
 
-        // Lateral Tire Grip (cornering traction)
-        const sideGripForce = -wheelLatSpeed * (this.tireFrictionSide * 25.0);
+        // Lateral Tire Grip with Coulomb Friction breakaway limit:
+        // When lateral force exceeds mu * NormalForce, tires slip smoothly into a controlled dirt drift!
+        // Prevents infinite lateral grip from tripping the car into violent rollovers.
+        const normalLoad = Math.max(12.0, totalSuspensionForce);
+        const maxLateralGrip = normalLoad * this.tireFrictionSide;
+        const sideGripForce = Math.max(-maxLateralGrip, Math.min(maxLateralGrip, -wheelLatSpeed * (this.tireFrictionSide * 16.0)));
         _sideForce.copy(_wheelSideDir).multiplyScalar(sideGripForce);
 
         // Total horizontal tire contact force
@@ -724,9 +748,12 @@ class RCCar {
         // Linear tire acceleration
         body.v.addScaledVector(_tireForceTotal, dt * body.invM);
 
-        // Tire yaw / steering torque on chassis (enables authentic turning and carving!)
+        // Tire yaw / steering torque on chassis:
+        // Project onto chassis upDir to provide 100% carving turn authority WITHOUT tripping roll moments!
         _tireTorque.crossVectors(_relMount, _tireForceTotal);
-        body.w.addScaledVector(_tireTorque, dt * body.invI);
+        const yawTorqueMag = _tireTorque.dot(upDir);
+        _tireYawTorque.copy(upDir).multiplyScalar(yawTorqueMag);
+        body.w.addScaledVector(_tireYawTorque, dt * body.invI);
 
         // Update wheel spin rotation angle
         const angularDelta = (wheelLongSpeed / this.wheelRadius) * dt;
@@ -743,6 +770,16 @@ class RCCar {
           : (body.v.length() / this.wheelRadius);
         this.wheelSpinAngles[i] += airSpinSpeed * dt;
       }
+    }
+
+    // Active Low-CoM Righting Torque & Roll Damping:
+    // Models battery and brushless motor mounted on lowest chassis skid plate (ultra-low Center of Mass).
+    // If the buggy rolls in hard 26 m/s turns, righting torque firmly counters roll and damps roll oscillations!
+    if (groundedWheelCount >= 1) {
+      const rollTilt = rightDir.y; // sin(roll angle)
+      const rollRate = body.w.dot(forwardDir);
+      const rightingTorque = -rollTilt * 38.0 - rollRate * 12.0;
+      body.w.addScaledVector(forwardDir, rightingTorque * dt * body.invI);
     }
 
     // Gentle resting stabilization only when buggy has naturally rolled to a near-stop (< 0.12 m/s)

@@ -128,9 +128,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=13"></script>
-<script src="../../src/room.js?v=13"></script>
-<script src="../../src/car.js?v=13"></script>
+<script src="../../src/xpbd.js?v=14"></script>
+<script src="../../src/room.js?v=14"></script>
+<script src="../../src/car.js?v=14"></script>
 <script>
 (() => {
 'use strict';
@@ -828,9 +828,13 @@ const buggy = new RCCar(world, scene, {
   z: -6.5,
   scale: 1.0,
   chassisMass: 4.2,
+  trackWidth: 0.86,    // Wide planted stance for rollover stability
   bodyColor: 0x00e5ff, // Electric Cyan
   rimColor: 0xffb300,  // Racing Anodized Gold
   suspensionPreset: 'medium',
+  suspensionStiffness: 140.0,
+  suspensionDamping: 8.0,
+  tireFrictionSide: 1.6, // High cornering grip with physical drift breakaway
   maxSpeed: 26.0,      // Doubled top speed: 26 m/s (~94 km/h)
   engineForce: 130.0,  // Powerful 4WD thrust for rapid acceleration
   brakeForce: 95.0,    // High-performance braking force

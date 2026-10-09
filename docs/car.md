@@ -100,12 +100,20 @@ Additionally, the virtual joystick applies a progressive exponential power curve
 $$\text{steer} = \operatorname{sign}(x) \cdot |x|^{1.6}$$
 providing micro-trim precision around center stick with progressive lock at outer deflections.
 
-### 3.3 Lateral Cornering Traction
-To ensure responsive handling without unrealistic frictionless slipping, tire lateral grip opposes sideways drift velocity $v_{\text{lat}}$:
-$$F_{\text{lat}} = -v_{\text{lat}} \cdot C_{\alpha}$$
-where $C_{\alpha} = \mu_{\text{side}} \times 42\,\text{N}\cdot\text{s/m}$ is the cornering stiffness.
+### 3.3 Lateral Cornering Traction & Drift Breakaway
+Tire lateral grip opposes sideways velocity $v_{\text{lat}}$, but is physically clamped by Coulomb normal load friction:
+$$F_{\text{lat}} = \operatorname{clamp}\left(-v_{\text{lat}} \cdot C_{\alpha},\, -\mu_{\text{side}} \cdot F_{\text{normal}},\, \mu_{\text{side}} \cdot F_{\text{normal}}\right)$$
+where $F_{\text{normal}} = \max(12\,\text{N}, F_{\text{susp}})$. When lateral forces exceed this threshold during aggressive high-speed cornering ($26\,\text{m/s}$), the tires cleanly break away into a smooth, authentic powerslide/drift instead of tripping the buggy into a rollover.
 
-### 3.4 Gyroscopic Air-Control Stabilizer
+### 3.4 Rollover Prevention & Anti-Roll Sway Bars
+High-speed stability is reinforced through multi-stage vehicle dynamics:
+1. **Yaw-Decoupled Steering Torque**: Tire traction torque is strictly projected onto the chassis vertical axis $\hat{\mathbf{u}}_{\text{chassis}}$, eliminating artificial roll moments caused by ground contact height offsets.
+2. **Front & Rear Anti-Roll Bars (ARB)**: Transfers stiffness between left and right suspension arms ($k_{\text{arb}} = 45\,\text{N}$ per unit compression delta), keeping the chassis level during cornering.
+3. **Aerodynamic Downforce**: Progressive downforce from front and rear wings scales with $v_{\text{fwd}}^2$ ($F_{\text{down}} \le 32\,\text{N}$), sucking the buggy into the track at top speed.
+4. **Active Low-CoM Righting Moment**: Replicating a bottom-mounted LiPo battery and brushless motor, roll tilt is strongly resisted and damped:
+   $$\boldsymbol{\tau}_{\text{roll}} = \hat{\mathbf{f}}_{\text{forward}} \cdot \left(-38 \cdot \sin(\phi_{\text{roll}}) - 12 \cdot \omega_{\text{roll}}\right)$$
+
+### 3.5 Gyroscopic Air-Control Stabilizer
 When airborne (all 4 wheels disconnected from ground), a subtle attitude stabilizer applies corrective torque toward the world up-vector:
 $$\boldsymbol{\tau}_{\text{air}} = 4.5 \cdot (\hat{\mathbf{u}}_{\text{chassis}} \times \hat{\mathbf{u}}_{\text{world}})$$
 This replicates the gyroscopic pitch and roll control experienced in competition RC cars when tapping the throttle or brake mid-air, guaranteeing clean landings on all four wheels.
