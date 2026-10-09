@@ -82,7 +82,8 @@ The repository hosts standalone interactive test scenes located in `tests/`, acc
 - **Interactions**:
   - Bottom-Center Virtual Joystick: compact low-profile analog joystick with progressive exponential response ($\text{steer} = \operatorname{sign}(x) \cdot |x|^{1.6}$) for precision micro-trim around center and full lock at edges.
   - Lowered-Horizon Action Chase Camera: low-angle follow cam keeping the buggy centered on screen while dropping the horizon line lower in the frame for a dramatic racing viewpoint.
-  - Dynamic Speed-Sensitive Steering: automatic damping at high speeds ($\approx 47\,\text{km/h}$) prevents twitchy spinouts while preserving full lock at low speeds.
+  - Free-Wheeling Coasting: releasing the joystick allows the buggy to continue rolling forward under momentum with realistic rolling resistance, slowly coasting down rather than locking abruptly.
+  - Dynamic Speed-Sensitive Steering: automatic damping at high speeds ($\approx 94\,\text{km/h}$, $26.0\,\text{m/s}$) prevents twitchy spinouts while preserving full lock at low speeds.
   - Momentum Transfer Crash Physics: the $4.2\,\text{kg}$ car has $93\times$ more inertia than the $45\,\text{g}$ plastic shell cubes, plowing through barriers with $<2\%$ speed drop while cubes explode into the air.
   - Suspension Debris Filter: wheels ignore lightweight debris ($w > 2.0$), preventing artificial vertical shock jolts when rolling over scattered plastic boxes.
   - Keyboard Controls: WASD or Arrow Keys for throttle and steering, Space for brake, `R` to reset, `F` to flip upright.

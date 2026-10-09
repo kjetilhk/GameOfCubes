@@ -83,18 +83,19 @@ To maintain high performance without dynamic vertex allocation:
 
 ## 3. Drivetrain & Tire Traction Model
 
-### 3.1 4WD Motor Drive & Braking
-The motor provides full-time four-wheel drive:
+### 3.1 4WD Motor Drive, Braking & Free-Wheeling Coast
+The motor provides full-time four-wheel drive up to $26.0\,\text{m/s}$ ($\approx 94\,\text{km/h}$):
 $$F_{\text{drive}} = \begin{cases} 
-0.25 \cdot \text{throttle} \cdot F_{\text{motor}} & \text{if driving} \\ 
--\operatorname{sign}(v_{\text{long}}) \cdot \min(|v_{\text{long}}| \cdot 30, F_{\text{brake}}) & \text{if braking} \\ 
--8.0 \cdot v_{\text{long}} & \text{rolling resistance drag}
+0.25 \cdot \text{throttle} \cdot F_{\text{motor}} \cdot \max(0, 1 - v_{\text{long}} / v_{\max}) & \text{if driving forward} \\ 
+-\operatorname{sign}(v_{\text{long}}) \cdot \min(|v_{\text{long}}| \cdot 25, 0.25 \cdot F_{\text{brake}}) & \text{if active braking} \\ 
+-\operatorname{sign}(v_{\text{long}}) \cdot \min(|v_{\text{long}}| \cdot 1.2, 0.95) - 0.05 \cdot v_{\text{long}} & \text{free-wheeling coast (throttle released)}
 \end{cases}$$
+When the joystick is released, the car continues rolling freely under its own momentum with realistic, gentle mechanical rolling resistance, smoothly and gradually slowing down over long distances rather than locking abruptly. Active motor braking is engaged when pulling the stick backward while in forward motion.
 
 ### 3.2 Dynamic Speed-Sensitive Steering
 To prevent high-speed twitchiness and spinouts while retaining tight maneuverability at low speeds, steering is dynamically damped based on forward velocity:
-$$\theta_{\text{target}} = -\text{steer} \cdot \theta_{\max} \cdot \max\left(0.42,\, 1.0 - \frac{|v_{\text{fwd}}|}{v_{\max}} \times 0.52\right)$$
-where $\theta_{\max} = 0.40\,\text{rad}$ ($\approx 23^\circ$) and $v_{\max} = 13.0\,\text{m/s}$. A rate-limiting lerp smooths instantaneous steer commands over time ($\text{steerSpeed} = 4.5\,\text{rad/s}$).
+$$\theta_{\text{target}} = -\text{steer} \cdot \theta_{\max} \cdot \max\left(0.35,\, 1.0 - \frac{|v_{\text{fwd}}|}{v_{\max}} \times 0.55\right)$$
+where $\theta_{\max} = 0.40\,\text{rad}$ ($\approx 23^\circ$) and $v_{\max} = 26.0\,\text{m/s}$. A rate-limiting lerp smooths instantaneous steer commands over time ($\text{steerSpeed} = 4.5\,\text{rad/s}$).
 Additionally, the virtual joystick applies a progressive exponential power curve:
 $$\text{steer} = \operatorname{sign}(x) \cdot |x|^{1.6}$$
 providing micro-trim precision around center stick with progressive lock at outer deflections.
@@ -149,9 +150,9 @@ const car = new RCCar(world, scene, {
   bodyColor: 0x00e5ff,      // Shell color (hex)
   rimColor: 0xffb300,       // Wheel rim & spring color (hex)
   suspensionPreset: 'medium',// 'soft' | 'medium' | 'stiff'
-  maxSpeed: 13.0,           // Max top speed in m/s (~47 km/h)
-  engineForce: 58.0,        // 4WD drive motor force in N
-  brakeForce: 70.0,         // Braking deceleration force in N
+  maxSpeed: 26.0,           // Max top speed in m/s (~94 km/h)
+  engineForce: 130.0,       // 4WD drive motor force in N
+  brakeForce: 95.0,         // Braking deceleration force in N
   maxSteerAngle: 0.40,      // Max steer angle in radians (~23 deg)
   steerSpeed: 4.5           // Steering rotation speed in rad/s
 });

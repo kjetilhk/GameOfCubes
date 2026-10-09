@@ -128,9 +128,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=12"></script>
-<script src="../../src/room.js?v=12"></script>
-<script src="../../src/car.js?v=12"></script>
+<script src="../../src/xpbd.js?v=13"></script>
+<script src="../../src/room.js?v=13"></script>
+<script src="../../src/car.js?v=13"></script>
 <script>
 (() => {
 'use strict';
@@ -148,8 +148,8 @@ const world = new XPBD.World({
   muDynamic: 0.20,   // Low dynamic friction - cubes tumble and skid smoothly
   restitution: 0.45, // Bouncy contact restitution
   density: 35,       // Lightweight: mass ~0.5 - 1.0 kg (vs 4.2 kg car)
-  linearDamping: 0.15,
-  angularDamping: 0.40
+  linearDamping: 0.05, // Low air resistance so buggy rolls freely
+  angularDamping: 0.25
 });
 
 /* ================= Open World Boundary Setup ================= */
@@ -831,9 +831,9 @@ const buggy = new RCCar(world, scene, {
   bodyColor: 0x00e5ff, // Electric Cyan
   rimColor: 0xffb300,  // Racing Anodized Gold
   suspensionPreset: 'medium',
-  maxSpeed: 13.0,
-  engineForce: 58.0,
-  brakeForce: 70.0,
+  maxSpeed: 26.0,      // Doubled top speed: 26 m/s (~94 km/h)
+  engineForce: 130.0,  // Powerful 4WD thrust for rapid acceleration
+  brakeForce: 95.0,    // High-performance braking force
   maxSteerAngle: 0.40,
   steerSpeed: 4.5
 });
@@ -866,8 +866,8 @@ function updateChaseCamera(dt, targetPos = null, targetQuat = null, instant = fa
     camera.position.copy(desiredPos);
     currentLookAt.copy(chaseCamTarget);
   } else {
-    // Tight responsive follow keeps car rock-solid in screen center
-    const smooth = Math.min(1.0, 18.0 * dt);
+    // Tight responsive follow keeps car rock-solid in screen center even at 26 m/s
+    const smooth = Math.min(1.0, 22.0 * dt);
     camera.position.lerp(desiredPos, smooth);
     currentLookAt.lerp(chaseCamTarget, smooth);
   }

@@ -116,10 +116,10 @@ class RCCar {
     this.suspensionDamping = options.suspensionDamping || 7.0;                       // Low damping for visible bounce
     this.suspensionPreset = 'medium';
 
-    // Drivetrain & Handling (Scaled RC buggy speed & responsiveness)
-    this.engineForce = options.engineForce || 58.0;      // 4WD motor thrust (accelerates to top speed ~13 m/s)
-    this.maxSpeed = options.maxSpeed || 13.0;           // Doubled top speed cap ~47 km/h (~13 m/s)
-    this.brakeForce = options.brakeForce || 70.0;       // Progressive braking force
+    // Drivetrain & Handling (High-speed brushless RC buggy dynamics)
+    this.engineForce = options.engineForce || 130.0;     // 4WD motor thrust (rapid acceleration to 26 m/s)
+    this.maxSpeed = options.maxSpeed || 26.0;           // Doubled top speed cap ~94 km/h (~26 m/s)
+    this.brakeForce = options.brakeForce || 95.0;       // Progressive braking force
     this.maxSteerAngle = options.maxSteerAngle || 0.40; // ~23 degrees (reduced from 0.54 to eliminate twitchiness)
     this.steerSpeed = options.steerSpeed || 4.5;        // Smooth steering rate
     this.tireFrictionForward = options.tireFrictionForward || 1.5;
@@ -678,16 +678,38 @@ class RCCar {
         const wheelLongSpeed = _pointVel.dot(_wheelHeading);
         const wheelLatSpeed = _pointVel.dot(_wheelSideDir);
 
-        // Longitudinal Motor / Brake Force (scaled for realistic RC speed)
+        // Longitudinal Motor / Brake / Coast Force
         let driveThrust = 0;
         if (this.isBraking) {
-          driveThrust = -Math.sign(wheelLongSpeed) * Math.min(Math.abs(wheelLongSpeed) * 20.0, this.brakeForce);
+          driveThrust = -Math.sign(wheelLongSpeed) * Math.min(Math.abs(wheelLongSpeed) * 25.0, this.brakeForce * 0.25);
         } else if (Math.abs(this.throttle) > 0.01) {
-          const currentSpeed = Math.abs(wheelLongSpeed);
-          const speedGovernor = Math.max(0, 1.0 - currentSpeed / this.maxSpeed);
-          driveThrust = this.throttle * (this.engineForce * 0.25) * speedGovernor;
+          if (this.throttle > 0) {
+            // Forward throttle
+            if (wheelLongSpeed >= 0) {
+              const speedGovernor = Math.max(0, 1.0 - wheelLongSpeed / this.maxSpeed);
+              driveThrust = this.throttle * (this.engineForce * 0.25) * speedGovernor;
+            } else {
+              // Rolling backward, pressing forward: counter-thrust brake to halt
+              driveThrust = Math.min(this.brakeForce * 0.25, -wheelLongSpeed * 25.0);
+            }
+          } else {
+            // Negative throttle (pulling joystick backward)
+            if (wheelLongSpeed > 0.3) {
+              // Moving forward: dynamic motor braking brings car to rapid controlled halt
+              const brakeAmount = Math.abs(this.throttle);
+              driveThrust = -Math.min(wheelLongSpeed * 25.0, (this.brakeForce * 0.25) * brakeAmount);
+            } else {
+              // Already stopped or moving backwards: reverse gear
+              const revSpeed = Math.abs(wheelLongSpeed);
+              const revGovernor = Math.max(0, 1.0 - revSpeed / (this.maxSpeed * 0.45));
+              driveThrust = this.throttle * (this.engineForce * 0.22) * revGovernor;
+            }
+          }
         } else {
-          driveThrust = -wheelLongSpeed * 25.0; // firm resting rolling resistance
+          // Joystick released (coasting / free-wheeling):
+          // Car continues to roll freely and slowly speeds down over time with realistic rolling resistance
+          const rollDrag = Math.min(Math.abs(wheelLongSpeed) * 1.2, 0.95);
+          driveThrust = -Math.sign(wheelLongSpeed) * rollDrag - wheelLongSpeed * 0.05;
         }
 
         _driveForce.copy(_wheelHeading).multiplyScalar(driveThrust);
@@ -715,18 +737,25 @@ class RCCar {
         wheel.isGrounded = false;
         wheel.suspensionLength = restLen;
         wheel.compression = 0.0;
-        this.wheelSpinAngles[i] += (this.throttle * 20.0) * dt;
+        // Wheels continue spinning in mid-air from vehicle momentum or active throttle
+        const airSpinSpeed = Math.abs(this.throttle) > 0.01
+          ? (this.throttle * 45.0)
+          : (body.v.length() / this.wheelRadius);
+        this.wheelSpinAngles[i] += airSpinSpeed * dt;
       }
     }
 
-    // Zero-velocity resting lock when no throttle is applied and buggy is settled
+    // Gentle resting stabilization only when buggy has naturally rolled to a near-stop (< 0.12 m/s)
     if (Math.abs(this.throttle) < 0.01 && !this.isBraking && groundedWheelCount >= 2) {
-      body.v.x *= 0.80;
-      body.v.z *= 0.80;
-      if (Math.hypot(body.v.x, body.v.z) < 0.04) {
-        body.v.x = 0;
-        body.v.z = 0;
-        body.w.set(0, 0, 0);
+      const horizontalSpeed = Math.hypot(body.v.x, body.v.z);
+      if (horizontalSpeed < 0.12) {
+        body.v.x *= 0.94;
+        body.v.z *= 0.94;
+        if (horizontalSpeed < 0.02) {
+          body.v.x = 0;
+          body.v.z = 0;
+          body.w.set(0, 0, 0);
+        }
       }
     }
 
