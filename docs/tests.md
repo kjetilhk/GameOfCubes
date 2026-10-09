@@ -69,6 +69,18 @@ The repository hosts standalone interactive test scenes located in `tests/`, acc
   - "Drop Cube": spawns falling dynamic rigid cubes to cause secondary collateral impacts.
   - "Wireframe": toggles wireframe rendering for all rigid bodies and chain links.
 
+### Test 7: RC Buggy & Suspension Dynamics (`tests/test7/index.html`)
+- **Focus**: High-performance vehicle dynamics, independent long-travel coilover suspension, 4WD motor drive, and tire traction friction.
+- **Scene**: Competition RC buggy featuring oversized knobby wheels, visible 3D helical springs, and roll cage in the 3.0m studio room with optional terrain bumps.
+- **Interactions**:
+  - Driving Controls: WASD or Arrow Keys for 4WD throttle and steering, Space for brake, on-screen touch D-Pad for mobile.
+  - "Suspension: Soft / Medium / Stiff": real-time spring stiffness ($300 - 650\,\text{N/m}$) and damping adjustment.
+  - "Cam: Chase / Orbit": switches between smooth dynamic follow-cam and free 3D orbit camera.
+  - "Add Bumps": spawns terrain curbs and bumps to test wheel articulation and suspension travel.
+  - "Flip Upright": rights the buggy if flipped or inverted.
+  - "Drop Cube": drops rigid blocks onto or in front of the car.
+  - Touch/Mouse Drag: grab the roll cage or wheels with pointer to lift, swing, and drop the car to watch the suspensions absorb the impact.
+
 ---
 
 ## Running Locally

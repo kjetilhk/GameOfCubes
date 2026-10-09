@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Test 7: RC Buggy & Suspension Dynamics — XPBD Dynamics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../src/common.css">
+<style>
+  /* Mobile virtual drive controls overlay */
+  #touch-controls {
+    position: fixed;
+    bottom: 24px;
+    left: 0;
+    right: 0;
+    padding: 0 20px;
+    display: none;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 20;
+  }
+  @media (pointer: coarse), (max-width: 768px) {
+    #touch-controls {
+      display: flex;
+    }
+  }
+  .touch-cluster {
+    display: flex;
+    gap: 12px;
+    pointer-events: auto;
+  }
+  .touch-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(26, 32, 44, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .touch-btn:active, .touch-btn.active {
+    background: rgba(0, 229, 255, 0.6);
+    border-color: #00e5ff;
+    transform: scale(0.92);
+  }
+  .btn-gas {
+    background: rgba(0, 229, 255, 0.25);
+    border-color: rgba(0, 229, 255, 0.5);
+  }
+  .btn-reverse {
+    background: rgba(255, 68, 68, 0.2);
+    border-color: rgba(255, 68, 68, 0.4);
+  }
+</style>
+</head>
+<body>
+<div id="fps">-- FPS</div>
+<div id="note"></div>
+<div id="hud">
+  <a id="back" href="../../">← Tests</a>
+  <button id="reset">Reset</button>
+  <button id="flip">Flip Upright</button>
+  <button id="susp">Suspension: Medium</button>
+  <button id="cam-mode">Cam: Chase</button>
+  <button id="bumps">Add Bumps</button>
+  <button id="cube">Drop Cube</button>
+  <button id="wire">Wireframe</button>
+</div>
+
+<div id="touch-controls">
+  <div class="touch-cluster">
+    <div id="touch-left" class="touch-btn">◀</div>
+    <div id="touch-right" class="touch-btn">▶</div>
+  </div>
+  <div class="touch-cluster">
+    <div id="touch-reverse" class="touch-btn btn-reverse">▼</div>
+    <div id="touch-gas" class="touch-btn btn-gas">▲</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="../../src/xpbd.js"></script>
+<script src="../../src/room.js"></script>
+<script src="../../src/car.js"></script>
+<script>
+(() => {
+'use strict';
+
+const V = THREE.Vector3;
+const world = new XPBD.World({
+  dt: 1/60,
+  substeps: 20,
+  positionIterations: 3,
+  velocityIterations: 2,
+  muStatic: 0.65,
+  muDynamic: 0.50,
+  linearDamping: 0.35,
+  angularDamping: 0.75
+});
+
+/* ================= rendering & studio room ================= */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 50);
+const lights = RoomEnv.createLighting(scene);
+let wallGroup = null;
+
+function resize(){
+  wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
+}
+window.addEventListener('resize', resize);
+
+/* ================= Camera Modes ================= */
+let cameraMode = 'chase'; // 'chase' or 'orbit'
+const orbitTarget = new V(0, -0.9, -1.2);
+let orbitDist = 3.8;
+let orbitPitch = 0.25;
+let orbitYaw = 0.0;
+
+function updateOrbitCameraTransform(){
+  const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
+  const cy = Math.cos(orbitYaw), sy = Math.sin(orbitYaw);
+  camera.position.set(
+    orbitTarget.x + orbitDist * sy * cp,
+    orbitTarget.y + orbitDist * sp,
+    orbitTarget.z + orbitDist * cy * cp
+  );
+  camera.lookAt(orbitTarget);
+}
+resize();
+updateOrbitCameraTransform();
+
+/* ================= Instantiate Reusable Buggy ================= */
+const buggy = new RCCar(world, scene, {
+  x: 0,
+  y: null,
+  z: -1.2,
+  scale: 1.0,
+  chassisMass: 4.2,
+  bodyColor: 0x00e5ff, // Electric Cyan
+  rimColor: 0xffb300,  // Racing Anodized Gold
+  suspensionPreset: 'medium'
+});
+
+/* ================= Dynamic Cube Spawner ================= */
+const cubeSpawner = RoomEnv.createCubeSpawner(world, scene, {
+  color: 0xcca068,
+  size: 0.36,
+  metalness: 0.05,
+  roughness: 0.45
+});
+
+/* ================= Bump & Ramp Obstacles ================= */
+const obstacleMeshes = [];
+const bumpMat = new THREE.MeshPhysicalMaterial({
+  color: 0x4a5568,
+  roughness: 0.50,
+  metalness: 0.40,
+  clearcoat: 0.20
+});
+
+function createBumps(){
+  clearBumps();
+  const floorY = -world.box.hy;
+  const bumpSizes = [
+    { s: 0.20, x: -0.65, z: -1.2 },
+    { s: 0.24, x:  0.55, z: -1.1 },
+    { s: 0.18, x:  0.00, z: -1.6 },
+    { s: 0.22, x: -0.45, z: -0.8 },
+    { s: 0.20, x:  0.70, z: -1.5 }
+  ];
+
+  for (const b of bumpSizes){
+    const body = new XPBD.Body(b.s, 1200);
+    body.x.set(b.x, floorY + b.s * 0.5, b.z);
+    body.px.copy(body.x);
+    body.sync();
+    world.bodies.push(body);
+
+    const geom = RoomEnv.roundedCube(b.s, b.s * 0.15, 3);
+    const mesh = new THREE.Mesh(geom, bumpMat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.body = body;
+    scene.add(mesh);
+    obstacleMeshes.push({ body, mesh });
+  }
+}
+
+function clearBumps(){
+  for (const item of obstacleMeshes){
+    const idx = world.bodies.indexOf(item.body);
+    if (idx !== -1) world.bodies.splice(idx, 1);
+    scene.remove(item.mesh);
+    if (item.mesh.geometry) item.mesh.geometry.dispose();
+  }
+  obstacleMeshes.length = 0;
+}
+
+let bumpsActive = false;
+
+/* ================= Pointer Interaction (Grab Buggy) ================= */
+const raycaster = new THREE.Raycaster();
+const mouseVec = new THREE.Vector2();
+const dragPlane = new THREE.Plane();
+const dragHit = new V();
+const grabLocal = new V();
+let grabbedBody = null;
+
+function handlePointerDrag(e, type){
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouseVec.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouseVec.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  if (type === 'down'){
+    raycaster.setFromCamera(mouseVec, camera);
+    const meshes = [buggy.chassisMesh].concat(
+      buggy.wheels.map(w => w.wheelGroup),
+      cubeSpawner.meshes,
+      obstacleMeshes.map(o => o.mesh)
+    );
+    const hits = raycaster.intersectObjects(meshes, true);
+
+    if (hits.length > 0){
+      const hit = hits[0];
+      // Check if clicked buggy
+      let cur = hit.object;
+      let isBuggy = false;
+      while (cur){
+        if (cur === buggy.rootGroup){ isBuggy = true; break; }
+        cur = cur.parent;
+      }
+
+      if (isBuggy){
+        grabbedBody = buggy.body;
+      } else if (hit.object.userData && hit.object.userData.body){
+        grabbedBody = hit.object.userData.body;
+      }
+
+      if (grabbedBody){
+        grabbedBody.toLocal(hit.point, grabLocal);
+        dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new V()).negate(), hit.point);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (type === 'move' && grabbedBody){
+    raycaster.setFromCamera(mouseVec, camera);
+    if (raycaster.ray.intersectPlane(dragPlane, dragHit)){
+      const curWorld = new V();
+      grabbedBody.toWorld(grabLocal, curWorld);
+      const delta = new V().subVectors(dragHit, curWorld);
+      grabbedBody.x.addScaledVector(delta, 0.40);
+      grabbedBody.v.copy(delta).multiplyScalar(18.0);
+      grabbedBody.px.copy(grabbedBody.x);
+    }
+    return true;
+  }
+
+  if (type === 'up'){
+    if (grabbedBody){
+      grabbedBody = null;
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
+/* ================= 3D Orbit Dragging ================= */
+let orbitDragging = false;
+let lastPointerX = 0, lastPointerY = 0;
+
+window.addEventListener('pointerdown', e => {
+  if (e.target && e.target.closest && (e.target.closest('#hud') || e.target.closest('#back') || e.target.closest('#touch-controls'))) return;
+  if (handlePointerDrag(e, 'down')) return;
+  orbitDragging = true;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+});
+
+window.addEventListener('pointermove', e => {
+  if (handlePointerDrag(e, 'move')) return;
+  if (!orbitDragging) return;
+  const dx = e.clientX - lastPointerX;
+  const dy = e.clientY - lastPointerY;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+  orbitYaw -= dx * 0.007;
+  orbitPitch = THREE.MathUtils.clamp(orbitPitch + dy * 0.007, -0.4, 1.3);
+  if (cameraMode === 'orbit') updateOrbitCameraTransform();
+});
+
+window.addEventListener('pointerup', e => {
+  handlePointerDrag(e, 'up');
+  orbitDragging = false;
+});
+
+window.addEventListener('wheel', e => {
+  orbitDist = THREE.MathUtils.clamp(orbitDist + e.deltaY * 0.002, 2.0, 7.5);
+  if (cameraMode === 'orbit') updateOrbitCameraTransform();
+}, { passive: true });
+
+/* ================= Keyboard & Driving Controls ================= */
+const keys = {
+  forward: false,
+  reverse: false,
+  left: false,
+  right: false,
+  brake: false
+};
+
+window.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  switch (e.code) {
+    case 'KeyW': case 'ArrowUp': keys.forward = true; break;
+    case 'KeyS': case 'ArrowDown': keys.reverse = true; break;
+    case 'KeyA': case 'ArrowLeft': keys.left = true; break;
+    case 'KeyD': case 'ArrowRight': keys.right = true; break;
+    case 'Space': keys.brake = true; e.preventDefault(); break;
+    case 'KeyR': buggy.reset(0, null, -1.2); RoomEnv.showNote('Buggy reset to center'); break;
+    case 'KeyF': buggy.flipUpright(); RoomEnv.showNote('Flipped upright'); break;
+    case 'KeyC': document.getElementById('cube').click(); break;
+  }
+});
+
+window.addEventListener('keyup', e => {
+  switch (e.code) {
+    case 'KeyW': case 'ArrowUp': keys.forward = false; break;
+    case 'KeyS': case 'ArrowDown': keys.reverse = false; break;
+    case 'KeyA': case 'ArrowLeft': keys.left = false; break;
+    case 'KeyD': case 'ArrowRight': keys.right = false; break;
+    case 'Space': keys.brake = false; break;
+  }
+});
+
+/* ================= Virtual Touch Controls ================= */
+const setupTouchBtn = (id, onDown, onUp) => {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    btn.classList.add('active');
+    onDown();
+  });
+  const cancel = e => {
+    btn.classList.remove('active');
+    onUp();
+  };
+  btn.addEventListener('pointerup', cancel);
+  btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('pointerleave', cancel);
+};
+
+setupTouchBtn('touch-left', () => { keys.left = true; }, () => { keys.left = false; });
+setupTouchBtn('touch-right', () => { keys.right = true; }, () => { keys.right = false; });
+setupTouchBtn('touch-gas', () => { keys.forward = true; }, () => { keys.forward = false; });
+setupTouchBtn('touch-reverse', () => { keys.reverse = true; }, () => { keys.reverse = false; });
+
+/* ================= HUD Button Handlers ================= */
+document.getElementById('reset').addEventListener('click', () => {
+  buggy.reset(0, null, -1.2);
+  RoomEnv.showNote('Buggy reset to start position');
+});
+
+document.getElementById('flip').addEventListener('click', () => {
+  buggy.flipUpright();
+  RoomEnv.showNote('Flipped upright');
+});
+
+const suspBtn = document.getElementById('susp');
+const suspPresets = ['medium', 'stiff', 'soft'];
+let suspIdx = 0;
+suspBtn.addEventListener('click', () => {
+  suspIdx = (suspIdx + 1) % suspPresets.length;
+  const p = suspPresets[suspIdx];
+  buggy.setSuspensionPreset(p);
+  suspBtn.textContent = `Suspension: ${p.charAt(0).toUpperCase() + p.slice(1)}`;
+  RoomEnv.showNote(`Suspension set to ${p.toUpperCase()} (${buggy.suspensionStiffness} N/m)`);
+});
+
+const camBtn = document.getElementById('cam-mode');
+camBtn.addEventListener('click', () => {
+  cameraMode = (cameraMode === 'chase') ? 'orbit' : 'chase';
+  camBtn.textContent = (cameraMode === 'chase') ? 'Cam: Chase' : 'Cam: Orbit';
+  RoomEnv.showNote(`Camera mode: ${cameraMode === 'chase' ? 'Chase Follow Cam' : 'Free 3D Orbit Cam'}`);
+  if (cameraMode === 'orbit') updateOrbitCameraTransform();
+});
+
+const bumpsBtn = document.getElementById('bumps');
+bumpsBtn.addEventListener('click', () => {
+  bumpsActive = !bumpsActive;
+  if (bumpsActive){
+    createBumps();
+    bumpsBtn.textContent = 'Remove Bumps';
+    bumpsBtn.classList.add('active');
+    RoomEnv.showNote('Added terrain bumps & curbs for suspension testing');
+  } else {
+    clearBumps();
+    bumpsBtn.textContent = 'Add Bumps';
+    bumpsBtn.classList.remove('active');
+    RoomEnv.showNote('Removed bumps');
+  }
+});
+
+document.getElementById('cube').addEventListener('click', () => {
+  cubeSpawner.spawnCube();
+  RoomEnv.showNote('Spawned falling dynamic cube');
+});
+
+let wireActive = false;
+document.getElementById('wire').addEventListener('click', function(){
+  wireActive = !wireActive;
+  this.classList.toggle('active', wireActive);
+  for (const m of [buggy.materials.body, buggy.materials.cockpit, buggy.materials.rollcage, buggy.materials.tires, buggy.materials.rims, bumpMat]){
+    m.wireframe = wireActive;
+  }
+  for (const m of cubeSpawner.meshes){
+    m.material.wireframe = wireActive;
+  }
+  RoomEnv.showNote(wireActive ? 'Wireframe enabled' : 'Wireframe disabled');
+});
+
+/* ================= Chase Follow Camera Update ================= */
+const chaseCamOffset = new V(0, 0.85, 2.1);
+const chaseCamTarget = new V();
+const currentCamPos = new V();
+const currentLookAt = new V();
+
+function updateChaseCamera(dt){
+  const chassisPos = buggy.body.x;
+  chaseCamTarget.copy(chassisPos).add(new V(0, 0.20, 0));
+
+  // Compute camera position behind buggy based on buggy heading
+  const forwardDir = new V(0, 0, -1).applyQuaternion(buggy.body.q);
+  const upDir = new V(0, 1, 0).applyQuaternion(buggy.body.q);
+
+  const desiredPos = new V()
+    .copy(chassisPos)
+    .addScaledVector(forwardDir, -chaseCamOffset.z)
+    .addScaledVector(upDir, chaseCamOffset.y);
+
+  // Smooth lerp to camera position and look target
+  const smooth = Math.min(1.0, 7.5 * dt);
+  camera.position.lerp(desiredPos, smooth);
+  currentLookAt.lerp(chaseCamTarget, smooth);
+  camera.lookAt(currentLookAt);
+}
+
+/* ================= Animation & Physics Loop ================= */
+const tickFps = RoomEnv.createFpsMeter();
+let acc = 0, last = performance.now();
+
+function frame(now){
+  tickFps(now);
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+
+  // Process driving input
+  let throttle = 0;
+  if (keys.forward) throttle += 1.0;
+  if (keys.reverse) throttle -= 1.0;
+  buggy.setThrottle(throttle);
+
+  let steer = 0;
+  if (keys.left) steer -= 1.0;
+  if (keys.right) steer += 1.0;
+  buggy.setSteering(steer);
+  buggy.setBrake(keys.brake);
+
+  // Substepped physics updates
+  acc += dt;
+  let n = 0;
+  while (acc >= world.dt && n < 3){
+    world.step();
+    buggy.step(world.dt);
+    acc -= world.dt;
+    n++;
+  }
+  if (n === 3) acc = 0;
+
+  // Sync visuals
+  buggy.updateVisuals();
+  cubeSpawner.sync();
+
+  for (const item of obstacleMeshes){
+    item.mesh.position.copy(item.body.x);
+    item.mesh.quaternion.copy(item.body.q);
+  }
+
+  // Camera update
+  if (cameraMode === 'chase'){
+    updateChaseCamera(dt);
+  }
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+RoomEnv.showNote('Drive with WASD or Arrow Keys. Grab & drop with pointer to test big suspensions!', 6000);
+
+})();
+</script>
+</body>
+</html>

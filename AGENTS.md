@@ -20,9 +20,11 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
 │   ├── testroom.md     # 3.0m room, PBR, lighting, sensors
 │   ├── cloth.md        # Cloth simulation reference
 │   ├── softbody.md     # Soft body continuum mechanics reference
+│   ├── car.md          # RC Buggy car & suspension reference
 │   └── tests.md        # Test suite catalog & developer guide
 ├── src/
 │   ├── xpbd.js         # Core XPBD physics engine (Müller et al.)
+│   ├── car.js          # Reusable off-road RC Buggy car asset
 │   ├── viewcube.js     # Standalone 3D isometric CAD ViewCube gravity controller
 │   ├── room.js         # Shared 3.0m room setup, 3-point lighting, spawner, dragger, and FPS meter
 │   └── common.css      # Shared responsive UI styling tokens, HUD, and badges
@@ -38,8 +40,10 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
     │   └── index.html  # Test 4: Cloth Over Sphere (fabric draping & sphere collision benchmark)
     ├── test5/
     │   └── index.html  # Test 5: Joints & Articulated Bodies (ragdoll & chain linkages)
-    └── test6/
-        └── index.html  # Test 6: Wrecking Ball & Destruction (high-impulse demolition & stacking benchmark)
+    ├── test6/
+    │   └── index.html  # Test 6: Wrecking Ball & Destruction (high-impulse demolition & stacking benchmark)
+    └── test7/
+        └── index.html  # Test 7: RC Buggy & Suspension Dynamics (off-road vehicle dynamics benchmark)
 ```
 
 The core physics engine lives in `src/xpbd.js` without DOM or rendering dependencies. It exports `XPBD` (and alias `CubePhysics`) to the global scope (`window`/`globalThis`) and to CommonJS (`module.exports`).
@@ -127,6 +131,15 @@ High-energy multi-body impact and dynamic stack collapse benchmark.
 - "Demolish" launch trigger, "Rebuild" tower reset, "Tower: Jenga / Brick Wall" style toggle, wireframe toggle, and dynamic rigid cube spawner.
 - Rigorous benchmark for high-mass-ratio collision stability ($220\,\text{kg}$ ball impacting $1.5\,\text{kg}$ bricks), preventing tunneling, explosion, or solver divergence under extreme impulse transfer.
 - Full 3D orbit camera controls with background dragging and zoom wheel.
+
+### Test 7: RC Buggy & Suspension Dynamics (`tests/test7/index.html`)
+
+High-performance off-road vehicle dynamics and compliant suspension benchmark.
+- Reusable modular `RCCar` asset (`src/car.js`) featuring authentic competition RC buggy styling: low-slung clearcoat body shell, dark titanium roll cage, rear downforce wing, front bull-bar bumper with twin rally LED spotlights, and dynamic flexible whip antenna with pennant flag.
+- Long-travel independent coilover suspension ($0.16\,\text{m}$ stroke) with real-time Hookean spring and velocity damping forces, procedural 3D helical coil springs that compress along their stroke, and pivoting suspension wishbone control arms.
+- Oversized knobby beadlock all-terrain wheels ($0.30\,\text{m}$ diameter) with deep-dish rims and extruded tread lugs that rotate with speed and steer with Ackermann-style steering geometry.
+- Full-time 4WD electric motor drive with forward/reverse throttle, progressive braking, lateral cornering traction, and in-flight gyroscopic attitude stabilization.
+- Terrain bumps and curbs spawner for rough ground articulation testing, dynamic falling cube collisions, suspension preset toggling (Soft / Medium / Stiff), flip-upright recovery, interactive raycast pointer grab & drop, and dual camera modes (Chase Follow Cam vs 3D Orbit Cam).
 
 ## Adding New Tests
 
