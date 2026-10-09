@@ -286,77 +286,28 @@ footer a:hover {
     <div class="section-label">Available Tests</div>
     <div class="tests-list">
 
-      <!-- Test 1 -->
+      <!-- Test 5 -->
       <article class="test-card active-test">
         <div class="card-top">
           <div class="test-title-group">
-            <span class="test-number">01</span>
-            <h2 class="test-name">Cube Box</h2>
+            <span class="test-number">05</span>
+            <h2 class="test-name">Joints & Articulated Bodies</h2>
           </div>
           <span class="badge active">Live</span>
         </div>
         <p class="test-desc">
-          Mobile-first 3D glass box filled with cubes. Evaluates SAT face-manifold clipping, edge-contact resolution, static/dynamic Coulomb friction, and sensor-driven fictitious forces (Euler, centrifugal, and Coriolis forces).
+          Articulated multibody physics powered by XPBD spherical and distance constraints. Features an interactive 15-body humanoid ragdoll with 14 ball-and-socket joints, a hanging 6-link heavy articulated pendulum chain, 3D orbit camera, suspension cord toggling, and interactive limb grabbing & tossing.
         </p>
         <div class="pill-group">
-          <span class="pill">3 Cubes (max 30)</span>
-          <span class="pill">15 Substeps @ 60 Hz</span>
-          <span class="pill">SAT Manifold Clipping</span>
-          <span class="pill">Coulomb Friction</span>
-          <span class="pill">DeviceMotion API</span>
+          <span class="pill">15-Body Ragdoll</span>
+          <span class="pill">14 Spherical Joints</span>
+          <span class="pill">6-Link Articulated Chain</span>
+          <span class="pill">XPBD Multi-Body Solver</span>
+          <span class="pill">Interactive Raycast Grab</span>
+          <span class="pill">3D Orbit Camera</span>
         </div>
         <div class="card-actions">
-          <a class="launch-btn" href="./tests/test1/">Launch Test 1 &rarr;</a>
-        </div>
-      </article>
-
-      <!-- Test 2 -->
-      <article class="test-card active-test">
-        <div class="card-top">
-          <div class="test-title-group">
-            <span class="test-number">02</span>
-            <h2 class="test-name">Cloth Simulation</h2>
-          </div>
-          <span class="badge active">Live</span>
-        </div>
-        <p class="test-desc">
-          Interactive XPBD cloth sheet with high-resolution woven cotton drape, distance & shear constraints, and zero-allocation spatial-hash self-collision. Evaluates compliance formulation, pin locking, touch/pointer dragging, and two-way interaction with dynamic rigid cubes.
-        </p>
-        <div class="pill-group">
-          <span class="pill">2,304 Particles (48×48)</span>
-          <span class="pill">Self-Collision (Spatial Hash)</span>
-          <span class="pill">Cotton Canvas Texture</span>
-          <span class="pill">Pin Toggling</span>
-          <span class="pill">Cloth-Cube Collision</span>
-          <span class="pill">Pointer Grab</span>
-        </div>
-        <div class="card-actions">
-          <a class="launch-btn" href="./tests/test2/">Launch Test 2 &rarr;</a>
-        </div>
-      </article>
-
-      <!-- Test 3 -->
-      <article class="test-card active-test">
-        <div class="card-top">
-          <div class="test-title-group">
-            <span class="test-number">03</span>
-            <h2 class="test-name">Soft Body (Tet Mesh)</h2>
-          </div>
-          <span class="badge active">Live</span>
-        </div>
-        <p class="test-desc">
-          Volumetric continuum elasticity on an XPBD tetrahedral mesh. Features 1,715 tetrahedra, strict hydrostatic volume conservation (incompressibility & lateral bulging), water-like fluid elasticity, wireframe toggling, pointer pinching & dragging, and rigid cube collisions.
-        </p>
-        <div class="pill-group">
-          <span class="pill">1,715 Tets (8×8×8 grid)</span>
-          <span class="pill">512 Particles</span>
-          <span class="pill">Water-like Fluid Elasticity</span>
-          <span class="pill">Wireframe View</span>
-          <span class="pill">Soft-Rigid Collisions</span>
-          <span class="pill">Pointer Grab</span>
-        </div>
-        <div class="card-actions">
-          <a class="launch-btn" href="./tests/test3/">Launch Test 3 &rarr;</a>
+          <a class="launch-btn" href="./tests/test5/">Launch Test 5 &rarr;</a>
         </div>
       </article>
 
@@ -385,28 +336,77 @@ footer a:hover {
         </div>
       </article>
 
-      <!-- Test 5 -->
+      <!-- Test 3 -->
       <article class="test-card active-test">
         <div class="card-top">
           <div class="test-title-group">
-            <span class="test-number">05</span>
-            <h2 class="test-name">Joints & Articulated Bodies</h2>
+            <span class="test-number">03</span>
+            <h2 class="test-name">Soft Body (Tet Mesh)</h2>
           </div>
           <span class="badge active">Live</span>
         </div>
         <p class="test-desc">
-          Articulated multibody physics powered by XPBD spherical and distance constraints. Features an interactive 15-body humanoid ragdoll with 14 ball-and-socket joints, a hanging 6-link heavy articulated pendulum chain, 3D orbit camera, suspension cord toggling, and interactive limb grabbing & tossing.
+          Volumetric continuum elasticity on an XPBD tetrahedral mesh. Features 1,715 tetrahedra, strict hydrostatic volume conservation (incompressibility & lateral bulging), water-like fluid elasticity, wireframe toggling, pointer pinching & dragging, and rigid cube collisions.
         </p>
         <div class="pill-group">
-          <span class="pill">15-Body Ragdoll</span>
-          <span class="pill">14 Spherical Joints</span>
-          <span class="pill">6-Link Articulated Chain</span>
-          <span class="pill">XPBD Multi-Body Solver</span>
-          <span class="pill">Interactive Raycast Grab</span>
-          <span class="pill">3D Orbit Camera</span>
+          <span class="pill">1,715 Tets (8×8×8 grid)</span>
+          <span class="pill">512 Particles</span>
+          <span class="pill">Water-like Fluid Elasticity</span>
+          <span class="pill">Wireframe View</span>
+          <span class="pill">Soft-Rigid Collisions</span>
+          <span class="pill">Pointer Grab</span>
         </div>
         <div class="card-actions">
-          <a class="launch-btn" href="./tests/test5/">Launch Test 5 &rarr;</a>
+          <a class="launch-btn" href="./tests/test3/">Launch Test 3 &rarr;</a>
+        </div>
+      </article>
+
+      <!-- Test 2 -->
+      <article class="test-card active-test">
+        <div class="card-top">
+          <div class="test-title-group">
+            <span class="test-number">02</span>
+            <h2 class="test-name">Cloth Simulation</h2>
+          </div>
+          <span class="badge active">Live</span>
+        </div>
+        <p class="test-desc">
+          Interactive XPBD cloth sheet with high-resolution woven cotton drape, distance & shear constraints, and zero-allocation spatial-hash self-collision. Evaluates compliance formulation, pin locking, touch/pointer dragging, and two-way interaction with dynamic rigid cubes.
+        </p>
+        <div class="pill-group">
+          <span class="pill">2,304 Particles (48×48)</span>
+          <span class="pill">Self-Collision (Spatial Hash)</span>
+          <span class="pill">Cotton Canvas Texture</span>
+          <span class="pill">Pin Toggling</span>
+          <span class="pill">Cloth-Cube Collision</span>
+          <span class="pill">Pointer Grab</span>
+        </div>
+        <div class="card-actions">
+          <a class="launch-btn" href="./tests/test2/">Launch Test 2 &rarr;</a>
+        </div>
+      </article>
+
+      <!-- Test 1 -->
+      <article class="test-card active-test">
+        <div class="card-top">
+          <div class="test-title-group">
+            <span class="test-number">01</span>
+            <h2 class="test-name">Cube Box</h2>
+          </div>
+          <span class="badge active">Live</span>
+        </div>
+        <p class="test-desc">
+          Mobile-first 3D glass box filled with cubes. Evaluates SAT face-manifold clipping, edge-contact resolution, static/dynamic Coulomb friction, and sensor-driven fictitious forces (Euler, centrifugal, and Coriolis forces).
+        </p>
+        <div class="pill-group">
+          <span class="pill">3 Cubes (max 30)</span>
+          <span class="pill">15 Substeps @ 60 Hz</span>
+          <span class="pill">SAT Manifold Clipping</span>
+          <span class="pill">Coulomb Friction</span>
+          <span class="pill">DeviceMotion API</span>
+        </div>
+        <div class="card-actions">
+          <a class="launch-btn" href="./tests/test1/">Launch Test 1 &rarr;</a>
         </div>
       </article>
 
