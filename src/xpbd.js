@@ -677,6 +677,7 @@ function solveJoints(world, h){
 }
 
 function areConnected(world, a, b){
+  if (a.collisionGroup && b.collisionGroup && a.collisionGroup === b.collisionGroup) return true;
   for (let i = 0; i < world.joints.length; i++){
     const j = world.joints[i];
     if (j.collideConnected) continue;

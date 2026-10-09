@@ -180,6 +180,7 @@ function buildRagdoll(originY = 0.1, originX = 0.15){
     b.x.set(originX + relX, originY + relY, -1.2 + relZ);
     b.sync();
     b.name = name;
+    b.collisionGroup = 'ragdoll';
     world.bodies.push(b);
     ragdollBodies.push(b);
     parts[name] = b;
@@ -191,33 +192,33 @@ function buildRagdoll(originY = 0.1, originX = 0.15){
   const head = makePart('head', 0.24, 0, 0.60, 0, woodHeadMat);
   const pelvis = makePart('pelvis', 0.30, 0, -0.15, 0, woodTorsoMat);
 
-  const lUpperArm = makePart('lUpperArm', 0.18, -0.30, 0.25, 0, woodLimbMat);
-  const lForearm = makePart('lForearm', 0.16, -0.50, 0.25, 0, woodLimbMat);
-  const lHand = makePart('lHand', 0.13, -0.68, 0.25, 0, woodHeadMat);
+  const lUpperArm = makePart('lUpperArm', 0.18, -0.28, 0.20, 0, woodLimbMat);
+  const lForearm = makePart('lForearm', 0.16, -0.28, 0.02, 0, woodLimbMat);
+  const lHand = makePart('lHand', 0.13, -0.28, -0.13, 0, woodHeadMat);
 
-  const rUpperArm = makePart('rUpperArm', 0.18, 0.30, 0.25, 0, woodLimbMat);
-  const rForearm = makePart('rForearm', 0.16, 0.50, 0.25, 0, woodLimbMat);
-  const rHand = makePart('rHand', 0.13, 0.68, 0.25, 0, woodHeadMat);
+  const rUpperArm = makePart('rUpperArm', 0.18, 0.28, 0.20, 0, woodLimbMat);
+  const rForearm = makePart('rForearm', 0.16, 0.28, 0.02, 0, woodLimbMat);
+  const rHand = makePart('rHand', 0.13, 0.28, -0.13, 0, woodHeadMat);
 
-  const lThigh = makePart('lThigh', 0.20, -0.11, -0.44, 0, woodLimbMat);
-  const lShin = makePart('lShin', 0.18, -0.11, -0.67, 0, woodLimbMat);
-  const lFoot = makePart('lFoot', 0.15, -0.11, -0.87, 0.04, woodHeadMat);
+  const lThigh = makePart('lThigh', 0.20, -0.12, -0.44, 0, woodLimbMat);
+  const lShin = makePart('lShin', 0.18, -0.12, -0.67, 0, woodLimbMat);
+  const lFoot = makePart('lFoot', 0.15, -0.12, -0.87, 0.04, woodHeadMat);
 
-  const rThigh = makePart('rThigh', 0.20, 0.11, -0.44, 0, woodLimbMat);
-  const rShin = makePart('rShin', 0.18, 0.11, -0.67, 0, woodLimbMat);
-  const rFoot = makePart('rFoot', 0.15, 0.11, -0.87, 0.04, woodHeadMat);
+  const rThigh = makePart('rThigh', 0.20, 0.12, -0.44, 0, woodLimbMat);
+  const rShin = makePart('rShin', 0.18, 0.12, -0.67, 0, woodLimbMat);
+  const rFoot = makePart('rFoot', 0.15, 0.12, -0.87, 0.04, woodHeadMat);
 
   // Connect limbs via XPBD Spherical Joints
   world.addSphericalJoint(head, new V(0, -0.12, 0), torso, new V(0, 0.18, 0));
   world.addSphericalJoint(pelvis, new V(0, 0.15, 0), torso, new V(0, -0.18, 0));
 
-  world.addSphericalJoint(lUpperArm, new V(0.09, 0, 0), torso, new V(-0.18, 0.12, 0));
-  world.addSphericalJoint(lForearm, new V(0.08, 0, 0), lUpperArm, new V(-0.09, 0, 0));
-  world.addSphericalJoint(lHand, new V(0.065, 0, 0), lForearm, new V(-0.08, 0, 0));
+  world.addSphericalJoint(lUpperArm, new V(0, 0.09, 0), torso, new V(-0.18, 0.12, 0));
+  world.addSphericalJoint(lForearm, new V(0, 0.08, 0), lUpperArm, new V(0, -0.09, 0));
+  world.addSphericalJoint(lHand, new V(0, 0.065, 0), lForearm, new V(0, -0.08, 0));
 
-  world.addSphericalJoint(rUpperArm, new V(-0.09, 0, 0), torso, new V(0.18, 0.12, 0));
-  world.addSphericalJoint(rForearm, new V(-0.08, 0, 0), rUpperArm, new V(0.09, 0, 0));
-  world.addSphericalJoint(rHand, new V(-0.065, 0, 0), rForearm, new V(0.08, 0, 0));
+  world.addSphericalJoint(rUpperArm, new V(0, 0.09, 0), torso, new V(0.18, 0.12, 0));
+  world.addSphericalJoint(rForearm, new V(0, 0.08, 0), rUpperArm, new V(0, -0.09, 0));
+  world.addSphericalJoint(rHand, new V(0, 0.065, 0), rForearm, new V(0, -0.08, 0));
 
   world.addSphericalJoint(lThigh, new V(0, 0.10, 0), pelvis, new V(-0.10, -0.15, 0));
   world.addSphericalJoint(lShin, new V(0, 0.09, 0), lThigh, new V(0, -0.10, 0));
@@ -232,7 +233,7 @@ function buildRagdoll(originY = 0.1, originX = 0.15){
 
 /* ================= Suspension Cords Lines ================= */
 const cordGeom = new THREE.BufferGeometry();
-const cordPositions = new Float32Array(6 * 3); // 3 cords * 2 points * 3 coords
+const cordPositions = new Float32Array(2 * 3); // 1 cord * 2 points * 3 coords
 cordGeom.setAttribute('position', new THREE.BufferAttribute(cordPositions, 3));
 const cordLines = new THREE.LineSegments(cordGeom, pinCordsMat);
 scene.add(cordLines);
@@ -267,15 +268,10 @@ function setSuspension(active){
   isSuspended = active;
 
   if (active && ragdollParts){
-    // Suspend by hands and head
-    const leftAnchor = new V(ragdollParts.lHand.x.x, 1.15, ragdollParts.lHand.x.z);
-    const rightAnchor = new V(ragdollParts.rHand.x.x, 1.15, ragdollParts.rHand.x.z);
-    const headAnchor = new V(ragdollParts.head.x.x, 1.15, ragdollParts.head.x.z);
-
-    pinJoints.push(world.addSphericalJoint(ragdollParts.lHand, new V(0, 0.065, 0), null, leftAnchor));
-    pinJoints.push(world.addSphericalJoint(ragdollParts.rHand, new V(0, 0.065, 0), null, rightAnchor));
+    // Suspend smoothly by overhead head anchor
+    const headAnchor = new V(ragdollParts.head.x.x, 1.05, ragdollParts.head.x.z);
     pinJoints.push(world.addSphericalJoint(ragdollParts.head, new V(0, 0.12, 0), null, headAnchor));
-    RoomEnv.showNote('Ragdoll suspended by suspension cords');
+    RoomEnv.showNote('Ragdoll suspended by overhead cord');
   } else {
     RoomEnv.showNote('Ragdoll released to tumble under gravity');
   }
