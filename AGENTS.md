@@ -36,8 +36,10 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
     │   └── index.html  # Test 3: Soft Body Simulation (tet mesh continuum elasticity)
     ├── test4/
     │   └── index.html  # Test 4: Cloth Over Sphere (fabric draping & sphere collision benchmark)
-    └── test5/
-        └── index.html  # Test 5: Joints & Articulated Bodies (ragdoll & chain linkages)
+    ├── test5/
+    │   └── index.html  # Test 5: Joints & Articulated Bodies (ragdoll & chain linkages)
+    └── test6/
+        └── index.html  # Test 6: Wrecking Ball & Destruction (high-impulse demolition & stacking benchmark)
 ```
 
 The core physics engine lives in `src/xpbd.js` without DOM or rendering dependencies. It exports `XPBD` (and alias `CubePhysics`) to the global scope (`window`/`globalThis`) and to CommonJS (`module.exports`).
@@ -112,6 +114,18 @@ Articulated multibody physics and character dynamics benchmark.
 - "Drop Ragdoll" drops the figure from height with random angular tumbling spin to land on the floor.
 - "Suspend / Free" toggles suspension cords anchoring hands and head to ceiling anchors.
 - Dropping dynamic cubes directly collides with the ragdoll and chain, demonstrating high-strain joint stability and zero detachment drift.
+- Full 3D orbit camera controls with background dragging and zoom wheel.
+
+### Test 6: Wrecking Ball & Destruction (`tests/test6/index.html`)
+
+High-energy multi-body impact and dynamic stack collapse benchmark.
+- Heavy cast-iron wrecking ball ($6,500\,\text{kg/m}^3$, $\approx 220\,\text{kg}$) suspended from the ceiling by an articulated 6-link metallic chain using XPBD spherical joints.
+- Switchable destructible structures:
+  - 10-tier Jenga tower: 30 wooden blocks arranged in alternating perpendicular trios, resting stably under gravity until impacted.
+  - 7-row staggered masonry brick wall: 31 interlocking terracotta blocks testing friction, shear resistance, and structural collapse.
+- Interactive raycaster slingshot aiming: clicking or dragging the wrecking ball pulls it back along an aiming vector with a dynamic visual tension trajectory line, imparting high release momentum upon release.
+- "Demolish" launch trigger, "Rebuild" tower reset, "Tower: Jenga / Brick Wall" style toggle, wireframe toggle, and dynamic rigid cube spawner.
+- Rigorous benchmark for high-mass-ratio collision stability ($220\,\text{kg}$ ball impacting $1.5\,\text{kg}$ bricks), preventing tunneling, explosion, or solver divergence under extreme impulse transfer.
 - Full 3D orbit camera controls with background dragging and zoom wheel.
 
 ## Adding New Tests

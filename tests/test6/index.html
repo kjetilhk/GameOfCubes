@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Test 6: Wrecking Ball & Destruction — XPBD Dynamics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../src/common.css">
+</head>
+<body>
+<div id="fps">-- FPS</div>
+<div id="note"></div>
+<div id="hud">
+  <a id="back" href="../../">← Tests</a>
+  <button id="launch">Demolish</button>
+  <button id="rebuild">Rebuild</button>
+  <button id="style">Tower: Jenga</button>
+  <button id="cube">Drop Cube</button>
+  <button id="wire">Wireframe</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="../../src/xpbd.js"></script>
+<script src="../../src/room.js"></script>
+<script>
+(() => {
+'use strict';
+
+const V = THREE.Vector3;
+const world = new XPBD.World({
+  dt: 1/60,
+  substeps: 22,
+  positionIterations: 3,
+  velocityIterations: 2,
+  muStatic: 0.58,
+  muDynamic: 0.42,
+  linearDamping: 0.4,
+  angularDamping: 0.8
+});
+
+/* ================= rendering & studio room ================= */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
+const lights = RoomEnv.createLighting(scene);
+let wallGroup = null;
+
+function resize(){
+  wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
+}
+window.addEventListener('resize', resize);
+
+/* ================= 3D Orbit Camera ================= */
+const orbitTarget = new V(-0.05, -0.3, -1.2);
+let orbitDist = 4.2;
+let orbitPitch = 0.22;
+let orbitYaw = 0.05;
+
+function updateCameraTransform(){
+  const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
+  const cy = Math.cos(orbitYaw), sy = Math.sin(orbitYaw);
+  camera.position.set(
+    orbitTarget.x + orbitDist * sy * cp,
+    orbitTarget.y + orbitDist * sp,
+    orbitTarget.z + orbitDist * cy * cp
+  );
+  camera.lookAt(orbitTarget);
+}
+resize();
+updateCameraTransform();
+
+/* ================= Visual Materials ================= */
+const ballMat = new THREE.MeshPhysicalMaterial({
+  color: 0x22272e,
+  roughness: 0.20,
+  metalness: 0.90,
+  clearcoat: 0.40,
+  clearcoatRoughness: 0.12
+});
+
+const chainMat = new THREE.MeshPhysicalMaterial({
+  color: 0xd4af37,
+  roughness: 0.28,
+  metalness: 0.82,
+  clearcoat: 0.25
+});
+
+const woodTileMatA = new THREE.MeshPhysicalMaterial({
+  color: 0xcca068,
+  roughness: 0.42,
+  metalness: 0.04,
+  clearcoat: 0.25
+});
+
+const woodTileMatB = new THREE.MeshPhysicalMaterial({
+  color: 0xba8c54,
+  roughness: 0.44,
+  metalness: 0.04,
+  clearcoat: 0.25
+});
+
+const brickMatA = new THREE.MeshStandardMaterial({
+  color: 0xbd5338,
+  roughness: 0.72,
+  metalness: 0.02
+});
+
+const brickMatB = new THREE.MeshStandardMaterial({
+  color: 0x9e3f28,
+  roughness: 0.75,
+  metalness: 0.02
+});
+
+const slingshotLineMat = new THREE.LineBasicMaterial({
+  color: 0xf2b632,
+  transparent: true,
+  opacity: 0.85,
+  linewidth: 2
+});
+
+/* ================= Slingshot Aim Line ================= */
+const aimGeom = new THREE.BufferGeometry();
+const aimPositions = new Float32Array(6);
+aimGeom.setAttribute('position', new THREE.BufferAttribute(aimPositions, 3));
+const aimLine = new THREE.Line(aimGeom, slingshotLineMat);
+aimLine.visible = false;
+scene.add(aimLine);
+
+/* ================= Geometry Cache ================= */
+const geomCache = new Map();
+function getRoundedBoxGeom(size){
+  const key = size.toFixed(4);
+  if (!geomCache.has(key)){
+    geomCache.set(key, RoomEnv.roundedCube(size, size * 0.10, 4));
+  }
+  return geomCache.get(key);
+}
+
+/* ================= Scene State ================= */
+const bodyMeshes = [];
+let wreckingBall = null;
+let chainLinks = [];
+let towerBodies = [];
+let towerStyle = 'jenga'; // 'jenga' or 'brick'
+let wireActive = false;
+
+function createMeshForBody(body, mat){
+  const mesh = new THREE.Mesh(getRoundedBoxGeom(body.size), mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.userData.body = body;
+  scene.add(mesh);
+  bodyMeshes.push({ body, mesh });
+  return mesh;
+}
+
+/* ================= Wrecking Ball & Chain Assembly ================= */
+const anchorPos = new V(-0.85, 1.40, -1.2);
+
+function buildWreckingBall(initialPullback = false){
+  const numLinks = 6;
+  const linkSize = 0.14;
+  const spacing = 0.18;
+  let prev = null;
+  chainLinks = [];
+
+  for (let i = 0; i < numLinks; i++){
+    const y = anchorPos.y - (i + 1) * spacing;
+    const b = new XPBD.Body(linkSize, 1200);
+    b.x.set(anchorPos.x, y, anchorPos.z);
+    b.sync();
+    b.collisionGroup = 'chain';
+    world.bodies.push(b);
+    chainLinks.push(b);
+    createMeshForBody(b, chainMat);
+
+    if (i === 0){
+      world.addSphericalJoint(b, new V(0, linkSize/2, 0), null, anchorPos);
+    } else {
+      world.addSphericalJoint(b, new V(0, linkSize/2, 0), prev, new V(0, -linkSize/2, 0));
+    }
+    prev = b;
+  }
+
+  // Wrecking Ball (Massive cast iron head)
+  const ballSize = 0.38;
+  const ballY = anchorPos.y - (numLinks + 1) * spacing - 0.05;
+  wreckingBall = new XPBD.Body(ballSize, 6500); // 6,500 kg/m³ = massive impact inertia (~350 kg)
+  wreckingBall.x.set(anchorPos.x, ballY, anchorPos.z);
+  wreckingBall.sync();
+  wreckingBall.name = 'wreckingBall';
+  world.bodies.push(wreckingBall);
+  createMeshForBody(wreckingBall, ballMat);
+
+  world.addSphericalJoint(wreckingBall, new V(0, ballSize/2, 0), prev, new V(0, -linkSize/2, 0));
+
+  if (initialPullback){
+    launchBall();
+  }
+}
+
+/* ================= Tower Builders ================= */
+function buildJengaTower(){
+  towerBodies = [];
+  const tiers = 10;
+  const blockSize = 0.18;
+  const originX = 0.35;
+  const originZ = -1.2;
+  const floorY = -1.5;
+
+  for (let t = 0; t < tiers; t++){
+    const y = floorY + blockSize/2 + t * (blockSize + 0.002);
+    const isEven = (t % 2 === 0);
+    const mat = isEven ? woodTileMatA : woodTileMatB;
+
+    for (let i = -1; i <= 1; i++){
+      const b = new XPBD.Body(blockSize, 650);
+      let posX = originX, posZ = originZ;
+      if (isEven){
+        posX = originX + i * (blockSize + 0.004);
+      } else {
+        posZ = originZ + i * (blockSize + 0.004);
+      }
+      b.x.set(posX, y, posZ);
+      b.sync();
+      b.name = `tower_${t}_${i}`;
+      world.bodies.push(b);
+      towerBodies.push(b);
+      createMeshForBody(b, mat);
+    }
+  }
+}
+
+function buildBrickWall(){
+  towerBodies = [];
+  const rows = 7;
+  const blockSize = 0.18;
+  const originX = 0.35;
+  const originZ = -1.2;
+  const floorY = -1.5;
+
+  for (let r = 0; r < rows; r++){
+    const y = floorY + blockSize/2 + r * (blockSize + 0.002);
+    const isOffset = (r % 2 === 1);
+    const count = isOffset ? 4 : 5;
+    const startOffset = isOffset ? -1.5 : -2.0;
+    const mat = (r % 2 === 0) ? brickMatA : brickMatB;
+
+    for (let i = 0; i < count; i++){
+      const b = new XPBD.Body(blockSize, 850);
+      const posX = originX + (startOffset + i) * (blockSize + 0.003);
+      b.x.set(posX, y, originZ);
+      b.sync();
+      b.name = `brick_${r}_${i}`;
+      world.bodies.push(b);
+      towerBodies.push(b);
+      createMeshForBody(b, mat);
+    }
+  }
+}
+
+/* ================= Dynamic Cube Spawner ================= */
+const cubeSpawner = RoomEnv.createCubeSpawner({
+  scene,
+  world,
+  palette: [0x5080b0, 0x48bb78, 0xed8936, 0x9f7aea, 0xe05a47],
+  maxCubes: 45,
+  sizeRange: 0.24,
+  spawnPos: () => new V(
+    0.35 + (Math.random() - 0.5) * 0.4,
+    1.25,
+    -1.2 + (Math.random() - 0.5) * 0.4
+  )
+});
+
+/* ================= Scene Assembly ================= */
+function initScene(pullback = false){
+  cubeSpawner.clear();
+  for (const bm of bodyMeshes){
+    scene.remove(bm.mesh);
+  }
+  bodyMeshes.length = 0;
+  world.clear();
+
+  buildWreckingBall(pullback);
+
+  if (towerStyle === 'jenga'){
+    buildJengaTower();
+  } else {
+    buildBrickWall();
+  }
+}
+initScene(false);
+
+/* ================= Launch / Demolish Action ================= */
+function launchBall(){
+  if (!wreckingBall) return;
+  // Pull ball high up to left-top corner and launch with forward swing momentum
+  const swingRadius = 1.35;
+  const angle = Math.PI * 0.65; // high angle swing
+  wreckingBall.x.set(
+    anchorPos.x - Math.sin(angle) * swingRadius,
+    anchorPos.y - Math.cos(angle) * swingRadius,
+    anchorPos.z
+  );
+  wreckingBall.px.copy(wreckingBall.x);
+  wreckingBall.v.set(1.5, 0, 0); // initial push towards tower
+  wreckingBall.w.set(0, 0, -2.5);
+
+  // Distribute chain links along arc
+  for (let i = 0; i < chainLinks.length; i++){
+    const frac = (i + 1) / (chainLinks.length + 1);
+    const linkAngle = angle * frac;
+    const linkR = swingRadius * frac;
+    chainLinks[i].x.set(
+      anchorPos.x - Math.sin(linkAngle) * linkR,
+      anchorPos.y - Math.cos(linkAngle) * linkR,
+      anchorPos.z
+    );
+    chainLinks[i].px.copy(chainLinks[i].x);
+    chainLinks[i].v.set(1.0 * frac, 0, 0);
+  }
+
+  RoomEnv.showNote('Demolition ball launched! Smashing into tower...');
+}
+
+/* ================= Interactive Raycast Dragging & Slingshot ================= */
+const raycaster = new THREE.Raycaster();
+const mouseVec = new THREE.Vector2();
+const dragPlane = new THREE.Plane();
+const dragHit = new V();
+let grabbedBody = null;
+let grabLocal = new V();
+let isSlingshot = false;
+let slingshotAnchor = new V();
+
+function handlePointerDrag(e, type){
+  mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+  if (type === 'down'){
+    raycaster.setFromCamera(mouseVec, camera);
+    const meshes = bodyMeshes.map(bm => bm.mesh).concat(cubeSpawner.meshes);
+    const hits = raycaster.intersectObjects(meshes, false);
+
+    if (hits.length > 0){
+      const hit = hits[0];
+      const body = hit.object.userData.body;
+      if (body){
+        grabbedBody = body;
+        body.toLocal(hit.point, grabLocal);
+        dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new V()).negate(), hit.point);
+        if (body === wreckingBall){
+          isSlingshot = true;
+          slingshotAnchor.copy(wreckingBall.x);
+          aimLine.visible = true;
+        } else {
+          isSlingshot = false;
+          aimLine.visible = false;
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (type === 'move' && grabbedBody){
+    raycaster.setFromCamera(mouseVec, camera);
+    if (raycaster.ray.intersectPlane(dragPlane, dragHit)){
+      const curWorld = new V();
+      grabbedBody.toWorld(grabLocal, curWorld);
+      const delta = new V().subVectors(dragHit, curWorld);
+      grabbedBody.x.addScaledVector(delta, 0.45);
+      grabbedBody.v.copy(delta).multiplyScalar(20);
+      grabbedBody.px.copy(grabbedBody.x);
+
+      if (isSlingshot){
+        const arr = aimGeom.attributes.position.array;
+        arr[0] = slingshotAnchor.x; arr[1] = slingshotAnchor.y; arr[2] = slingshotAnchor.z;
+        arr[3] = grabbedBody.x.x; arr[4] = grabbedBody.x.y; arr[5] = grabbedBody.x.z;
+        aimGeom.attributes.position.needsUpdate = true;
+      }
+    }
+    return true;
+  }
+
+  if (type === 'up'){
+    if (grabbedBody){
+      if (isSlingshot){
+        // Boost release velocity towards resting anchor
+        const launchDelta = new V().subVectors(slingshotAnchor, grabbedBody.x);
+        grabbedBody.v.addScaledVector(launchDelta, 6.0);
+        aimLine.visible = false;
+        isSlingshot = false;
+        RoomEnv.showNote('Wrecking ball released!');
+      }
+      grabbedBody = null;
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
+/* ================= 3D Orbit Controls ================= */
+let orbitDragging = false;
+let lastPointerX = 0, lastPointerY = 0;
+
+window.addEventListener('pointerdown', e => {
+  if (e.target && e.target.closest && (e.target.closest('#hud') || e.target.closest('#back'))) return;
+  if (handlePointerDrag(e, 'down')) return;
+  orbitDragging = true;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+});
+
+window.addEventListener('pointermove', e => {
+  if (handlePointerDrag(e, 'move')) return;
+  if (!orbitDragging) return;
+  const dx = e.clientX - lastPointerX;
+  const dy = e.clientY - lastPointerY;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+  orbitYaw -= dx * 0.007;
+  orbitPitch = THREE.MathUtils.clamp(orbitPitch + dy * 0.007, -0.4, 1.3);
+  updateCameraTransform();
+});
+
+window.addEventListener('pointerup', e => {
+  handlePointerDrag(e, 'up');
+  orbitDragging = false;
+});
+
+window.addEventListener('wheel', e => {
+  orbitDist = THREE.MathUtils.clamp(orbitDist + e.deltaY * 0.002, 2.2, 7.5);
+  updateCameraTransform();
+}, { passive: true });
+
+/* ================= HUD Button Handlers ================= */
+document.getElementById('launch').addEventListener('click', () => {
+  launchBall();
+});
+
+document.getElementById('rebuild').addEventListener('click', () => {
+  initScene(false);
+  RoomEnv.showNote('Tower rebuilt');
+});
+
+const styleBtn = document.getElementById('style');
+styleBtn.addEventListener('click', () => {
+  towerStyle = (towerStyle === 'jenga') ? 'brick' : 'jenga';
+  styleBtn.textContent = (towerStyle === 'jenga') ? 'Tower: Jenga' : 'Tower: Brick Wall';
+  initScene(false);
+  RoomEnv.showNote(`Tower style changed to ${towerStyle === 'jenga' ? 'Jenga Tower' : 'Brick Wall'}`);
+});
+
+document.getElementById('cube').addEventListener('click', () => {
+  cubeSpawner.spawnCube();
+  RoomEnv.showNote('Spawned falling dynamic cube');
+});
+
+document.getElementById('wire').addEventListener('click', function(){
+  wireActive = !wireActive;
+  this.classList.toggle('active', wireActive);
+  for (const bm of bodyMeshes){
+    bm.mesh.material.wireframe = wireActive;
+  }
+  for (const m of cubeSpawner.meshes){
+    m.material.wireframe = wireActive;
+  }
+  RoomEnv.showNote(wireActive ? 'Wireframe enabled' : 'Wireframe disabled');
+});
+
+// Keyboard shortcuts
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); launchBall(); }
+  else if (e.key === 'r' || e.key === 'R') initScene(false);
+  else if (e.key === 't' || e.key === 'T') styleBtn.click();
+  else if (e.key === 'c' || e.key === 'C') cubeSpawner.spawnCube();
+  else if (e.key === 'w' || e.key === 'W') document.getElementById('wire').click();
+});
+
+/* ================= Animation Loop ================= */
+const tickFps = RoomEnv.createFpsMeter();
+let acc = 0, last = performance.now();
+
+function frame(now){
+  tickFps(now);
+  acc += Math.min((now - last) / 1000, 0.1);
+  last = now;
+  let n = 0;
+  while (acc >= world.dt && n < 3){ world.step(); acc -= world.dt; n++; }
+  if (n === 3) acc = 0;
+
+  for (let i = 0; i < bodyMeshes.length; i++){
+    const { body, mesh } = bodyMeshes[i];
+    mesh.position.copy(body.x);
+    mesh.quaternion.copy(body.q);
+  }
+  cubeSpawner.sync();
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+RoomEnv.showNote('Pull back the wrecking ball with mouse/touch or click "Demolish" to smash the tower!', 5000);
+
+})();
+</script>
+</body>
+</html>

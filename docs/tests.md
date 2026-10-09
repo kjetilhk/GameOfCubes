@@ -57,6 +57,18 @@ The repository hosts standalone interactive test scenes located in `tests/`, acc
   - "Wireframe": toggles mesh wireframe rendering.
   - "Reset": restores default suspended pose.
 
+### Test 6: Wrecking Ball & Destruction (`tests/test6/index.html`)
+- **Focus**: High-energy multi-body impact dynamics, stacking stability, destructive structural collapse, and extreme mass-ratio collision resolution.
+- **Scene**: Massive cast-iron wrecking ball ($6,500\,\text{kg/m}^3$, $\approx 220\,\text{kg}$) suspended from the ceiling by an articulated 6-link metallic chain, poised before a destructible multi-tier block structure in the 3.0m studio room.
+- **Interactions**:
+  - Interactive Slingshot Aim: drag the wrecking ball with touch or mouse to pull it back against tension; release to fire with high velocity impulse.
+  - "Demolish": automated high-energy slingshot launch directly into the tower.
+  - "Rebuild": clears debris and reconstructs the tower cleanly.
+  - "Tower: Jenga / Brick Wall": toggles between a 30-block 10-tier alternating Jenga tower and a 31-block 7-row interlocking masonry brick wall.
+  - 3D Orbit Camera: background drag rotates camera around the destruction zone, mouse wheel zooms.
+  - "Drop Cube": spawns falling dynamic rigid cubes to cause secondary collateral impacts.
+  - "Wireframe": toggles wireframe rendering for all rigid bodies and chain links.
+
 ---
 
 ## Running Locally
