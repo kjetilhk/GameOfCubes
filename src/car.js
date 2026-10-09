@@ -544,7 +544,14 @@ class RCCar {
 
   flipUpright() {
     this.body.q.set(0, 0, 0, 1);
-    this.body.x.y += 0.40 * this.scale;
+    let surfaceY = -this.world.box.hy;
+    if (this.world.ramps) {
+      for (let r = 0; r < this.world.ramps.length; r++) {
+        const ry = this.world.ramps[r].getHeight(this.body.x.x, this.body.x.z);
+        if (ry !== null && ry > surfaceY) surfaceY = ry;
+      }
+    }
+    this.body.x.y = Math.max(this.body.x.y, surfaceY) + 0.40 * this.scale;
     this.body.px.copy(this.body.x);
     this.body.v.set(0, 1.5, 0);
     this.body.w.set(0, 0, 0);
@@ -582,8 +589,19 @@ class RCCar {
       body.toWorld(mount.localPos, _mountWorldPos);
       const mountWorldPos = _mountWorldPos;
 
-      // 2. Query contact surface (Floor and dynamic rigid bodies)
+      // 2. Query contact surface (Floor, dynamic rigid bodies, and jumps/ramps)
       let hitY = floorY;
+
+      // Test custom ramps and jumps in world
+      if (this.world.ramps) {
+        for (let r = 0; r < this.world.ramps.length; r++) {
+          const ramp = this.world.ramps[r];
+          const ry = ramp.getHeight(mountWorldPos.x, mountWorldPos.z);
+          if (ry !== null && ry > hitY) {
+            hitY = ry;
+          }
+        }
+      }
 
       // Test obstacles and cubes in world
       for (const b of this.world.bodies) {
@@ -608,6 +626,13 @@ class RCCar {
         groundedWheelCount++;
         wheel.suspensionLength = Math.max(minLen, currentDistToContact);
         wheel.compression = (restLen - wheel.suspensionLength) / maxTravel;
+
+        // Hard bottom-out prevention for steep jumps/hard landings
+        if (currentDistToContact < minLen) {
+          const hardPen = minLen - currentDistToContact;
+          body.x.y += hardPen * 0.35;
+          if (body.v.y < 0) body.v.y = 0;
+        }
 
         // Bouncy Suspension Spring Force (Hooke's Law: F_s = k * delta_x)
         const springCompression = restLen - wheel.suspensionLength;
@@ -696,6 +721,20 @@ class RCCar {
       const currentUp = _v1.set(0, 1, 0).applyQuaternion(body.q);
       const correctionAxis = _v2.crossVectors(currentUp, _up);
       body.w.addScaledVector(correctionAxis, 4.0 * dt);
+    }
+
+    // Chassis bottom clearance on ramps
+    if (this.world.ramps) {
+      for (let r = 0; r < this.world.ramps.length; r++) {
+        const ry = this.world.ramps[r].getHeight(body.x.x, body.x.z);
+        if (ry !== null) {
+          const minChassisY = ry + this.chassisSize * 0.16;
+          if (body.x.y < minChassisY) {
+            body.x.y = minChassisY;
+            if (body.v.y < 0) body.v.y = 0;
+          }
+        }
+      }
     }
   }
 
