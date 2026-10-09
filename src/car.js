@@ -1,7 +1,7 @@
 /* =========================================================================
    RC Buggy Car Asset — Extended Position-Based Dynamics (XPBD)
-   High-performance, modular off-road RC buggy asset with big wheels,
-   long-travel visible coilover suspensions, and realistic vehicle dynamics.
+   High-performance, modular off-road RC buggy asset with double-wide wheels,
+   exposed long-travel bouncy coilover suspensions, and realistic vehicle dynamics.
    ========================================================================= */
 
 (function(global) {
@@ -14,7 +14,6 @@ if (!THREE) {
 
 const V = THREE.Vector3;
 const Q = THREE.Quaternion;
-const M4 = THREE.Matrix4;
 
 // Scratch vectors for zero-allocation simulation updates
 const _v1 = new V();
@@ -26,7 +25,7 @@ const _up = new V(0, 1, 0);
 const _forward = new V(0, 0, -1);
 const _right = new V(1, 0, 0);
 
-/* ================= Procedural Spring Geometry ================= */
+/* ================= Procedural Helical Spring Geometry ================= */
 function createCoilSpringGeometry(radius, wireRadius, turns, height, radialSegments, tubularSegments) {
   const points = [];
   const totalPoints = turns * tubularSegments;
@@ -34,7 +33,7 @@ function createCoilSpringGeometry(radius, wireRadius, turns, height, radialSegme
     const t = i / totalPoints;
     const angle = t * turns * Math.PI * 2;
     const x = Math.cos(angle) * radius;
-    const y = (t - 0.5) * height;
+    const y = t * height;
     const z = Math.sin(angle) * radius;
     points.push(new V(x, y, z));
   }
@@ -42,32 +41,40 @@ function createCoilSpringGeometry(radius, wireRadius, turns, height, radialSegme
   return new THREE.TubeGeometry(curve, totalPoints, wireRadius, radialSegments, false);
 }
 
-/* ================= Procedural Knobby Off-Road Wheel Geometry ================= */
-function createBuggyWheelGeometry(radius, width, rimRadius) {
-  const group = new THREE.Group();
-
-  // 1. Rubber Tire Outer Cylinder
-  const tireGeom = new THREE.CylinderGeometry(radius, radius, width, 24, 1, false);
+/* ================= Procedural Double-Wide Off-Road Knobby Wheel ================= */
+function createDoubleWideBuggyWheelGeometry(radius, width, rimRadius) {
+  // 1. Double-Wide Rubber Tire Outer Cylinder (oriented along X axis)
+  const tireGeom = new THREE.CylinderGeometry(radius, radius, width, 28, 1, false);
   tireGeom.rotateZ(Math.PI / 2);
 
-  // 2. Beadlock Rim
-  const rimGeom = new THREE.CylinderGeometry(rimRadius, rimRadius, width * 1.02, 20);
+  // 2. Deep-Dish Beadlock Rim
+  const rimGeom = new THREE.CylinderGeometry(rimRadius, rimRadius, width * 1.01, 24);
   rimGeom.rotateZ(Math.PI / 2);
 
-  // 3. Central Hex Nut & Hub Cap
-  const hubGeom = new THREE.CylinderGeometry(rimRadius * 0.35, rimRadius * 0.35, width * 1.08, 6);
+  // 3. Central Hex Hub Nut
+  const hubGeom = new THREE.CylinderGeometry(rimRadius * 0.38, rimRadius * 0.38, width * 1.06, 6);
   hubGeom.rotateZ(Math.PI / 2);
 
-  // 4. Knobby Tread Lugs around circumference
+  // 4. Staggered Dual-Row Off-Road Tread Lugs across double width
   const lugCount = 14;
-  const lugGeom = new THREE.BoxGeometry(width * 0.75, radius * 0.16, radius * 0.22);
+  const lugWidth = width * 0.42;
+  const lugGeom = new THREE.BoxGeometry(lugWidth, radius * 0.16, radius * 0.22);
   const lugsMerged = new THREE.Group();
+
   for (let i = 0; i < lugCount; i++) {
     const angle = (i / lugCount) * Math.PI * 2;
-    const lug = new THREE.Mesh(lugGeom);
-    lug.position.set(0, Math.cos(angle) * (radius * 0.98), Math.sin(angle) * (radius * 0.98));
-    lug.rotation.x = -angle;
-    lugsMerged.add(lug);
+    // Row 1 (inner side of tire)
+    const lug1 = new THREE.Mesh(lugGeom);
+    lug1.position.set(-width * 0.24, Math.cos(angle) * (radius * 0.98), Math.sin(angle) * (radius * 0.98));
+    lug1.rotation.x = -angle;
+    lugsMerged.add(lug1);
+
+    // Row 2 (outer side of tire, staggered angle)
+    const angle2 = angle + (Math.PI / lugCount);
+    const lug2 = new THREE.Mesh(lugGeom);
+    lug2.position.set(width * 0.24, Math.cos(angle2) * (radius * 0.98), Math.sin(angle2) * (radius * 0.98));
+    lug2.rotation.x = -angle2;
+    lugsMerged.add(lug2);
   }
 
   return { tireGeom, rimGeom, hubGeom, lugsMerged };
@@ -79,29 +86,29 @@ class RCCar {
     this.world = world;
     this.scene = scene;
 
-    // Dimensions & Geometry Configuration (calibrated to 3m room scale)
+    // Dimensions & Geometry Configuration
     this.scale = options.scale || 1.0;
-    this.wheelbase = (options.wheelbase || 0.68) * this.scale;   // Front to rear distance
-    this.trackWidth = (options.trackWidth || 0.58) * this.scale; // Left to right distance
-    this.wheelRadius = (options.wheelRadius || 0.15) * this.scale; // Big buggy tires
-    this.wheelWidth = (options.wheelWidth || 0.11) * this.scale;
+    this.wheelbase = (options.wheelbase || 0.70) * this.scale;   // Front to rear distance
+    this.trackWidth = (options.trackWidth || 0.82) * this.scale; // Wide stance for double-wide tires
+    this.wheelRadius = (options.wheelRadius || 0.16) * this.scale;
+    this.wheelWidth = (options.wheelWidth || 0.22) * this.scale;  // DOUBLE AS WIDE
     this.chassisSize = (options.chassisSize || 0.40) * this.scale;
     this.chassisMass = options.chassisMass || 4.2; // kg
 
-    // Suspension Parameters (Long-travel off-road buggy coilovers)
-    this.suspensionRestLength = (options.suspensionRestLength || 0.26) * this.scale;
-    this.suspensionTravel = (options.suspensionTravel || 0.16) * this.scale;
-    this.suspensionStiffness = options.suspensionStiffness || 450.0; // N/m
-    this.suspensionDamping = options.suspensionDamping || 28.0;     // N·s/m
+    // Suspension Parameters (Long-travel, soft & bouncy)
+    this.suspensionRestLength = (options.suspensionRestLength || 0.32) * this.scale; // Longer travel rest
+    this.suspensionTravel = (options.suspensionTravel || 0.22) * this.scale;         // Big bouncy travel
+    this.suspensionStiffness = options.suspensionStiffness || 130.0;                 // Soft & bouncy spring (N/m)
+    this.suspensionDamping = options.suspensionDamping || 7.0;                       // Low damping for visible bounce
     this.suspensionPreset = 'medium';
 
     // Drivetrain & Handling
-    this.engineForce = options.engineForce || 160.0;    // Forward motor thrust
-    this.brakeForce = options.brakeForce || 120.0;      // Braking force
-    this.maxSteerAngle = options.maxSteerAngle || 0.52; // ~30 degrees max steer
-    this.steerSpeed = options.steerSpeed || 6.5;        // Rad/s steering response
-    this.tireFrictionForward = options.tireFrictionForward || 1.4;
-    this.tireFrictionSide = options.tireFrictionSide || 1.6;
+    this.engineForce = options.engineForce || 170.0;    // 4WD motor thrust
+    this.brakeForce = options.brakeForce || 130.0;      // Braking force
+    this.maxSteerAngle = options.maxSteerAngle || 0.54; // ~31 degrees max steer
+    this.steerSpeed = options.steerSpeed || 7.0;        // Rad/s steering response
+    this.tireFrictionForward = options.tireFrictionForward || 1.5;
+    this.tireFrictionSide = options.tireFrictionSide || 1.8;
 
     // Dynamic State
     this.throttle = 0.0;  // -1 to 1
@@ -152,17 +159,17 @@ class RCCar {
       }),
       springs: new THREE.MeshPhysicalMaterial({
         color: rimColor,
-        roughness: 0.25,
+        roughness: 0.22,
         metalness: 0.90,
         clearcoat: 0.50
       }),
       damperShaft: new THREE.MeshStandardMaterial({
-        color: 0xe0e6ed,
-        roughness: 0.15,
+        color: 0xedf2f7,
+        roughness: 0.12,
         metalness: 0.95
       }),
       tires: new THREE.MeshStandardMaterial({
-        color: 0x1a1c20,
+        color: 0x181a1f,
         roughness: 0.88,
         metalness: 0.05
       }),
@@ -173,14 +180,14 @@ class RCCar {
         clearcoat: 0.40
       }),
       hub: new THREE.MeshStandardMaterial({
-        color: 0x111317,
+        color: 0x0f1115,
         roughness: 0.50,
         metalness: 0.80
       }),
       lights: new THREE.MeshStandardMaterial({
         color: 0xffffff,
         emissive: 0x88ccff,
-        emissiveIntensity: 0.8,
+        emissiveIntensity: 0.9,
         roughness: 0.1
       }),
       flag: new THREE.MeshBasicMaterial({
@@ -198,10 +205,9 @@ class RCCar {
     this.rootGroup.add(this.chassisMesh);
 
     // 4. Wheel & Suspension Mount Anchors (Local Chassis Space)
-    // Indices: 0: Front-Left, 1: Front-Right, 2: Rear-Left, 3: Rear-Right
     const hx = this.trackWidth * 0.5;
     const hz = this.wheelbase * 0.5;
-    const mountY = -this.chassisSize * 0.15;
+    const mountY = -this.chassisSize * 0.08;
 
     this.wheelMounts = [
       { id: 'FL', isFront: true,  isLeft: true,  localPos: new V(-hx, mountY, -hz) },
@@ -239,9 +245,9 @@ class RCCar {
     chassis.add(canopyMesh);
 
     // Tubular Roll Cage Frame
-    const cageGeom = new THREE.CylinderGeometry(0.012 * this.scale, 0.012 * this.scale, this.chassisSize * 0.85);
+    const cageBarGeom = new THREE.CylinderGeometry(0.012 * this.scale, 0.012 * this.scale, this.chassisSize * 0.85);
     const addRollBar = (px, py, pz, rx, ry, rz) => {
-      const bar = new THREE.Mesh(cageGeom, this.materials.rollcage);
+      const bar = new THREE.Mesh(cageBarGeom, this.materials.rollcage);
       bar.position.set(px, py, pz);
       bar.rotation.set(rx, ry, rz);
       bar.castShadow = true;
@@ -255,10 +261,20 @@ class RCCar {
     addRollBar(-cw, ch,  this.chassisSize * 0.22, -Math.PI / 4, 0, 0);
     addRollBar( cw, ch,  this.chassisSize * 0.22, -Math.PI / 4, 0, 0);
 
+    // Prominent High Shock Towers (Front & Rear)
+    const towerGeom = new THREE.BoxGeometry(this.chassisSize * 0.95, 0.035 * this.scale, 0.035 * this.scale);
+    const frontTower = new THREE.Mesh(towerGeom, this.materials.rollcage);
+    frontTower.position.set(0, this.chassisSize * 0.26, -this.wheelbase * 0.5);
+    chassis.add(frontTower);
+
+    const rearTower = new THREE.Mesh(towerGeom, this.materials.rollcage);
+    rearTower.position.set(0, this.chassisSize * 0.28, this.wheelbase * 0.5);
+    chassis.add(rearTower);
+
     // High-Downforce Rear Wing / Spoiler
-    const wingGeom = new THREE.BoxGeometry(this.trackWidth * 0.72, 0.018 * this.scale, this.chassisSize * 0.35);
+    const wingGeom = new THREE.BoxGeometry(this.trackWidth * 0.70, 0.018 * this.scale, this.chassisSize * 0.35);
     const wingMesh = new THREE.Mesh(wingGeom, this.materials.body);
-    wingMesh.position.set(0, this.chassisSize * 0.42, this.chassisSize * 0.82);
+    wingMesh.position.set(0, this.chassisSize * 0.44, this.chassisSize * 0.82);
     wingMesh.rotation.x = 0.12;
     wingMesh.castShadow = true;
     chassis.add(wingMesh);
@@ -266,15 +282,15 @@ class RCCar {
     // Wing Endplates
     const endplateGeom = new THREE.BoxGeometry(0.01 * this.scale, this.chassisSize * 0.20, this.chassisSize * 0.38);
     const leftEndplate = new THREE.Mesh(endplateGeom, this.materials.rollcage);
-    leftEndplate.position.set(-this.trackWidth * 0.36, this.chassisSize * 0.42, this.chassisSize * 0.82);
+    leftEndplate.position.set(-this.trackWidth * 0.35, this.chassisSize * 0.44, this.chassisSize * 0.82);
     chassis.add(leftEndplate);
 
     const rightEndplate = new THREE.Mesh(endplateGeom, this.materials.rollcage);
-    rightEndplate.position.set(this.trackWidth * 0.36, this.chassisSize * 0.42, this.chassisSize * 0.82);
+    rightEndplate.position.set(this.trackWidth * 0.35, this.chassisSize * 0.44, this.chassisSize * 0.82);
     chassis.add(rightEndplate);
 
     // Front Bumper / Skid Plate
-    const bumperGeom = new THREE.CylinderGeometry(0.016 * this.scale, 0.016 * this.scale, this.trackWidth * 0.62);
+    const bumperGeom = new THREE.CylinderGeometry(0.016 * this.scale, 0.016 * this.scale, this.chassisSize * 0.88);
     bumperGeom.rotateZ(Math.PI / 2);
     const bumper = new THREE.Mesh(bumperGeom, this.materials.rollcage);
     bumper.position.set(0, -this.chassisSize * 0.08, -this.chassisSize * 0.85);
@@ -285,36 +301,53 @@ class RCCar {
     const lightGeom = new THREE.CylinderGeometry(0.024 * this.scale, 0.024 * this.scale, 0.028 * this.scale, 16);
     lightGeom.rotateX(Math.PI / 2);
     const lightL = new THREE.Mesh(lightGeom, this.materials.lights);
-    lightL.position.set(-this.chassisSize * 0.18, this.chassisSize * 0.46, -this.chassisSize * 0.42);
+    lightL.position.set(-this.chassisSize * 0.18, this.chassisSize * 0.48, -this.chassisSize * 0.42);
     chassis.add(lightL);
 
     const lightR = new THREE.Mesh(lightGeom, this.materials.lights);
-    lightR.position.set(this.chassisSize * 0.18, this.chassisSize * 0.46, -this.chassisSize * 0.42);
+    lightR.position.set(this.chassisSize * 0.18, this.chassisSize * 0.48, -this.chassisSize * 0.42);
     chassis.add(lightR);
 
     return chassis;
   }
 
   _buildSuspensionAndWheels() {
+    const coilRestHeight = 0.25 * this.scale;
     const coilGeom = createCoilSpringGeometry(
-      0.024 * this.scale, // spring radius
-      0.005 * this.scale, // wire radius
-      7,                  // turns
-      0.18 * this.scale,  // height
+      0.026 * this.scale, // spring radius
+      0.0055 * this.scale, // wire radius
+      8,                   // turns
+      coilRestHeight,
       6,
-      36
+      40
     );
 
-    const damperShaftGeom = new THREE.CylinderGeometry(0.012 * this.scale, 0.012 * this.scale, 0.22 * this.scale, 12);
-    const armGeom = new THREE.BoxGeometry(this.trackWidth * 0.32, 0.014 * this.scale, 0.035 * this.scale);
+    const damperShaftGeom = new THREE.CylinderGeometry(0.013 * this.scale, 0.013 * this.scale, 0.30 * this.scale, 12);
+    damperShaftGeom.translate(0, 0.15 * this.scale, 0);
+
+    const hx = this.trackWidth * 0.5;
 
     for (let i = 0; i < 4; i++) {
       const mount = this.wheelMounts[i];
-      const wheelGroup = new THREE.Group();
+      const signX = mount.isLeft ? -1 : 1;
+      const mountZ = mount.localPos.z;
 
-      // 1. Suspension Upper Strut & Coil Spring (attached to chassis)
+      // 1. Suspension Attachment Anchors (Strictly INBOARD of the wheel!)
+      // Upper shock mount on chassis shock tower
+      const upperMountLocal = new V(signX * this.chassisSize * 0.36, this.chassisSize * 0.26, mountZ);
+      // Inner wishbone hinge on lower chassis
+      const innerHingeLocal = new V(signX * this.chassisSize * 0.28, -this.chassisSize * 0.12, mountZ);
+
+      // Wheel Hub knuckle sits on the INNER face of the wheel
+      // Wheel center is at X = signX * hx. Wheel width is this.wheelWidth.
+      // Inner edge of wheel is at signX * (hx - this.wheelWidth * 0.5).
+      // Knuckle is strictly inboard by an extra 0.015m clearance!
+      const knuckleXInChassis = signX * (hx - this.wheelWidth * 0.5 - 0.018 * this.scale);
+      const knuckleLocalOffset = new V(-signX * (this.wheelWidth * 0.5 + 0.018 * this.scale), 0, 0);
+
+      // 2. Visible Upper Coilover Strut Group (placed on chassis)
       const strutGroup = new THREE.Group();
-      strutGroup.position.copy(mount.localPos);
+      strutGroup.position.copy(upperMountLocal);
 
       const springMesh = new THREE.Mesh(coilGeom, this.materials.springs);
       springMesh.castShadow = true;
@@ -326,17 +359,25 @@ class RCCar {
 
       this.chassisMesh.add(strutGroup);
 
-      // 2. Suspension Wishbone Control Arm (pivoting arm)
+      // 3. Lower Wishbone A-Arm (spans horizontally from chassis to inner knuckle)
+      const armLength = Math.abs(knuckleXInChassis - innerHingeLocal.x);
+      const armGeom = new THREE.BoxGeometry(armLength, 0.018 * this.scale, 0.055 * this.scale);
+      armGeom.translate(signX * armLength * 0.5, 0, 0);
       const wishbone = new THREE.Mesh(armGeom, this.materials.rollcage);
-      const armOffsetX = mount.isLeft ? -this.trackWidth * 0.16 : this.trackWidth * 0.16;
-      wishbone.position.set(mount.localPos.x - armOffsetX * 0.5, mount.localPos.y - 0.04 * this.scale, mount.localPos.z);
+      wishbone.position.copy(innerHingeLocal);
+      wishbone.castShadow = true;
       this.chassisMesh.add(wishbone);
 
-      // 3. Wheel Assembly (Steering pivot -> Wheel Hub -> Rotating Rim & Tire)
+      // 4. Wheel Assembly (Wheel knuckle -> Steering pivot -> Hub -> DOUBLE-WIDE Rim & Knobby Tire)
+      const wheelGroup = new THREE.Group();
       const steerPivot = new THREE.Group();
-
       const wheelHub = new THREE.Group();
-      const wheelGeom = createBuggyWheelGeometry(this.wheelRadius, this.wheelWidth, this.wheelRadius * 0.55);
+
+      const wheelGeom = createDoubleWideBuggyWheelGeometry(
+        this.wheelRadius,
+        this.wheelWidth,
+        this.wheelRadius * 0.54
+      );
 
       const tireMesh = new THREE.Mesh(wheelGeom.tireGeom, this.materials.tires);
       tireMesh.castShadow = true;
@@ -350,7 +391,7 @@ class RCCar {
       const hubMesh = new THREE.Mesh(wheelGeom.hubGeom, this.materials.hub);
       wheelHub.add(hubMesh);
 
-      // Add knobby tread block meshes
+      // Knobby tread blocks
       for (const lug of wheelGeom.lugsMerged.children) {
         const lugMesh = new THREE.Mesh(lug.geometry, this.materials.tires);
         lugMesh.position.copy(lug.position);
@@ -361,10 +402,31 @@ class RCCar {
 
       steerPivot.add(wheelHub);
       wheelGroup.add(steerPivot);
+
+      // Knuckle axle mesh extending from knuckle into the wheel hub
+      const axleGeom = new THREE.CylinderGeometry(0.016 * this.scale, 0.016 * this.scale, this.wheelWidth * 0.55);
+      axleGeom.rotateZ(Math.PI / 2);
+      const axleMesh = new THREE.Mesh(axleGeom, this.materials.rollcage);
+      axleMesh.position.set(knuckleLocalOffset.x * 0.5, 0, 0);
+      steerPivot.add(axleMesh);
+
       this.rootGroup.add(wheelGroup);
+
+      // Initial rest distance for spring scaling
+      const initialRestDist = upperMountLocal.distanceTo(new V(knuckleXInChassis, -this.suspensionRestLength, mountZ));
+
+      const damperRestHeight = 0.30 * this.scale;
 
       this.wheels.push({
         mount,
+        signX,
+        upperMountLocal,
+        innerHingeLocal,
+        knuckleXInChassis,
+        knuckleLocalOffset,
+        initialRestDist,
+        coilRestHeight,
+        damperRestHeight,
         strutGroup,
         springMesh,
         damperMesh,
@@ -372,7 +434,7 @@ class RCCar {
         steerPivot,
         wheelHub,
         wheelGroup,
-        compression: 0.0,       // Current compression (0 = fully extended, 1 = max bottomed out)
+        compression: 0.0,
         suspensionLength: this.suspensionRestLength,
         contactPoint: new V(),
         isGrounded: false
@@ -419,14 +481,14 @@ class RCCar {
   setSuspensionPreset(preset) {
     this.suspensionPreset = preset;
     if (preset === 'soft') {
-      this.suspensionStiffness = 300.0;
-      this.suspensionDamping = 18.0;
+      this.suspensionStiffness = 85.0; // Very soft, super bouncy
+      this.suspensionDamping = 4.5;
     } else if (preset === 'stiff') {
-      this.suspensionStiffness = 650.0;
-      this.suspensionDamping = 45.0;
+      this.suspensionStiffness = 240.0;
+      this.suspensionDamping = 14.0;
     } else { // medium
-      this.suspensionStiffness = 450.0;
-      this.suspensionDamping = 28.0;
+      this.suspensionStiffness = 130.0; // Active off-road bounce
+      this.suspensionDamping = 7.0;
     }
   }
 
@@ -448,9 +510,9 @@ class RCCar {
 
   flipUpright() {
     this.body.q.set(0, 0, 0, 1);
-    this.body.x.y += 0.35 * this.scale;
+    this.body.x.y += 0.40 * this.scale;
     this.body.px.copy(this.body.x);
-    this.body.v.set(0, 1.2, 0);
+    this.body.v.set(0, 1.5, 0);
     this.body.w.set(0, 0, 0);
     this.body.sync();
   }
@@ -476,30 +538,25 @@ class RCCar {
     const rightDir = _right.set(1, 0, 0).applyQuaternion(body.q);
     const upDir = _up.set(0, 1, 0).applyQuaternion(body.q);
 
-    // Forward ground speed
-    const forwardSpeed = body.v.dot(forwardDir);
-
     let groundedWheelCount = 0;
 
     for (let i = 0; i < 4; i++) {
       const wheel = this.wheels[i];
       const mount = wheel.mount;
 
-      // 1. World position of suspension upper mount point
-      body.toWorld(mount.localPos, _v1); // mount world pos
+      // 1. World position of wheel top mount
+      body.toWorld(mount.localPos, _v1);
       const mountWorldPos = _v1;
 
       // 2. Query contact surface (Floor and dynamic rigid bodies)
-      // Ray cast downwards along suspension stroke (-upDir)
-      const rayDir = _v2.copy(upDir).negate();
-      let hitY = floorY; // default flat floor
+      let hitY = floorY;
 
-      // Test obstacles and other cubes in world
+      // Test obstacles and cubes in world
       for (const b of this.world.bodies) {
         if (b === body || b.collisionGroup === 'rccar') continue;
         const dx = Math.abs(mountWorldPos.x - b.x.x);
         const dz = Math.abs(mountWorldPos.z - b.x.z);
-        if (dx < b.h + this.wheelRadius * 0.7 && dz < b.h + this.wheelRadius * 0.7) {
+        if (dx < b.h + this.wheelWidth * 0.6 && dz < b.h + this.wheelRadius * 0.7) {
           const topY = b.x.y + b.h;
           if (topY > hitY && topY < mountWorldPos.y) {
             hitY = topY;
@@ -518,12 +575,11 @@ class RCCar {
         wheel.suspensionLength = Math.max(minLen, currentDistToContact);
         wheel.compression = (restLen - wheel.suspensionLength) / maxTravel;
 
-        // Suspension Spring Force (Hooke's Law: F_s = k * delta_x)
+        // Bouncy Suspension Spring Force (Hooke's Law: F_s = k * delta_x)
         const springCompression = restLen - wheel.suspensionLength;
         const springForce = springCompression * this.suspensionStiffness;
 
         // Suspension Damper Force (F_d = -c * v_rel)
-        // Relative velocity at mount point along suspension axis
         const pointVel = _v3.crossVectors(body.w, _v4.subVectors(mountWorldPos, body.x)).add(body.v);
         const compressVel = -pointVel.dot(upDir);
         const dampingForce = compressVel * this.suspensionDamping;
@@ -534,40 +590,37 @@ class RCCar {
         const suspForceVec = _v3.copy(upDir).multiplyScalar(totalSuspensionForce * dt * body.invM);
         body.v.add(suspForceVec);
 
-        // Suspension torque on chassis
+        // Suspension torque on chassis (produces authentic squat, dive, and body roll!)
         _v4.subVectors(mountWorldPos, body.x);
         const suspTorque = _v2.crossVectors(_v4, _v3.copy(upDir).multiplyScalar(totalSuspensionForce * dt));
         body.w.addScaledVector(suspTorque, body.invI);
 
-        // 3. Tire Traction: Longitudinal (Drive / Brake) & Lateral (Cornering Grip)
-        // Wheel heading direction (steered if front, straight if rear)
+        // 3. Tire Traction: Longitudinal & Lateral
         const wheelHeading = _v3.copy(forwardDir);
         if (mount.isFront) {
           wheelHeading.applyAxisAngle(upDir, -this.currentSteerAngle);
         }
         const wheelSideDir = _v2.crossVectors(upDir, wheelHeading).normalize();
 
-        // Longitudinal velocity & Lateral slip velocity
         const wheelLongSpeed = pointVel.dot(wheelHeading);
         const wheelLatSpeed = pointVel.dot(wheelSideDir);
 
         // Longitudinal Motor / Brake Force
         let driveThrust = 0;
         if (this.isBraking) {
-          driveThrust = -Math.sign(wheelLongSpeed) * Math.min(Math.abs(wheelLongSpeed) * 30.0, this.brakeForce);
+          driveThrust = -Math.sign(wheelLongSpeed) * Math.min(Math.abs(wheelLongSpeed) * 35.0, this.brakeForce);
         } else if (Math.abs(this.throttle) > 0.01) {
-          // 4WD torque distribution (25% per wheel)
+          // 4WD torque distribution
           driveThrust = this.throttle * this.engineForce * 0.25;
         } else {
-          // Natural rolling resistance drag
-          driveThrust = -wheelLongSpeed * 8.0;
+          driveThrust = -wheelLongSpeed * 6.0; // rolling drag
         }
 
         const driveForceVec = _v4.copy(wheelHeading).multiplyScalar(driveThrust * dt * body.invM);
         body.v.add(driveForceVec);
 
-        // Lateral Tire Grip (cancels sideways drift with realistic cornering stiffness)
-        const sideGripForce = -wheelLatSpeed * (this.tireFrictionSide * 42.0);
+        // Lateral Tire Grip (cornering traction)
+        const sideGripForce = -wheelLatSpeed * (this.tireFrictionSide * 40.0);
         const sideForceVec = _v4.copy(wheelSideDir).multiplyScalar(sideGripForce * dt * body.invM);
         body.v.add(sideForceVec);
 
@@ -576,21 +629,19 @@ class RCCar {
         this.wheelSpinAngles[i] += angularDelta;
 
       } else {
-        // Airborne: suspension fully extended
+        // Airborne: suspension fully drooped / extended
         wheel.isGrounded = false;
         wheel.suspensionLength = restLen;
         wheel.compression = 0.0;
-        // In-air wheel spin inertia decay
         this.wheelSpinAngles[i] += (this.throttle * 25.0) * dt;
       }
     }
 
-    // Mid-air RC gyro pitch/roll stabilizer (allows landing cleanly on all 4 wheels)
+    // Mid-air RC gyro pitch/roll stabilizer
     if (groundedWheelCount === 0) {
-      // Upright torque correction
       const currentUp = _v1.set(0, 1, 0).applyQuaternion(body.q);
       const correctionAxis = _v2.crossVectors(currentUp, _up);
-      body.w.addScaledVector(correctionAxis, 4.5 * dt);
+      body.w.addScaledVector(correctionAxis, 4.0 * dt);
     }
   }
 
@@ -603,28 +654,16 @@ class RCCar {
     this.rootGroup.quaternion.copy(body.q);
 
     // 2. Sync Suspensions & Wheels
-    const restLen = this.suspensionRestLength;
+    const hx = this.trackWidth * 0.5;
 
     for (let i = 0; i < 4; i++) {
       const wheel = this.wheels[i];
       const mount = wheel.mount;
-
+      const signX = wheel.signX;
       const currentStroke = wheel.suspensionLength;
-      const compressionScale = Math.max(0.4, currentStroke / restLen);
 
-      // Spring coil compression scaling
-      wheel.springMesh.scale.set(1.0, compressionScale, 1.0);
-      wheel.springMesh.position.y = -currentStroke * 0.5;
-
-      // Damper cylinder positioning
-      wheel.damperMesh.position.y = -currentStroke * 0.5;
-
-      // Wishbone angle pivoting
-      const angle = (1.0 - compressionScale) * 0.35 * (mount.isLeft ? 1 : -1);
-      wheel.wishbone.rotation.z = angle;
-
-      // Wheel assembly positioning (at base of suspension stroke)
-      wheel.wheelGroup.position.set(mount.localPos.x, mount.localPos.y - currentStroke, mount.localPos.z);
+      // Wheel assembly positioning (at base of suspension stroke, wide stance)
+      wheel.wheelGroup.position.set(signX * hx, mount.localPos.y - currentStroke, mount.localPos.z);
 
       // Steering angle on front wheels
       if (mount.isFront) {
@@ -633,6 +672,30 @@ class RCCar {
 
       // Wheel spin roll
       wheel.wheelHub.rotation.x = this.wheelSpinAngles[i];
+
+      // Knuckle position in chassis space (on inner face of wheel)
+      const knuckleChassisPos = _v1.set(wheel.knuckleXInChassis, mount.localPos.y - currentStroke, mount.localPos.z);
+
+      // Orient wishbone arm towards knuckle
+      const armDeltaY = knuckleChassisPos.y - wheel.innerHingeLocal.y;
+      const armDeltaX = Math.abs(knuckleChassisPos.x - wheel.innerHingeLocal.x);
+      const wishbonePitch = Math.atan2(armDeltaY, armDeltaX) * signX;
+      wheel.wishbone.rotation.z = wishbonePitch;
+
+      // Orient and scale Coilover Shock Absorber (from upper shock tower down to lower knuckle)
+      const lowerShockMount = _v2.copy(knuckleChassisPos).addScaledVector(_up, 0.02 * this.scale);
+      const shockVector = _v3.subVectors(lowerShockMount, wheel.upperMountLocal);
+      const currentShockDist = shockVector.length();
+
+      // Orient strut along shock vector
+      const shockDir = _v4.copy(shockVector).divideScalar(currentShockDist);
+      wheel.strutGroup.quaternion.setFromUnitVectors(_up, shockDir);
+
+      // Scale helical coil spring and damper shaft along shock length
+      const springScale = currentShockDist / wheel.coilRestHeight;
+      wheel.springMesh.scale.set(1.0, springScale, 1.0);
+      const damperScale = currentShockDist / wheel.damperRestHeight;
+      wheel.damperMesh.scale.set(1.0, damperScale, 1.0);
     }
 
     // 3. Dynamic Flexible Antenna Simulation
@@ -640,17 +703,14 @@ class RCCar {
   }
 
   _updateAntennaVisuals() {
-    // World position of antenna base
     this.body.toWorld(this.antennaBasePos, _v1);
     const basePos = _v1;
 
-    // Antenna tip physics (inertial bend against velocity & acceleration)
     const targetTip = _v2.copy(basePos).addScaledVector(_up.set(0, 1, 0).applyQuaternion(this.body.q), 0.36 * this.scale);
-    targetTip.addScaledVector(this.body.v, -0.04); // lag behind velocity
+    targetTip.addScaledVector(this.body.v, -0.04);
 
     this.antennaTipPos.lerp(targetTip, 0.35);
 
-    // Update line geometry
     const lineArr = this.antennaLine.geometry.attributes.position.array;
     this.rootGroup.worldToLocal(_v3.copy(basePos));
     lineArr[0] = _v3.x; lineArr[1] = _v3.y; lineArr[2] = _v3.z;
@@ -659,18 +719,17 @@ class RCCar {
     lineArr[3] = _v4.x; lineArr[4] = _v4.y; lineArr[5] = _v4.z;
     this.antennaLine.geometry.attributes.position.needsUpdate = true;
 
-    // Position pennant flag at antenna tip
     this.flagMesh.position.copy(_v4);
-    this.flagMesh.rotation.y = Math.atan2(this.body.v.x, this.body.v.z);
+    if (this.body.v.lengthSq() > 0.01) {
+      this.flagMesh.rotation.y = Math.atan2(this.body.v.x, this.body.v.z);
+    }
   }
 
   /* ================= Cleanup & Disposal ================= */
   destroy() {
-    // Remove rigid body from physics world
     const idx = this.world.bodies.indexOf(this.body);
     if (idx !== -1) this.world.bodies.splice(idx, 1);
 
-    // Remove meshes from Three.js scene
     if (this.rootGroup && this.rootGroup.parent) {
       this.rootGroup.parent.remove(this.rootGroup);
     }

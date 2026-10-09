@@ -119,25 +119,73 @@ renderer.toneMappingExposure = 1.0;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 50);
-const lights = RoomEnv.createLighting(scene);
-let wallGroup = null;
+scene.background = new THREE.Color(0x0e1117);
+scene.fog = new THREE.FogExp2(0x0e1117, 0.022);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 120);
+
+// Open Plane 3-Point Lighting
+const sunLight = new THREE.DirectionalLight(0xfff5ea, 0.95);
+sunLight.position.set(15, 25, 20);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 80;
+sunLight.shadow.camera.left = -25;
+sunLight.shadow.camera.right = 25;
+sunLight.shadow.camera.top = 25;
+sunLight.shadow.camera.bottom = -25;
+sunLight.shadow.bias = -0.0004;
+sunLight.shadow.radius = 2.0;
+scene.add(sunLight);
+
+const fillLight = new THREE.DirectionalLight(0x7090b0, 0.45);
+fillLight.position.set(-15, 15, -15);
+scene.add(fillLight);
+
+const ambLight = new THREE.AmbientLight(0x222a36, 0.65);
+scene.add(ambLight);
+
+// Vast Open Ground Plane
+const groundGeom = new THREE.PlaneGeometry(120, 120);
+const groundMat = new THREE.MeshStandardMaterial({
+  color: 0x161a22,
+  roughness: 0.78,
+  metalness: 0.12
+});
+const groundMesh = new THREE.Mesh(groundGeom, groundMat);
+groundMesh.rotation.x = -Math.PI / 2;
+groundMesh.position.y = -1.5;
+groundMesh.receiveShadow = true;
+scene.add(groundMesh);
+
+// Sleek Visual Grid on Ground Plane
+const grid = new THREE.GridHelper(120, 120, 0x00e5ff, 0x252c38);
+grid.position.y = -1.498;
+scene.add(grid);
 
 function resize(){
-  wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
+  const W = window.innerWidth, H = window.innerHeight;
+  renderer.setSize(W, H, false);
+  camera.aspect = W / H;
+  camera.updateProjectionMatrix();
+  world.setBox(40, 1.5, 40); // Floor at -1.5, wide 80m x 80m open plane
 }
 window.addEventListener('resize', resize);
 
 /* ================= Camera Modes ================= */
 let cameraMode = 'orbit'; // 'orbit' or 'chase'
 const orbitTarget = new V(0, -0.9, -1.2);
-let orbitDist = 3.5;
-let orbitPitch = 0.26;
-let orbitYaw = 0.52;
+let orbitDist = 3.6;
+let orbitPitch = 0.28;
+let orbitYaw = 0.55;
 
 function updateOrbitCameraTransform(){
   const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
   const cy = Math.cos(orbitYaw), sy = Math.sin(orbitYaw);
+  if (typeof buggy !== 'undefined' && buggy && buggy.body) {
+    orbitTarget.copy(buggy.body.x);
+  }
   camera.position.set(
     orbitTarget.x + orbitDist * sy * cp,
     orbitTarget.y + orbitDist * sp,
@@ -146,7 +194,6 @@ function updateOrbitCameraTransform(){
   camera.lookAt(orbitTarget);
 }
 resize();
-updateOrbitCameraTransform();
 
 /* ================= Instantiate Reusable Buggy ================= */
 const buggy = new RCCar(world, scene, {
@@ -159,6 +206,7 @@ const buggy = new RCCar(world, scene, {
   rimColor: 0xffb300,  // Racing Anodized Gold
   suspensionPreset: 'medium'
 });
+updateOrbitCameraTransform();
 
 /* ================= Dynamic Cube Spawner ================= */
 const cubeSpawner = RoomEnv.createCubeSpawner({
@@ -518,6 +566,8 @@ function frame(now){
   // Camera update
   if (cameraMode === 'chase'){
     updateChaseCamera(dt);
+  } else {
+    updateOrbitCameraTransform();
   }
 
   renderer.render(scene, camera);

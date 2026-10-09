@@ -15,16 +15,16 @@ Calibrated to the standard $3.0\,\text{m}$ high studio room:
 | **Chassis Scale** | $1.0\times$ (configurable) | Global dimension scalar |
 | **Chassis Core Dimensions** | $0.40\,\text{m} \times 0.18\,\text{m} \times 0.65\,\text{m}$ | Low center-of-gravity faceted buggy chassis |
 | **Total Mass** | $4.2\,\text{kg}$ | Scale-calibrated rigid body inertia |
-| **Wheelbase** | $0.68\,\text{m}$ | Distance between front and rear axle centers |
-| **Track Width** | $0.58\,\text{m}$ | Lateral distance between left and right tire centers |
-| **Tire Diameter** | $0.30\,\text{m}$ ($R = 0.15\,\text{m}$) | Oversized knobby off-road competition tires |
-| **Tire Width** | $0.11\,\text{m}$ | Deep-dish beadlock all-terrain rubber footprint |
-| **Suspension Rest Length** | $0.26\,\text{m}$ | Static uncompressed suspension strut length |
-| **Suspension Stroke (Travel)** | $0.16\,\text{m}$ | Maximum compression travel before bump-stop |
-| **Spring Stiffness ($k$)** | $450\,\text{N/m}$ (Medium) | Linear Hookean restoration stiffness |
-| **Damper Coefficient ($c$)** | $28\,\text{N}\cdot\text{s/m}$ (Medium) | Velocity-proportional shock dissipation |
-| **Motor Thrust Force** | $160\,\text{N}$ | 4WD electric motor torque (40 N per wheel) |
-| **Max Steering Angle** | $\pm 30^\circ$ ($0.52\,\text{rad}$) | Front wheel steering sweep |
+| **Wheelbase** | $0.70\,\text{m}$ | Distance between front and rear axle centers |
+| **Track Width** | $0.82\,\text{m}$ | Wide lateral stance clearing double-wide tires |
+| **Tire Diameter** | $0.32\,\text{m}$ ($R = 0.16\,\text{m}$) | Oversized knobby off-road competition tires |
+| **Tire Width** | $0.22\,\text{m}$ | Double-wide monster knobby beadlock rubber footprint |
+| **Suspension Rest Length** | $0.32\,\text{m}$ | Extended uncompressed suspension strut length |
+| **Suspension Stroke (Travel)** | $0.22\,\text{m}$ | Extra long-travel bouncy compression stroke |
+| **Spring Stiffness ($k$)** | $130\,\text{N/m}$ (Medium) | Soft, highly compliant bouncy restoration stiffness ($85\,\text{N/m}$ Soft, $240\,\text{N/m}$ Stiff) |
+| **Damper Coefficient ($c$)** | $7.0\,\text{N}\cdot\text{s/m}$ (Medium) | Under-damped shock dissipation allowing expressive body roll & bounce |
+| **Motor Thrust Force** | $170\,\text{N}$ | 4WD electric motor torque (42.5 N per wheel) |
+| **Max Steering Angle** | $\pm 31^\circ$ ($0.54\,\text{rad}$) | Front wheel steering sweep |
 
 ---
 
