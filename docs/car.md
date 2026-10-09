@@ -23,6 +23,8 @@ Calibrated to the standard $3.0\,\text{m}$ high studio room:
 | **Suspension Stroke (Travel)** | $0.22\,\text{m}$ | Extra long-travel bouncy compression stroke |
 | **Spring Stiffness ($k$)** | $130\,\text{N/m}$ (Medium) | Soft, highly compliant bouncy restoration stiffness ($85\,\text{N/m}$ Soft, $240\,\text{N/m}$ Stiff) |
 | **Damper Coefficient ($c$)** | $7.0\,\text{N}\cdot\text{s/m}$ (Medium) | Under-damped shock dissipation allowing expressive body roll & bounce |
+| **Motor Thrust Force** | $58.0\,\text{N}$ | 4WD electric motor torque (14.5 N per wheel) |
+| **Braking Force** | $70.0\,\text{N}$ | Progressive decelerating friction force |
 | **Max Steering Angle** | $\pm 23^\circ$ ($0.40\,\text{rad}$) | Progressive speed-damped front wheel steering sweep |
 | **Top Speed** | $13.0\,\text{m/s}$ ($\approx 47\,\text{km/h}$) | High-speed electric brushless motor cap |
 
@@ -46,8 +48,8 @@ Each of the four corners (**Front-Left**, **Front-Right**, **Rear-Left**, **Rear
        │Damper│                         │Damper│
        │ Shaft│                         │ Shaft│
        ===█===                          ===█===
-          │  │ Rest: 0.26m              │  │ Rest: 0.26m
-          │  ▼ Travel: 0.16m            │  ▼ Travel: 0.16m
+          │  │ Rest: 0.32m              │  │ Rest: 0.32m
+          │  ▼ Travel: 0.22m            │  ▼ Travel: 0.22m
        ┌──┴────────┐                 ┌──┴────────┐
        │ Wheel Hub │                 │ Wheel Hub │
        └──┬────────┘                 └──┬────────┘
@@ -61,14 +63,17 @@ Each of the four corners (**Front-Left**, **Front-Right**, **Rear-Left**, **Rear
 ### 2.1 Spring-Damper Normal Force
 At each substep $\Delta t$, the suspension length $L$ is measured by raycasting from $\mathbf{p}_{\text{mount}}$ along the chassis down axis toward the terrain/floor or obstacles:
 $$\Delta x = \max(0, L_0 - L)$$
-where $L_0$ is the uncompressed rest length ($0.26\,\text{m}$). The vertical suspension force applied to the chassis at the mount point is:
+where $L_0$ is the uncompressed rest length ($0.32\,\text{m}$). The vertical suspension force applied to the chassis at the mount point is:
 $$F_{\text{susp}} = \max\left(0,\, k \cdot \Delta x - c \cdot v_{\text{rel}}\right)$$
 where:
 - $k$ is the spring stiffness ($\text{N/m}$).
 - $c$ is the damping coefficient ($\text{N}\cdot\text{s/m}$).
 - $v_{\text{rel}} = -\mathbf{v}_{\text{mount}} \cdot \hat{\mathbf{u}}_{\text{chassis}}$ is the compression velocity along the suspension axis.
 
-### 2.2 Visual Spring & Wishbone Deformation
+### 2.2 Terrain & Debris Filtering
+Suspension length queries test ground floor, elevated ramp profiles (`ramp.getHeight(x, z)`), and heavy obstacles (`b.invM <= 2.0`). Lightweight debris such as hollow plastic shell cubes ($m = 0.045\,\text{kg}, w > 2.0$) are ignored by the suspension raycast, preventing wheels from experiencing artificial vertical jolt impulses when rolling over scattered debris.
+
+### 2.3 Visual Spring & Wishbone Deformation
 To maintain high performance without dynamic vertex allocation:
 1. **Helical Spring Scaling**: The 3D helical coil mesh scales along its local Y-axis in real time ($\text{scale}_y = L / L_0$).
 2. **Wishbone Angle Pivoting**: The control A-arms rotate around their pivot pins proportional to $(1 - L / L_0) \times 20^\circ$.
@@ -86,12 +91,20 @@ $$F_{\text{drive}} = \begin{cases}
 -8.0 \cdot v_{\text{long}} & \text{rolling resistance drag}
 \end{cases}$$
 
-### 3.2 Lateral Cornering Traction
+### 3.2 Dynamic Speed-Sensitive Steering
+To prevent high-speed twitchiness and spinouts while retaining tight maneuverability at low speeds, steering is dynamically damped based on forward velocity:
+$$\theta_{\text{target}} = -\text{steer} \cdot \theta_{\max} \cdot \max\left(0.42,\, 1.0 - \frac{|v_{\text{fwd}}|}{v_{\max}} \times 0.52\right)$$
+where $\theta_{\max} = 0.40\,\text{rad}$ ($\approx 23^\circ$) and $v_{\max} = 13.0\,\text{m/s}$. A rate-limiting lerp smooths instantaneous steer commands over time ($\text{steerSpeed} = 4.5\,\text{rad/s}$).
+Additionally, the virtual joystick applies a progressive exponential power curve:
+$$\text{steer} = \operatorname{sign}(x) \cdot |x|^{1.6}$$
+providing micro-trim precision around center stick with progressive lock at outer deflections.
+
+### 3.3 Lateral Cornering Traction
 To ensure responsive handling without unrealistic frictionless slipping, tire lateral grip opposes sideways drift velocity $v_{\text{lat}}$:
 $$F_{\text{lat}} = -v_{\text{lat}} \cdot C_{\alpha}$$
 where $C_{\alpha} = \mu_{\text{side}} \times 42\,\text{N}\cdot\text{s/m}$ is the cornering stiffness.
 
-### 3.3 Gyroscopic Air-Control Stabilizer
+### 3.4 Gyroscopic Air-Control Stabilizer
 When airborne (all 4 wheels disconnected from ground), a subtle attitude stabilizer applies corrective torque toward the world up-vector:
 $$\boldsymbol{\tau}_{\text{air}} = 4.5 \cdot (\hat{\mathbf{u}}_{\text{chassis}} \times \hat{\mathbf{u}}_{\text{world}})$$
 This replicates the gyroscopic pitch and roll control experienced in competition RC cars when tapping the throttle or brake mid-air, guaranteeing clean landings on all four wheels.
@@ -100,26 +113,26 @@ This replicates the gyroscopic pitch and roll control experienced in competition
 
 ## 4. Visual Scene Graph & Three.js Hierarchy
 
-The asset builds a detailed PBR hierarchy using Three.js standard and physical materials:
+The asset builds a detailed PBR hierarchy with double-sided shading enabled across all components (`side: THREE.DoubleSide`) to guarantee complete lighting fidelity from any camera angle:
 
 - **Root Group** (`THREE.Group`): Synchronized to the XPBD rigid body center $\mathbf{x}$ and orientation $\mathbf{q}$.
   - **Chassis Subgroup**:
-    - Aerodynamic buggy shell with physical clearcoat lacquer (`clearcoat: 0.90`, `clearcoatRoughness: 0.10`).
-    - Smoked polycarbonate cockpit visor.
-    - Tubular roll cage frame with matte titanium finish.
+    - Aerodynamic buggy shell with physical clearcoat lacquer (`clearcoat: 0.90`, `clearcoatRoughness: 0.10`, `side: THREE.DoubleSide`).
+    - Smoked polycarbonate cockpit visor (`roughness: 0.12`, `metalness: 0.85`).
+    - Tubular roll cage frame with matte titanium finish (`roughness: 0.45`, `metalness: 0.85`).
     - High-downforce rear wing with aerodynamic endplates.
     - Front tubular bull-bar bumper.
-    - Twin high-intensity rally LED spotlights (`emissiveIntensity: 0.8`).
+    - Twin high-intensity rally LED spotlights (`emissiveIntensity: 0.9`).
     - Upper suspension mount struts with coilover springs.
   - **4× Wheel Assemblies**:
     - Steering pivot (front wheels rotate with steer angle).
     - Wheel hub and rotating axle (rolls forward/backward with linear speed).
-    - Deep-dish beadlock rims with anodized gold or cyan accents.
-    - Knobby all-terrain rubber tire with 14 extruded traction lugs.
+    - Deep-dish beadlock rims with anodized gold or cyan accents (`clearcoat: 0.40`).
+    - Knobby all-terrain rubber tire with 14 extruded traction lugs across double width.
   - **Dynamic RC Whip Antenna**:
     - High-flexibility spring steel wire.
     - Inertial tip tracking that bends backward under acceleration and forward under braking.
-    - High-visibility fluorescent pennant flag.
+    - High-visibility fluorescent pennant flag (`side: THREE.DoubleSide`).
 
 ---
 
@@ -130,12 +143,17 @@ The asset builds a detailed PBR hierarchy using Three.js standard and physical m
 const car = new RCCar(world, scene, {
   x: 0.0,                   // Initial X coordinate (default 0)
   y: null,                  // Initial Y coordinate (default: ground + offset)
-  z: -1.2,                  // Initial Z coordinate (default -1.2m)
+  z: -6.5,                  // Initial Z coordinate (default -6.5m)
   scale: 1.0,               // Dimension scale factor
   chassisMass: 4.2,         // Chassis mass in kg
   bodyColor: 0x00e5ff,      // Shell color (hex)
   rimColor: 0xffb300,       // Wheel rim & spring color (hex)
-  suspensionPreset: 'medium'// 'soft' | 'medium' | 'stiff'
+  suspensionPreset: 'medium',// 'soft' | 'medium' | 'stiff'
+  maxSpeed: 13.0,           // Max top speed in m/s (~47 km/h)
+  engineForce: 58.0,        // 4WD drive motor force in N
+  brakeForce: 70.0,         // Braking deceleration force in N
+  maxSteerAngle: 0.40,      // Max steer angle in radians (~23 deg)
+  steerSpeed: 4.5           // Steering rotation speed in rad/s
 });
 ```
 
@@ -143,9 +161,9 @@ const car = new RCCar(world, scene, {
 - `car.setThrottle(value)`: Sets throttle input $[-1.0, 1.0]$ (negative = reverse).
 - `car.setSteering(value)`: Sets steering input $[-1.0, 1.0]$ (negative = left, positive = right).
 - `car.setBrake(active)`: Activates or releases the brakes (`true` / `false`).
-- `car.setSuspensionPreset('soft' | 'medium' | 'stiff')`: Adjusts spring stiffness ($300 - 650\,\text{N/m}$) and damping in real time.
+- `car.setSuspensionPreset('soft' | 'medium' | 'stiff')`: Adjusts spring stiffness ($85\,\text{N/m}$ Soft, $130\,\text{N/m}$ Medium, $240\,\text{N/m}$ Stiff) and damping in real time.
 - `car.step(dt)`: Advances suspension, drivetrain, and tire physics (called every simulation frame).
-- `car.updateVisuals()`: Synchronizes visual meshes, coils, wishbones, and wheels with physics state.
+- `car.updateVisuals(interpPos, interpQuat)`: Synchronizes visual meshes, coils, wishbones, and wheels with optional interpolated transform vectors for 120Hz retinal smoothness.
 - `car.reset(x, y, z)`: Teleports the car back to target coordinates with zero velocity.
 - `car.flipUpright()`: Righting impulse to flip the car back onto its wheels if inverted.
 - `car.destroy()`: Cleans up meshes from Three.js scene and unregisters the rigid body from XPBD.
@@ -157,7 +175,7 @@ const car = new RCCar(world, scene, {
 To use `RCCar` in any test scene:
 
 ```html
-<!-- Include Three.js, XPBD, and RCCar -->
+<!-- Include Three.js r128, XPBD, and RCCar -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="../../src/xpbd.js"></script>
 <script src="../../src/car.js"></script>
@@ -167,15 +185,36 @@ To use `RCCar` in any test scene:
   const scene = new THREE.Scene();
 
   // Instantiate the buggy
-  const buggy = new RCCar(world, scene, { x: 0, z: -1.2 });
+  const buggy = new RCCar(world, scene, { x: 0, z: -6.5 });
 
-  // In animation / simulation loop:
-  function animate() {
-    requestAnimationFrame(animate);
-    world.step();
-    buggy.step(1/60);
-    buggy.updateVisuals();
+  // In animation / simulation loop with high-refresh display interpolation:
+  let acc = 0, last = performance.now();
+  const prevPos = new THREE.Vector3().copy(buggy.body.x);
+  const prevQuat = new THREE.Quaternion().copy(buggy.body.q);
+  const interpPos = new THREE.Vector3();
+  const interpQuat = new THREE.Quaternion();
+
+  function animate(now) {
+    const dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+    acc += dt;
+
+    prevPos.copy(buggy.body.x);
+    prevQuat.copy(buggy.body.q);
+    while (acc >= world.dt) {
+      world.step();
+      buggy.step(world.dt);
+      acc -= world.dt;
+    }
+
+    const alpha = Math.min(1.0, Math.max(0.0, acc / world.dt));
+    interpPos.lerpVectors(prevPos, buggy.body.x, alpha);
+    interpQuat.slerpQuaternions(prevQuat, buggy.body.q, alpha);
+
+    buggy.updateVisuals(interpPos, interpQuat);
     renderer.render(scene, camera);
+    requestAnimationFrame(animate);
   }
+  requestAnimationFrame(animate);
 </script>
 ```

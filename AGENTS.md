@@ -134,12 +134,16 @@ High-energy multi-body impact and dynamic stack collapse benchmark.
 
 ### Test 7: RC Buggy & Suspension Dynamics (`tests/test7/index.html`)
 
-High-performance off-road vehicle dynamics and compliant suspension benchmark.
-- Reusable modular `RCCar` asset (`src/car.js`) featuring authentic competition RC buggy styling: low-slung clearcoat body shell, dark titanium roll cage, rear downforce wing, front bull-bar bumper with twin rally LED spotlights, and dynamic flexible whip antenna with pennant flag.
-- Long-travel independent coilover suspension ($0.16\,\text{m}$ stroke) with real-time Hookean spring and velocity damping forces, procedural 3D helical coil springs that compress along their stroke, and pivoting suspension wishbone control arms.
-- Oversized knobby beadlock all-terrain wheels ($0.30\,\text{m}$ diameter) with deep-dish rims and extruded tread lugs that rotate with speed and steer with Ackermann-style steering geometry.
-- Full-time 4WD electric motor drive with forward/reverse throttle, progressive braking, lateral cornering traction, and in-flight gyroscopic attitude stabilization.
-- Terrain bumps and curbs spawner for rough ground articulation testing, dynamic falling cube collisions, suspension preset toggling (Soft / Medium / Stiff), flip-upright recovery, interactive raycast pointer grab & drop, and dual camera modes (Chase Follow Cam vs 3D Orbit Cam).
+High-performance off-road vehicle dynamics, circuit racing, and high-speed multi-body crash destruction benchmark.
+- Reusable modular `RCCar` asset (`src/car.js`) featuring authentic competition RC buggy styling: low-slung clearcoat body shell, dark titanium roll cage, rear downforce wing, front bull-bar bumper with twin rally LED spotlights, double-sided PBR shading, and dynamic flexible whip antenna with pennant flag.
+- Long-travel independent coilover suspension ($0.22\,\text{m}$ stroke, $0.32\,\text{m}$ rest length) with real-time Hookean spring and velocity damping forces, procedural 3D helical coil springs that compress along their stroke, and pivoting suspension wishbone control arms.
+- Oversized knobby beadlock all-terrain wheels ($0.32\,\text{m}$ diameter, $0.22\,\text{m}$ wide) with deep-dish rims and dual-row staggered tread lugs rotating with speed and steering with Ackermann geometry.
+- Full-time 4WD electric motor drive with forward/reverse throttle, progressive braking ($70\,\text{N}$), top speed $13.0\,\text{m/s}$ ($\approx 47\,\text{km/h}$), dynamic speed-sensitive steering damping, and in-flight gyroscopic attitude stabilization.
+- Massive $96\,\text{m} \times 112\,\text{m}$ figure-8 racing circuit with double-wide $15.2\,\text{m}$ roadway lanes, 3D raised beveled border curbs ($0.60\,\text{m}$ wide) with automatic intersection clearance, checkered start/finish line, turf infield beds, corner apex cones, and wide tabletop ($10\,\text{m}$) & mega kicker ($8\,\text{m}$) jumps.
+- 44 ultra-lightweight ($45\,\text{g}$) hollow plastic shell crash cubes with momentum transfer collision physics (car plows through barriers with $<2\%$ speed loss while cubes scatter into the air).
+- Suspension debris filtering: wheels ignore lightweight debris ($w > 2.0$), preventing artificial vertical shock jolts when rolling over scattered plastic boxes.
+- Compact bottom-center virtual analog joystick with progressive exponential response ($\text{steer} = \operatorname{sign}(x) \cdot |x|^{1.6}$) and screen-centered chase follow camera.
+- High-refresh rate 120Hz display interpolation eliminating motion ghosting.
 
 ## Adding New Tests
 
