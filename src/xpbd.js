@@ -687,7 +687,7 @@ function areConnected(world, a, b){
 }
 
 // ---------- cube vs walls: corners against six planes ----------
-const corner = new V(), wallPt = new V();
+const corner = new V(), wallPt = new V(), groundNorm = new V(0, 1, 0);
 
 function collideWalls(world, a, walls){
   for (let i = 0; i < 8; i++){
@@ -695,6 +695,13 @@ function collideWalls(world, a, walls){
     for (const w of walls){
       const pen = w.o - w.n.dot(corner);
       if (pen > -world.margin) world.addContact(a, null, corner, wallPt.copy(corner).addScaledVector(w.n, pen), w.n);
+    }
+    if (world.getTerrainHeight){
+      const ty = world.getTerrainHeight(corner.x, corner.z);
+      const pen = ty - corner.y;
+      if (pen > -world.margin){
+        world.addContact(a, null, corner, wallPt.set(corner.x, ty, corner.z), groundNorm);
+      }
     }
   }
 }

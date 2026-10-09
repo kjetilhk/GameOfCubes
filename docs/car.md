@@ -71,7 +71,7 @@ where:
 - $v_{\text{rel}} = -\mathbf{v}_{\text{mount}} \cdot \hat{\mathbf{u}}_{\text{chassis}}$ is the compression velocity along the suspension axis.
 
 ### 2.2 Terrain & Debris Filtering
-Suspension length queries test ground floor, elevated ramp profiles (`ramp.getHeight(x, z)`), and heavy obstacles (`b.invM <= 2.0`). Lightweight debris such as hollow plastic shell cubes ($m = 0.045\,\text{kg}, w > 2.0$) are ignored by the suspension raycast, preventing wheels from experiencing artificial vertical jolt impulses when rolling over scattered debris.
+Suspension length queries test the procedural terrain surface height (`world.getTerrainHeight(x, z)`), elevated ramp profiles (`ramp.getHeight(x, z)`), and heavy obstacles (`b.invM <= 2.0`). Lightweight debris such as hollow plastic shell cubes ($m = 0.045\,\text{kg}, w > 2.0$) are ignored by the suspension raycast, preventing wheels from experiencing artificial vertical jolt impulses when rolling over scattered debris.
 
 ### 2.3 Visual Spring & Wishbone Deformation
 To maintain high performance without dynamic vertex allocation:

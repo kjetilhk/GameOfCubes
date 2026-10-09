@@ -128,9 +128,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=11"></script>
-<script src="../../src/room.js?v=11"></script>
-<script src="../../src/car.js?v=11"></script>
+<script src="../../src/xpbd.js?v=12"></script>
+<script src="../../src/room.js?v=12"></script>
+<script src="../../src/car.js?v=12"></script>
 <script>
 (() => {
 'use strict';
@@ -210,8 +210,38 @@ scene.add(fillLight);
 const ambLight = new THREE.AmbientLight(0x222a36, 0.65);
 scene.add(ambLight);
 
-// Vast Open Ground Plane
-const groundGeom = new THREE.PlaneGeometry(320, 320);
+/* ================= Procedural Uneven Off-Road Surface ================= */
+// Continuous mathematical height function providing authentic off-road bumps,
+// washboard whoops, swells, and ruts for the buggy suspension and cubes.
+function getTrackSurfaceHeight(x, z) {
+  const baseFloor = -1.50;
+  // 1. Broad rolling swells across the 96m x 112m circuit (wavelength ~15-25m, amplitude ~5cm)
+  const roll = 0.050 * Math.sin(x * 0.12 + 0.3) * Math.cos(z * 0.16 - 0.2)
+             + 0.030 * Math.sin((x + z) * 0.09);
+
+  // 2. Off-road washboard whoops & rhythm bumps (wavelength ~3-6m, amplitude ~2.5cm)
+  const wash = 0.025 * Math.sin(x * 0.60 + z * 0.35)
+             + 0.018 * Math.cos(x * 0.45 - z * 0.65);
+
+  // 3. Compact packed dirt chatter and tyre ruts (wavelength ~1-2m, amplitude ~1.2cm)
+  const chatter = 0.012 * Math.sin(x * 1.3 - z * 0.9) * Math.cos(x * 0.8 + z * 1.1);
+
+  // Elevation smoothly undulating between 0.008m and 0.20m above base floor (-1.50)
+  return baseFloor + Math.max(0.008, roll + wash + chatter + 0.070);
+}
+world.getTerrainHeight = getTrackSurfaceHeight;
+
+// Vast Open Ground Plane displaced with terrain height
+const groundGeom = new THREE.PlaneGeometry(320, 320, 96, 96);
+groundGeom.rotateX(-Math.PI / 2);
+const gPos = groundGeom.attributes.position;
+for (let i = 0; i < gPos.count; i++) {
+  const gx = gPos.getX(i);
+  const gz = gPos.getZ(i);
+  gPos.setY(i, getTrackSurfaceHeight(gx, gz) - 0.006);
+}
+groundGeom.computeVertexNormals();
+
 const groundMat = new THREE.MeshStandardMaterial({
   color: 0x13171f,
   roughness: 0.88,
@@ -219,15 +249,8 @@ const groundMat = new THREE.MeshStandardMaterial({
   side: THREE.DoubleSide
 });
 const groundMesh = new THREE.Mesh(groundGeom, groundMat);
-groundMesh.rotation.x = -Math.PI / 2;
-groundMesh.position.y = -1.5;
 groundMesh.receiveShadow = true;
 scene.add(groundMesh);
-
-// Visual Grid on Ground Plane
-const grid = new THREE.GridHelper(320, 160, 0x00e5ff, 0x1c222d);
-grid.position.y = -1.498;
-scene.add(grid);
 
 function resize() {
   const W = window.innerWidth, H = window.innerHeight;
@@ -255,7 +278,6 @@ const halfW = trackWidth * 0.5;
 const N_SEGS = 360;
 
 const roadPositions = [];
-const roadNormals = [];
 const roadUvs = [];
 const roadIndices = [];
 
@@ -273,6 +295,8 @@ const linePositions = [];
 const lineIndices = [];
 let lineVertCount = 0;
 
+const W_SEGS = 8; // 8 lateral cross-lane strips for detailed 3D ruts and rolls across 15.2m road
+
 for (let i = 0; i <= N_SEGS; i++) {
   const t = (i / N_SEGS) * Math.PI * 2;
   const xc = Rx * Math.sin(2 * t);
@@ -289,15 +313,29 @@ for (let i = 0; i <= N_SEGS; i++) {
   const rx = xc - nx * halfW;
   const rz = zc - nz * halfW;
 
-  roadPositions.push(lx, -1.492, lz);
-  roadPositions.push(rx, -1.492, rz);
-  roadNormals.push(0, 1, 0, 0, 1, 0);
-  roadUvs.push(0, i / 5, 1, i / 5);
+  // Subdivided road vertices across the full 15.2m lane width
+  for (let w = 0; w <= W_SEGS; w++) {
+    const frac = w / W_SEGS; // 0 (left edge) to 1 (right edge)
+    const offset = halfW - frac * trackWidth;
+    const px = xc + nx * offset;
+    const pz = zc + nz * offset;
+    const py = getTrackSurfaceHeight(px, pz) + 0.005; // layer bias above open ground
+    roadPositions.push(px, py, pz);
+    roadUvs.push(frac, i / 5);
+  }
 
   if (i < N_SEGS) {
-    const v0 = i * 2, v1 = i * 2 + 1, v2 = (i + 1) * 2, v3 = (i + 1) * 2 + 1;
-    roadIndices.push(v0, v1, v2);
-    roadIndices.push(v2, v1, v3);
+    // Road triangle mesh indices connecting segment i and i+1
+    const row0 = i * (W_SEGS + 1);
+    const row1 = (i + 1) * (W_SEGS + 1);
+    for (let w = 0; w < W_SEGS; w++) {
+      const v0 = row0 + w;
+      const v1 = row0 + w + 1;
+      const v2 = row1 + w;
+      const v3 = row1 + w + 1;
+      roadIndices.push(v0, v1, v2);
+      roadIndices.push(v2, v1, v3);
+    }
 
     const distCenter = Math.hypot(xc, zc);
     const isRed = (Math.floor(i / 2) % 2) === 0;
@@ -320,16 +358,20 @@ for (let i = 0; i <= N_SEGS; i++) {
     // Runs all the way around each loop, opening cleanly at central intersection
     if (distCenter > 19.0) {
       const k0 = innerVertCount;
-      // Beveled curb face
-      innerPositions.push(lx, -1.492, lz);
-      innerPositions.push(lx + nx * (kw * 0.5), -1.34, lz + nz * (kw * 0.5));
-      innerPositions.push(lxN, -1.492, lzN);
-      innerPositions.push(lxN + nxN * (kw * 0.5), -1.34, lzN + nzN * (kw * 0.5));
+      const lyBase = getTrackSurfaceHeight(lx, lz) + 0.005;
+      const lyTop = lyBase + 0.14;
+      const lyNBase = getTrackSurfaceHeight(lxN, lzN) + 0.005;
+      const lyNTop = lyNBase + 0.14;
 
-      innerPositions.push(lx + nx * (kw * 0.5), -1.34, lz + nz * (kw * 0.5));
-      innerPositions.push(lx + nx * kw, -1.492, lz + nz * kw);
-      innerPositions.push(lxN + nxN * (kw * 0.5), -1.34, lzN + nzN * (kw * 0.5));
-      innerPositions.push(lxN + nxN * kw, -1.492, lzN + nzN * kw);
+      innerPositions.push(lx, lyBase, lz);
+      innerPositions.push(lx + nx * (kw * 0.5), lyTop, lz + nz * (kw * 0.5));
+      innerPositions.push(lxN, lyNBase, lzN);
+      innerPositions.push(lxN + nxN * (kw * 0.5), lyNTop, lzN + nzN * (kw * 0.5));
+
+      innerPositions.push(lx + nx * (kw * 0.5), lyTop, lz + nz * (kw * 0.5));
+      innerPositions.push(lx + nx * kw, lyBase, lz + nz * kw);
+      innerPositions.push(lxN + nxN * (kw * 0.5), lyNTop, lzN + nzN * (kw * 0.5));
+      innerPositions.push(lxN + nxN * kw, lyNBase, lzN + nzN * kw);
 
       for (let c = 0; c < 8; c++) innerColors.push(r, g, b);
       innerIndices.push(k0, k0+1, k0+2, k0+2, k0+1, k0+3);
@@ -340,31 +382,37 @@ for (let i = 0; i <= N_SEGS; i++) {
     // 2. OUTER BORDER (Raised 3D curb along perimeter edge of racetrack)
     if (distCenter > 19.0) {
       const k0 = outerVertCount;
-      outerPositions.push(rx, -1.492, rz);
-      outerPositions.push(rx - nx * (kw * 0.5), -1.34, rz - nz * (kw * 0.5));
-      outerPositions.push(rxN, -1.492, rzN);
-      outerPositions.push(rxN - nxN * (kw * 0.5), -1.34, rzN - nzN * (kw * 0.5));
+      const ryBase = getTrackSurfaceHeight(rx, rz) + 0.005;
+      const ryTop = ryBase + 0.14;
+      const ryNBase = getTrackSurfaceHeight(rxN, rzN) + 0.005;
+      const ryNTop = ryNBase + 0.14;
 
-      outerPositions.push(rx - nx * (kw * 0.5), -1.34, rz - nz * (kw * 0.5));
-      outerPositions.push(rx - nx * kw, -1.492, rz - nz * kw);
-      outerPositions.push(rxN - nxN * (kw * 0.5), -1.34, rzN - nzN * (kw * 0.5));
-      outerPositions.push(rxN - nxN * kw, -1.492, rzN - nzN * kw);
+      outerPositions.push(rx, ryBase, rz);
+      outerPositions.push(rx - nx * (kw * 0.5), ryTop, rz - nz * (kw * 0.5));
+      outerPositions.push(rxN, ryNBase, rzN);
+      outerPositions.push(rxN - nxN * (kw * 0.5), ryNTop, rzN - nzN * (kw * 0.5));
+
+      outerPositions.push(rx - nx * (kw * 0.5), ryTop, rz - nz * (kw * 0.5));
+      outerPositions.push(rx - nx * kw, ryBase, rz - nz * kw);
+      outerPositions.push(rxN - nxN * (kw * 0.5), ryNTop, rzN - nzN * (kw * 0.5));
+      outerPositions.push(rxN - nxN * kw, ryNBase, rzN - nzN * kw);
 
       for (let c = 0; c < 8; c++) outerColors.push(r, g, b);
-      innerIndices.push(k0, k0+1, k0+2, k0+2, k0+1, k0+3);
-      innerIndices.push(k0+4, k0+5, k0+6, k0+6, k0+5, k0+7);
+      outerIndices.push(k0, k0+1, k0+2, k0+2, k0+1, k0+3);
+      outerIndices.push(k0+4, k0+5, k0+6, k0+6, k0+5, k0+7);
       outerVertCount += 8;
     }
 
     // 3. Yellow Dashed Centerline on straights
     if (distCenter > 15.0 && (i % 4 < 2)) {
       const lw = 0.16;
-      const ly = -1.490;
+      const ly = getTrackSurfaceHeight(xc, zc) + 0.010;
+      const lyN = getTrackSurfaceHeight(xcN, zcN) + 0.010;
       const l0 = lineVertCount;
       linePositions.push(xc + nx * lw, ly, zc + nz * lw);
       linePositions.push(xc - nx * lw, ly, zc - nz * lw);
-      linePositions.push(xcN + nxN * lw, ly, zcN + nzN * lw);
-      linePositions.push(xcN - nxN * lw, ly, zcN - nzN * lw);
+      linePositions.push(xcN + nxN * lw, lyN, zcN + nzN * lw);
+      linePositions.push(xcN - nxN * lw, lyN, zcN - nzN * lw);
 
       lineIndices.push(l0, l0 + 1, l0 + 2, l0 + 2, l0 + 1, l0 + 3);
       lineVertCount += 4;
@@ -375,9 +423,9 @@ for (let i = 0; i <= N_SEGS; i++) {
 // Assemble Road Asphalt Mesh
 const roadGeom = new THREE.BufferGeometry();
 roadGeom.setAttribute('position', new THREE.Float32BufferAttribute(roadPositions, 3));
-roadGeom.setAttribute('normal', new THREE.Float32BufferAttribute(roadNormals, 3));
 roadGeom.setAttribute('uv', new THREE.Float32BufferAttribute(roadUvs, 2));
 roadGeom.setIndex(roadIndices);
+roadGeom.computeVertexNormals();
 const roadMat = new THREE.MeshStandardMaterial({
   color: 0x1a1e27,
   roughness: 0.82,
@@ -433,32 +481,45 @@ for (let c = 0; c < sfChecks; c++) {
     const checkMat = new THREE.MeshBasicMaterial({ color: isWhite ? 0xf0f4f8 : 0x11141a, side: THREE.DoubleSide });
     const checkMesh = new THREE.Mesh(checkGeom, checkMat);
     checkMesh.rotation.x = -Math.PI / 2;
-    checkMesh.position.set(
-      -trackWidth / 2 + (c + 0.5) * (trackWidth / sfChecks),
-      -1.489,
-      (r - 0.5) * (sfLen / 2)
-    );
+    const px = -trackWidth / 2 + (c + 0.5) * (trackWidth / sfChecks);
+    const pz = -8.0 + (r - 0.5) * (sfLen / 2);
+    const py = getTrackSurfaceHeight(px, pz) + 0.009;
+    checkMesh.position.set(px, py, pz);
     startFinishGroup.add(checkMesh);
   }
 }
-startFinishGroup.position.set(0, 0, -8.0);
 trackGroup.add(startFinishGroup);
 
 // Infield Island Turf Beds (North & South Loop Interiors)
 const turfMat = new THREE.MeshStandardMaterial({ color: 0x15221b, roughness: 0.90, metalness: 0.05, side: THREE.DoubleSide });
+
 const northTurfGeom = new THREE.CircleGeometry(16.0, 36);
+northTurfGeom.rotateX(-Math.PI / 2);
+northTurfGeom.scale(1.9, 1.0, 1.0);
+const ntPos = northTurfGeom.attributes.position;
+for (let i = 0; i < ntPos.count; i++) {
+  const vx = ntPos.getX(i);
+  const vz = ntPos.getZ(i) + 27.0;
+  ntPos.setY(i, getTrackSurfaceHeight(vx, vz) - 0.003);
+}
+northTurfGeom.computeVertexNormals();
 const northTurfMesh = new THREE.Mesh(northTurfGeom, turfMat);
-northTurfMesh.rotation.x = -Math.PI / 2;
-northTurfMesh.scale.set(1.9, 1.0, 1.0);
-northTurfMesh.position.set(0, -1.496, 27.0);
+northTurfMesh.position.set(0, 0, 27.0);
 northTurfMesh.receiveShadow = true;
 trackGroup.add(northTurfMesh);
 
 const southTurfGeom = new THREE.CircleGeometry(16.0, 36);
+southTurfGeom.rotateX(-Math.PI / 2);
+southTurfGeom.scale(1.9, 1.0, 1.0);
+const stPos = southTurfGeom.attributes.position;
+for (let i = 0; i < stPos.count; i++) {
+  const vx = stPos.getX(i);
+  const vz = stPos.getZ(i) - 27.0;
+  stPos.setY(i, getTrackSurfaceHeight(vx, vz) - 0.003);
+}
+southTurfGeom.computeVertexNormals();
 const southTurfMesh = new THREE.Mesh(southTurfGeom, turfMat);
-southTurfMesh.rotation.x = -Math.PI / 2;
-southTurfMesh.scale.set(1.9, 1.0, 1.0);
-southTurfMesh.position.set(0, -1.496, -27.0);
+southTurfMesh.position.set(0, 0, -27.0);
 southTurfMesh.receiveShadow = true;
 trackGroup.add(southTurfMesh);
 
@@ -475,7 +536,7 @@ const apexPositions = [
 ];
 for (const [cx, cz] of apexPositions) {
   const cone = new THREE.Mesh(coneGeom, coneMat);
-  cone.position.set(cx, -1.5 + 0.30, cz);
+  cone.position.set(cx, getTrackSurfaceHeight(cx, cz) + 0.30, cz);
   cone.castShadow = true;
   trackGroup.add(cone);
 }
@@ -500,7 +561,7 @@ class Ramp {
     this.type = type;
     this.cos = Math.cos(heading);
     this.sin = Math.sin(heading);
-    this.floorY = -1.5;
+    this.floorY = getTrackSurfaceHeight(x, z);
   }
 
   getHeight(px, pz) {
@@ -581,7 +642,7 @@ function buildRampMesh(ramp) {
   });
 
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(ramp.x, -1.5, ramp.z);
+  mesh.position.set(ramp.x, ramp.floorY, ramp.z);
   mesh.rotation.y = ramp.heading;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -697,10 +758,10 @@ let cIdx = 0;
 const bw1 = 0.44;
 const nx1 = -0.47, nz1 = 0.88;
 for (let r = 0; r < 2; r++) {
-  const cy = -1.5 + bw1 * 0.5 + r * bw1;
   for (let col = -2.5; col <= 2.5; col += 1.0) {
     const cx = 22.0 + nx1 * (col * bw1 * 1.35);
     const cz = 10.0 + nz1 * (col * bw1 * 1.35);
+    const cy = getTrackSurfaceHeight(cx, cz) + bw1 * 0.5 + r * bw1;
     spawnCrashCube(bw1, cx, cy, cz, cIdx++);
   }
 }
@@ -709,10 +770,10 @@ for (let r = 0; r < 2; r++) {
 const bw2 = 0.44;
 const nx2 = -0.47, nz2 = 0.88;
 for (let r = 0; r < 2; r++) {
-  const cy = -1.5 + bw2 * 0.5 + r * bw2;
   for (let col = -2.5; col <= 2.5; col += 1.0) {
     const cx = -22.0 + nx2 * (col * bw2 * 1.35);
     const cz = -10.0 + nz2 * (col * bw2 * 1.35);
+    const cy = getTrackSurfaceHeight(cx, cz) + bw2 * 0.5 + r * bw2;
     spawnCrashCube(bw2, cx, cy, cz, cIdx++);
   }
 }
@@ -720,34 +781,46 @@ for (let r = 0; r < 2; r++) {
 // 3. Formation 3: Stunt Jump Landing Pyramid (8 Hollow Plastic Shell Cubes in flight path of Ramp 1)
 const s3 = 0.44;
 const jpx = 45.0, jpz = 22.0;
+const jh = getTrackSurfaceHeight(jpx, jpz);
 // Tier 1 (4 cubes)
 for (let c = 0; c < 4; c++) {
-  spawnCrashCube(s3, jpx + (c - 1.5) * s3, -1.5 + s3 * 0.5, jpz + (c - 1.5) * 0.5 * s3, cIdx++);
+  const cx = jpx + (c - 1.5) * s3;
+  const cz = jpz + (c - 1.5) * 0.5 * s3;
+  spawnCrashCube(s3, cx, jh + s3 * 0.5, cz, cIdx++);
 }
 // Tier 2 (3 cubes)
 for (let c = 0; c < 3; c++) {
-  spawnCrashCube(s3, jpx + (c - 1.0) * s3, -1.5 + s3 * 1.5, jpz + (c - 1.0) * 0.5 * s3, cIdx++);
+  const cx = jpx + (c - 1.0) * s3;
+  const cz = jpz + (c - 1.0) * 0.5 * s3;
+  spawnCrashCube(s3, cx, jh + s3 * 1.5, cz, cIdx++);
 }
 // Tier 3 (1 apex cube)
-spawnCrashCube(s3, jpx, -1.5 + s3 * 2.5, jpz, cIdx++);
+spawnCrashCube(s3, jpx, jh + s3 * 2.5, jpz, cIdx++);
 
 // 4. Formation 4: North Turn Apex Drift Pyramid (8 Hollow Plastic Shell Cubes on apex curve)
 const s4 = 0.44;
 const ax = 0.0, az = 48.0;
+const ah = getTrackSurfaceHeight(ax, az);
 for (let c = 0; c < 4; c++) {
-  spawnCrashCube(s4, ax + (c - 1.5) * s4, -1.5 + s4 * 0.5, az, cIdx++);
+  spawnCrashCube(s4, ax + (c - 1.5) * s4, ah + s4 * 0.5, az, cIdx++);
 }
 for (let c = 0; c < 3; c++) {
-  spawnCrashCube(s4, ax + (c - 1.0) * s4, -1.5 + s4 * 1.5, az, cIdx++);
+  spawnCrashCube(s4, ax + (c - 1.0) * s4, ah + s4 * 1.5, az, cIdx++);
 }
-spawnCrashCube(s4, ax, -1.5 + s4 * 2.5, az, cIdx++);
+spawnCrashCube(s4, ax, ah + s4 * 2.5, az, cIdx++);
 
 // 5. Formation 5: Central Crossover Block (4 Hollow Plastic Shell Cubes right at center crossing)
 const s5 = 0.42;
-spawnCrashCube(s5, -s5 * 0.7, -1.5 + s5 * 0.5, -s5 * 0.7, cIdx++);
-spawnCrashCube(s5,  s5 * 0.7, -1.5 + s5 * 0.5, -s5 * 0.7, cIdx++);
-spawnCrashCube(s5, -s5 * 0.7, -1.5 + s5 * 0.5,  s5 * 0.7, cIdx++);
-spawnCrashCube(s5,  s5 * 0.7, -1.5 + s5 * 0.5,  s5 * 0.7, cIdx++);
+const p5 = [
+  [-s5 * 0.7, -s5 * 0.7],
+  [ s5 * 0.7, -s5 * 0.7],
+  [-s5 * 0.7,  s5 * 0.7],
+  [ s5 * 0.7,  s5 * 0.7]
+];
+for (const [cx, cz] of p5) {
+  const cy = getTrackSurfaceHeight(cx, cz) + s5 * 0.5;
+  spawnCrashCube(s5, cx, cy, cz, cIdx++);
+}
 
 /* ================= Instantiate Reusable Buggy ================= */
 const buggy = new RCCar(world, scene, {
@@ -768,9 +841,9 @@ window.buggy = buggy;
 window.world = world;
 
 /* ================= Chase Camera Setup (Perfect Screen Center) ================= */
-// Calibrated so buggy is centered both horizontally and vertically in screen viewport
-const chaseDistance = 3.6; // distance behind buggy
-const chaseHeight = 1.35;   // height above buggy
+// Calibrated with lowered height to keep horizon lower in the frame while keeping buggy centered
+const chaseDistance = 3.9;  // distance behind buggy
+const chaseHeight = 0.68;    // lowered height above buggy (drops horizon lower in the frame)
 const chaseCamTarget = new V();
 const currentLookAt = new V();
 
@@ -779,7 +852,7 @@ function updateChaseCamera(dt, targetPos = null, targetQuat = null, instant = fa
   const chassisQuat = targetQuat || buggy.body.q;
 
   // Exact vertical and horizontal visual center of buggy body
-  chaseCamTarget.copy(chassisPos).add(new V(0, 0.08, 0));
+  chaseCamTarget.copy(chassisPos).add(new V(0, 0.12, 0));
 
   const forwardDir = new V(0, 0, -1).applyQuaternion(chassisQuat);
   const upDir = new V(0, 1, 0).applyQuaternion(chassisQuat);

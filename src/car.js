@@ -531,7 +531,7 @@ class RCCar {
     const mountY = -this.chassisSize * 0.08;
     const staticSag = (this.chassisMass * 9.81 * 0.25) / this.suspensionStiffness;
     const initialSuspLength = this.suspensionRestLength - staticSag;
-    const groundY = -this.world.box.hy;
+    const groundY = this.world.getTerrainHeight ? this.world.getTerrainHeight(x, z) : -this.world.box.hy;
     const targetY = y !== null ? y : groundY + this.wheelRadius + initialSuspLength - mountY;
     this.body.x.set(x, targetY, z);
     this.body.px.copy(this.body.x);
@@ -554,6 +554,9 @@ class RCCar {
   flipUpright() {
     this.body.q.set(0, 0, 0, 1);
     let surfaceY = -this.world.box.hy;
+    if (this.world.getTerrainHeight) {
+      surfaceY = this.world.getTerrainHeight(this.body.x.x, this.body.x.z);
+    }
     if (this.world.ramps) {
       for (let r = 0; r < this.world.ramps.length; r++) {
         const ry = this.world.ramps[r].getHeight(this.body.x.x, this.body.x.z);
@@ -600,8 +603,8 @@ class RCCar {
       body.toWorld(mount.localPos, _mountWorldPos);
       const mountWorldPos = _mountWorldPos;
 
-      // 2. Query contact surface (Floor, dynamic rigid bodies, and jumps/ramps)
-      let hitY = floorY;
+      // 2. Query contact surface (Floor/terrain, dynamic rigid bodies, and jumps/ramps)
+      let hitY = this.world.getTerrainHeight ? this.world.getTerrainHeight(mountWorldPos.x, mountWorldPos.z) : floorY;
 
       // Test custom ramps and jumps in world
       if (this.world.ramps) {

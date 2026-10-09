@@ -72,15 +72,16 @@ The repository hosts standalone interactive test scenes located in `tests/`, acc
 ### Test 7: RC Buggy & Suspension Dynamics (`tests/test7/index.html`)
 - **Focus**: High-performance vehicle dynamics, independent long-travel coilover suspension, speed-sensitive steering, double-sided PBR rendering, and high-energy multi-body impact response.
 - **Scene**: Competition RC buggy on a massive $96\,\text{m} \times 112\,\text{m}$ figure-8 racing circuit featuring:
-  - Double-wide $15.2\,\text{m}$ asphalt roadway lanes with yellow dashed centerline ($0.16\,\text{m}$).
-  - 3D raised beveled inner and outer border curbs ($0.60\,\text{m}$ wide, $16\,\text{cm}$ high) with automatic intersection clearance opening ($dist > 19\,\text{m}$).
+  - Continuous procedural off-road terrain elevation function `world.getTerrainHeight(x, z)` creating rolling swells, washboard whoops, and packed-dirt chatter with 8-ribbon cross-lane mesh subdivision.
+  - Double-wide $15.2\,\text{m}$ asphalt roadway lanes with yellow dashed centerline conforming to terrain.
+  - 3D raised beveled inner and outer border curbs ($0.60\,\text{m}$ wide, $14\,\text{cm}$ high) following terrain elevation with automatic intersection clearance opening ($dist > 19\,\text{m}$).
   - Checkered start/finish line grid ($15.2\,\text{m}$ wide across roadway).
-  - Two elliptic turf infield beds ($16\,\text{m}$ radius scaled $1.9\times$ in X) and 6 perimeter apex cones.
-  - Two wide tabletop jumps ($10.0\,\text{m}$ wide, $8.5\,\text{m}$ long, $0.80\,\text{m}$ high) and an infield mega kicker ramp ($8.0\,\text{m}$ wide).
+  - Two elliptic turf infield beds ($16\,\text{m}$ radius scaled $1.9\times$ in X) and 6 perimeter apex cones resting on terrain.
+  - Two wide tabletop jumps ($10.0\,\text{m}$ wide, $8.5\,\text{m}$ long, $0.80\,\text{m}$ high) and an infield mega kicker ramp ($8.0\,\text{m}$ wide) seated on terrain.
   - 44 ultra-lightweight ($45\,\text{g}$) hollow plastic shell crash cubes stacked in roadway barriers, jump landing zone, drift apex, and crossover.
 - **Interactions**:
   - Bottom-Center Virtual Joystick: compact low-profile analog joystick with progressive exponential response ($\text{steer} = \operatorname{sign}(x) \cdot |x|^{1.6}$) for precision micro-trim around center and full lock at edges.
-  - Screen-Centered Chase Follow Camera: tight lerped follow cam keeping the buggy centered horizontally and vertically on screen.
+  - Lowered-Horizon Action Chase Camera: low-angle follow cam keeping the buggy centered on screen while dropping the horizon line lower in the frame for a dramatic racing viewpoint.
   - Dynamic Speed-Sensitive Steering: automatic damping at high speeds ($\approx 47\,\text{km/h}$) prevents twitchy spinouts while preserving full lock at low speeds.
   - Momentum Transfer Crash Physics: the $4.2\,\text{kg}$ car has $93\times$ more inertia than the $45\,\text{g}$ plastic shell cubes, plowing through barriers with $<2\%$ speed drop while cubes explode into the air.
   - Suspension Debris Filter: wheels ignore lightweight debris ($w > 2.0$), preventing artificial vertical shock jolts when rolling over scattered plastic boxes.
