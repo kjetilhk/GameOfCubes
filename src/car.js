@@ -35,6 +35,9 @@ const _q1 = new Q();
 const _up = new V(0, 1, 0);
 const _forward = new V(0, 0, -1);
 const _right = new V(1, 0, 0);
+const _upDir = new V();
+const _forwardDir = new V();
+const _rightDir = new V();
 
 /* ================= Procedural Helical Spring Geometry ================= */
 function createCoilSpringGeometry(radius, wireRadius, turns, height, radialSegments, tubularSegments) {
@@ -565,9 +568,9 @@ class RCCar {
     );
 
     // Chassis local orientation directions in world space
-    const forwardDir = _forward.set(0, 0, -1).applyQuaternion(body.q);
-    const rightDir = _right.set(1, 0, 0).applyQuaternion(body.q);
-    const upDir = _up.set(0, 1, 0).applyQuaternion(body.q);
+    const forwardDir = _forwardDir.set(0, 0, -1).applyQuaternion(body.q);
+    const rightDir = _rightDir.set(1, 0, 0).applyQuaternion(body.q);
+    const upDir = _upDir.set(0, 1, 0).applyQuaternion(body.q);
 
     let groundedWheelCount = 0;
 
@@ -697,12 +700,15 @@ class RCCar {
   }
 
   /* ================= Visual Scene Graph Synchronization ================= */
-  updateVisuals() {
+  updateVisuals(customPos = null, customQuat = null) {
     const body = this.body;
 
-    // 1. Sync Chassis Root Transformation
-    this.rootGroup.position.copy(body.x);
-    this.rootGroup.quaternion.copy(body.q);
+    // 1. Sync Chassis Root Transformation (supports high-refresh 120Hz interpolation)
+    if (customPos) this.rootGroup.position.copy(customPos);
+    else this.rootGroup.position.copy(body.x);
+
+    if (customQuat) this.rootGroup.quaternion.copy(customQuat);
+    else this.rootGroup.quaternion.copy(body.q);
 
     // 2. Sync Suspensions & Wheels
     const hx = this.trackWidth * 0.5;
@@ -757,7 +763,7 @@ class RCCar {
     this.body.toWorld(this.antennaBasePos, _v1);
     const basePos = _v1;
 
-    const targetTip = _v2.copy(basePos).addScaledVector(_up.set(0, 1, 0).applyQuaternion(this.body.q), 0.36 * this.scale);
+    const targetTip = _v2.copy(basePos).addScaledVector(_upDir.set(0, 1, 0).applyQuaternion(this.body.q), 0.36 * this.scale);
     targetTip.addScaledVector(this.body.v, -0.04);
 
     this.antennaTipPos.lerp(targetTip, 0.35);

@@ -6,7 +6,7 @@
 <title>Test 7: RC Buggy & Suspension Dynamics — XPBD Dynamics</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../../src/common.css?v=5">
+<link rel="stylesheet" href="../../src/common.css?v=6">
 <style>
   #hud {
     position: fixed;
@@ -98,9 +98,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=5"></script>
-<script src="../../src/room.js?v=5"></script>
-<script src="../../src/car.js?v=5"></script>
+<script src="../../src/xpbd.js?v=6"></script>
+<script src="../../src/room.js?v=6"></script>
+<script src="../../src/car.js?v=6"></script>
 <script>
 (() => {
 'use strict';
@@ -133,20 +133,21 @@ scene.fog = new THREE.FogExp2(0x0e1117, 0.022);
 
 const camera = new THREE.PerspectiveCamera(44, 1, 0.05, 120);
 
-// Open Plane 3-Point Lighting
+// Overhead Directional Light with tight contact shadow underneath buggy
 const sunLight = new THREE.DirectionalLight(0xfff5ea, 0.95);
-sunLight.position.set(15, 25, 20);
+sunLight.position.set(3, 18, 2);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(2048, 2048);
 sunLight.shadow.camera.near = 0.5;
-sunLight.shadow.camera.far = 80;
-sunLight.shadow.camera.left = -25;
-sunLight.shadow.camera.right = 25;
-sunLight.shadow.camera.top = 25;
-sunLight.shadow.camera.bottom = -25;
-sunLight.shadow.bias = -0.0004;
+sunLight.shadow.camera.far = 45;
+sunLight.shadow.camera.left = -5;
+sunLight.shadow.camera.right = 5;
+sunLight.shadow.camera.top = 5;
+sunLight.shadow.camera.bottom = -5;
+sunLight.shadow.bias = -0.0005;
 sunLight.shadow.radius = 2.0;
 scene.add(sunLight);
+scene.add(sunLight.target);
 
 const fillLight = new THREE.DirectionalLight(0x7090b0, 0.45);
 fillLight.position.set(-15, 15, -15);
@@ -203,12 +204,13 @@ const chaseCamOffset = new V(0, 1.25, 2.75);
 const chaseCamTarget = new V();
 const currentLookAt = new V();
 
-function updateChaseCamera(dt, instant = false){
-  const chassisPos = buggy.body.x;
+function updateChaseCamera(dt, targetPos = null, targetQuat = null, instant = false){
+  const chassisPos = targetPos || buggy.body.x;
+  const chassisQuat = targetQuat || buggy.body.q;
   chaseCamTarget.copy(chassisPos).add(new V(0, 0.32, 0));
 
-  const forwardDir = new V(0, 0, -1).applyQuaternion(buggy.body.q);
-  const upDir = new V(0, 1, 0).applyQuaternion(buggy.body.q);
+  const forwardDir = new V(0, 0, -1).applyQuaternion(chassisQuat);
+  const upDir = new V(0, 1, 0).applyQuaternion(chassisQuat);
 
   const desiredPos = new V()
     .copy(chassisPos)
@@ -219,7 +221,7 @@ function updateChaseCamera(dt, instant = false){
     camera.position.copy(desiredPos);
     currentLookAt.copy(chaseCamTarget);
   } else {
-    const smooth = Math.min(1.0, 8.5 * dt);
+    const smooth = Math.min(1.0, 14.0 * dt);
     camera.position.lerp(desiredPos, smooth);
     currentLookAt.lerp(chaseCamTarget, smooth);
   }
@@ -227,7 +229,7 @@ function updateChaseCamera(dt, instant = false){
 }
 
 // Position camera behind buggy immediately
-updateChaseCamera(0, true);
+updateChaseCamera(0, null, null, true);
 
 /* ================= Virtual Joystick Controls ================= */
 const baseEl = document.getElementById('joystick-base');
@@ -321,6 +323,12 @@ window.addEventListener('keyup', e => {
 const tickFps = RoomEnv.createFpsMeter();
 let acc = 0, last = performance.now();
 
+// High-refresh display interpolation vectors (eliminates 60Hz-on-120Hz mobile double-imaging)
+const prevBodyPos = new V().copy(buggy.body.x);
+const prevBodyQuat = new THREE.Quaternion().copy(buggy.body.q);
+const interpPos = new V();
+const interpQuat = new THREE.Quaternion();
+
 function frame(now){
   tickFps(now);
   const dt = Math.min((now - last) / 1000, 0.1);
@@ -351,9 +359,11 @@ function frame(now){
   world.omega.set(0, 0, 0);
   world.omegaDot.set(0, 0, 0);
 
-  // Physics substeps
+  // Physics substeps with state snapshot for 120Hz/high-refresh interpolation
   acc += dt;
   let n = 0;
+  prevBodyPos.copy(buggy.body.x);
+  prevBodyQuat.copy(buggy.body.q);
   while (acc >= world.dt && n < 3){
     world.step();
     buggy.step(world.dt);
@@ -362,11 +372,20 @@ function frame(now){
   }
   if (n === 3) acc = 0;
 
-  // Sync visuals
-  buggy.updateVisuals();
+  // High-refresh interpolation (eliminates retinal double-image ghosting on 120Hz displays)
+  const alpha = Math.min(1.0, Math.max(0.0, acc / world.dt));
+  interpPos.lerpVectors(prevBodyPos, buggy.body.x, n > 0 ? alpha : 1.0);
+  interpQuat.slerpQuaternions(prevBodyQuat, buggy.body.q, n > 0 ? alpha : 1.0);
+
+  // Sync visuals with interpolated transform
+  buggy.updateVisuals(interpPos, interpQuat);
+
+  // Keep sunlight and contact shadow camera centered overhead the buggy
+  sunLight.position.set(interpPos.x + 3, interpPos.y + 18, interpPos.z + 2);
+  sunLight.target.position.copy(interpPos);
 
   // Update chase follow camera behind buggy
-  updateChaseCamera(dt);
+  updateChaseCamera(dt, interpPos, interpQuat);
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
