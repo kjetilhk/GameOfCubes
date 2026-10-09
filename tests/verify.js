@@ -239,6 +239,46 @@ console.log('\n=== XPBD Physics Engine Verification Suite ===\n');
   assert(worldA.nContacts !== undefined && worldB.nContacts !== undefined, 'Both instances maintain independent solver contact state');
 })();
 
+// 6. Articulated Joint Integrity & Chain Stability Test
+(() => {
+  console.log('\n6. Articulated Joint Integrity & Multi-Link Chain:');
+  const world = new XPBD.World({ dt: 1/60, substeps: 20 });
+  world.setBox(1.5, 1.5, 2.0);
+
+  const anchorPos = new Vector3(0, 1.2, -1.0);
+  let prev = null;
+  const chain = [];
+  for (let i = 0; i < 4; i++){
+    const s = 0.2;
+    const b = world.addCube(s, new Vector3(0, 1.0 - i * 0.25, -1.0));
+    chain.push(b);
+    if (i === 0) world.addSphericalJoint(b, new Vector3(0, s/2, 0), null, anchorPos);
+    else world.addSphericalJoint(b, new Vector3(0, s/2, 0), prev, new Vector3(0, -prev.size/2, 0));
+    prev = b;
+  }
+
+  // Heavy falling impact body crashing into chain
+  const impact = world.addCube(0.35, new Vector3(0.05, 1.4, -1.0), null, new Vector3(0, -3.0, 0));
+
+  for (let f = 0; f < 120; f++) world.step();
+
+  const rootWorld = new Vector3();
+  chain[0].toWorld(world.joints[0].rA, rootWorld);
+  const anchorDrift = rootWorld.distanceTo(anchorPos);
+
+  let maxJointDrift = 0;
+  const pA = new Vector3(), pB = new Vector3();
+  for (const j of world.joints){
+    j.a.toWorld(j.rA, pA);
+    if (j.b) j.b.toWorld(j.rB, pB); else pB.copy(j.rB);
+    const d = pA.distanceTo(pB);
+    if (d > maxJointDrift) maxJointDrift = d;
+  }
+
+  assert(anchorDrift < 0.001, `Ceiling joint anchor drift strictly bounded (${anchorDrift.toFixed(6)} m < 0.001 m)`);
+  assert(maxJointDrift < 0.001, `Inter-link joint separation strictly bounded (${maxJointDrift.toFixed(6)} m < 0.001 m)`);
+})();
+
 console.log(`\nVerification Result: ${passedTests}/${totalTests} tests passed.\n`);
 if (passedTests !== totalTests) {
   process.exit(1);

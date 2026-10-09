@@ -34,8 +34,10 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
     │   └── index.html  # Test 2: Cloth Simulation (compliant XPBD cloth)
     ├── test3/
     │   └── index.html  # Test 3: Soft Body Simulation (tet mesh continuum elasticity)
-    └── test4/
-        └── index.html  # Test 4: Cloth Over Sphere (fabric draping & sphere collision benchmark)
+    ├── test4/
+    │   └── index.html  # Test 4: Cloth Over Sphere (fabric draping & sphere collision benchmark)
+    └── test5/
+        └── index.html  # Test 5: Joints & Articulated Bodies (ragdoll & chain linkages)
 ```
 
 The core physics engine lives in `src/xpbd.js` without DOM or rendering dependencies. It exports `XPBD` (and alias `CubePhysics`) to the global scope (`window`/`globalThis`) and to CommonJS (`module.exports`).
@@ -101,6 +103,16 @@ Cloth draping and 3D curved obstacle collision benchmark.
 - Cloth starts $1\,\text{m}$ above sphere center ($y = 1.0\,\text{m}$) and falls freely without pinned corners.
 - Active spatial-hash cloth self-collision preventing overlapping folds from penetrating as they flute around the sphere.
 - Fixed downwards gravity with no gyro sensor permission modal; features a 3D orbit camera, wireframe mode toggle, raycast grab & pull, and dynamic rigid cube drop collisions.
+
+### Test 5: Joints & Articulated Bodies (`tests/test5/index.html`)
+
+Articulated multibody physics and character dynamics benchmark.
+- Features an interactive 15-body humanoid ragdoll connected by 14 XPBD spherical joints (head, torso, pelvis, arms, hands, thighs, shins, feet), and a hanging 6-link metallic articulated chain with heavy tip pendulum.
+- Raycaster pointer interaction allows grabbing, lifting, posing, and tossing any body segment or chain link with momentum transfer.
+- "Drop Ragdoll" drops the figure from height with random angular tumbling spin to land on the floor.
+- "Suspend / Free" toggles suspension cords anchoring hands and head to ceiling anchors.
+- Dropping dynamic cubes directly collides with the ragdoll and chain, demonstrating high-strain joint stability and zero detachment drift.
+- Full 3D orbit camera controls with background dragging and zoom wheel.
 
 ## Adding New Tests
 

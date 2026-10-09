@@ -335,6 +335,56 @@ class TetMesh {
   }
 }
 
+class SphericalJoint {
+  constructor(bodyA, rA, bodyB = null, rB = null, compliance = 0){
+    this.type = 'spherical';
+    this.a = bodyA;
+    this.rA = rA.clone();
+    this.b = bodyB;
+    this.rB = rB ? rB.clone() : new V();
+    this.compliance = compliance;
+    this.lambda = 0;
+    this.collideConnected = false;
+  }
+}
+
+class HingeJoint {
+  constructor(bodyA, rA, bodyB = null, rB = null, axisA = new V(0,1,0), axisB = new V(0,1,0), compliance = 0){
+    this.type = 'hinge';
+    this.a = bodyA;
+    this.rA = rA.clone();
+    this.b = bodyB;
+    this.rB = rB ? rB.clone() : new V();
+    this.axisA = axisA.clone().normalize();
+    this.axisB = axisB.clone().normalize();
+    this.compliance = compliance;
+    this.lambda = 0;
+    this.lambdaAng = 0;
+    this.collideConnected = false;
+  }
+}
+
+class DistanceJoint {
+  constructor(bodyA, rA, bodyB = null, rB = null, restLength = null, compliance = 0){
+    this.type = 'distance';
+    this.a = bodyA;
+    this.rA = rA.clone();
+    this.b = bodyB;
+    this.rB = rB ? rB.clone() : new V();
+    if (restLength !== null && restLength !== undefined){
+      this.restLength = restLength;
+    } else {
+      const p1 = new V(), p2 = new V();
+      bodyA.toWorld(rA, p1);
+      if (bodyB) bodyB.toWorld(this.rB, p2); else p2.copy(this.rB);
+      this.restLength = p1.distanceTo(p2);
+    }
+    this.compliance = compliance;
+    this.lambda = 0;
+    this.collideConnected = false;
+  }
+}
+
 // ---------- scratch vectors (hot path never allocates) ----------
 const t1 = new V(), t2 = new V(), t3 = new V(), t4 = new V(), tq = new Q();
 const g1 = new V(), g2 = new V(), g3 = new V(), g4 = new V();
@@ -481,6 +531,159 @@ function applyImpulse(b, r, p, sign){            // velocity impulse p at offset
 }
 
 function pointVelocity(b, r, out){ return out.crossVectors(b.w, r).add(b.v); }
+
+// ---------- rigid body joints (XPBD) ----------
+const jP1 = new V(), jP2 = new V(), jR1 = new V(), jR2 = new V(), jDisp = new V(), jDir = new V();
+const jU1 = new V(), jU2 = new V(), jK = new V(), jRotA = new V(), jRotB = new V();
+
+function solveSphericalJoint(j, h){
+  const { a, b, rA, rB, compliance } = j;
+  a.toWorld(rA, jP1);
+  jR1.subVectors(jP1, a.x);
+  if (b){
+    b.toWorld(rB, jP2);
+    jR2.subVectors(jP2, b.x);
+  } else {
+    jP2.copy(rB);
+  }
+
+  jDisp.subVectors(jP1, jP2);
+  const dist = jDisp.length();
+  if (dist < 1e-9) return;
+
+  jDir.copy(jDisp).divideScalar(dist);
+  const wA = genInvMass(a, jR1, jDir);
+  const wB = b ? genInvMass(b, jR2, jDir) : 0;
+  const wSum = wA + wB;
+  if (wSum < 1e-12) return;
+
+  const alphaTilde = compliance / (h * h);
+  const dLambda = (-dist - alphaTilde * j.lambda) / (wSum + alphaTilde);
+  j.lambda += dLambda;
+
+  jDir.multiplyScalar(dLambda);
+  applyCorrection(a, jR1, jDir, +1);
+  if (b) applyCorrection(b, jR2, jDir, -1);
+}
+
+function solveHingeJoint(j, h){
+  solveSphericalJoint(j, h);
+
+  const { a, b, axisA, axisB, compliance } = j;
+  jU1.copy(axisA).applyQuaternion(a.q);
+  if (b) jU2.copy(axisB).applyQuaternion(b.q);
+  else jU2.copy(axisB);
+
+  jK.crossVectors(jU1, jU2);
+  const sinTheta = jK.length();
+  if (sinTheta < 1e-6) return;
+
+  jK.divideScalar(sinTheta);
+  const wA = a.invI;
+  const wB = b ? b.invI : 0;
+  const wSum = wA + wB;
+  if (wSum < 1e-12) return;
+
+  const alphaTilde = compliance / (h * h);
+  const dLambda = (-sinTheta - alphaTilde * j.lambdaAng) / (wSum + alphaTilde);
+  j.lambdaAng += dLambda;
+
+  const dThetaA = dLambda * (wA / wSum);
+  jRotA.copy(jK).multiplyScalar(dThetaA);
+  tq.set(jRotA.x, jRotA.y, jRotA.z, 0).multiply(a.q);
+  a.q.x += 0.5 * tq.x; a.q.y += 0.5 * tq.y; a.q.z += 0.5 * tq.z; a.q.w += 0.5 * tq.w;
+  a.q.normalize();
+
+  if (b){
+    const dThetaB = -dLambda * (wB / wSum);
+    jRotB.copy(jK).multiplyScalar(dThetaB);
+    tq.set(jRotB.x, jRotB.y, jRotB.z, 0).multiply(b.q);
+    b.q.x += 0.5 * tq.x; b.q.y += 0.5 * tq.y; b.q.z += 0.5 * tq.z; b.q.w += 0.5 * tq.w;
+    b.q.normalize();
+  }
+}
+
+function solveDistanceJoint(j, h){
+  const { a, b, rA, rB, restLength, compliance } = j;
+  a.toWorld(rA, jP1);
+  jR1.subVectors(jP1, a.x);
+  if (b){
+    b.toWorld(rB, jP2);
+    jR2.subVectors(jP2, b.x);
+  } else {
+    jP2.copy(rB);
+  }
+
+  jDisp.subVectors(jP1, jP2);
+  const dist = jDisp.length();
+  if (dist < 1e-9) return;
+
+  const C = dist - restLength;
+  jDir.copy(jDisp).divideScalar(dist);
+  const wA = genInvMass(a, jR1, jDir);
+  const wB = b ? genInvMass(b, jR2, jDir) : 0;
+  const wSum = wA + wB;
+  if (wSum < 1e-12) return;
+
+  const alphaTilde = compliance / (h * h);
+  const dLambda = (-C - alphaTilde * j.lambda) / (wSum + alphaTilde);
+  j.lambda += dLambda;
+
+  jDir.multiplyScalar(dLambda);
+  applyCorrection(a, jR1, jDir, +1);
+  if (b) applyCorrection(b, jR2, jDir, -1);
+}
+
+function solveJointVelocities(j, h){
+  const { a, b, rA, rB } = j;
+  a.toWorld(rA, jP1);
+  jR1.subVectors(jP1, a.x);
+  pointVelocity(a, jR1, va);
+  if (b){
+    b.toWorld(rB, jP2);
+    jR2.subVectors(jP2, b.x);
+    va.sub(pointVelocity(b, jR2, t1));
+  }
+  const vRel = va.length();
+  if (vRel < 1e-6) return;
+  jDir.copy(va).divideScalar(vRel);
+  const wA = genInvMass(a, jR1, jDir);
+  const wB = b ? genInvMass(b, jR2, jDir) : 0;
+  const wSum = wA + wB;
+  if (wSum < 1e-12) return;
+
+  const dv = -vRel;
+  jDir.multiplyScalar(dv / wSum);
+  applyImpulse(a, jR1, jDir, +1);
+  if (b) applyImpulse(b, jR2, jDir, -1);
+}
+
+function resetJointLambdas(joints){
+  for (let i = 0; i < joints.length; i++){
+    const j = joints[i];
+    j.lambda = 0;
+    if (j.lambdaAng !== undefined) j.lambdaAng = 0;
+  }
+}
+
+function solveJoints(world, h){
+  const joints = world.joints;
+  for (let i = 0; i < joints.length; i++){
+    const j = joints[i];
+    if (j.type === 'spherical') solveSphericalJoint(j, h);
+    else if (j.type === 'hinge') solveHingeJoint(j, h);
+    else if (j.type === 'distance') solveDistanceJoint(j, h);
+  }
+}
+
+function areConnected(world, a, b){
+  for (let i = 0; i < world.joints.length; i++){
+    const j = world.joints[i];
+    if (j.collideConnected) continue;
+    if ((j.a === a && j.b === b) || (j.a === b && j.b === a)) return true;
+  }
+  return false;
+}
 
 // ---------- cube vs walls: corners against six planes ----------
 const corner = new V(), wallPt = new V();
@@ -643,9 +846,13 @@ function solveStaticFriction(world, muS, fwd){
 }
 
 function solvePositions(world, h, maxPush, iters){
-  for (let it = 0; it < iters; it++) solveNormals(world, maxPush, (it & 1) === 0 ? !world.flip : world.flip);
+  for (let it = 0; it < iters; it++){
+    if (world.joints.length > 0) solveJoints(world, h);
+    solveNormals(world, maxPush, (it & 1) === 0 ? !world.flip : world.flip);
+  }
   solveStaticFriction(world, world.muStatic, !world.flip);
   solveNormals(world, maxPush, world.flip);
+  if (world.joints.length > 0) solveJoints(world, h);
 }
 
 function contactArms(c){
@@ -696,6 +903,9 @@ function solveVelocities(world, h, gmag){
       applyImpulse(a, r1, dir, +1);
       applyImpulse(b, r2, dir, -1);
     }
+    if (world.joints.length > 0){
+      for (let i = 0; i < world.joints.length; i++) solveJointVelocities(world.joints[i], h);
+    }
   }
 }
 
@@ -710,6 +920,7 @@ class World {
     this.cloths = [];
     this.tetMeshes = [];
     this.spheres = [];
+    this.joints = [];
     this.walls = [];
     this.box = { hx:1.0, hy:1.5, d:2.2 };
     this.accel = new V(0, -9.81, 0);   // apparent acceleration felt inside the box
@@ -789,6 +1000,24 @@ class World {
     return c;
   }
 
+  addSphericalJoint(bodyA, rA, bodyB, rB, compliance = 0){
+    const j = new SphericalJoint(bodyA, rA, bodyB, rB, compliance);
+    this.joints.push(j);
+    return j;
+  }
+
+  addHingeJoint(bodyA, rA, bodyB, rB, axisA, axisB, compliance = 0){
+    const j = new HingeJoint(bodyA, rA, bodyB, rB, axisA, axisB, compliance);
+    this.joints.push(j);
+    return j;
+  }
+
+  addDistanceJoint(bodyA, rA, bodyB, rB, restLength = null, compliance = 0){
+    const j = new DistanceJoint(bodyA, rA, bodyB, rB, restLength, compliance);
+    this.joints.push(j);
+    return j;
+  }
+
   addContact(a, b, pa, pb, n){
     if (this.nContacts === this.pool.length)
       this.pool.push({ a:null, b:null, n:new V(), la:new V(), lb:new V(), wp:new V(), lam:0, vn0:0, e:0, jt:new V() });
@@ -809,6 +1038,7 @@ class World {
     this.cloths.length = 0;
     this.tetMeshes.length = 0;
     this.spheres.length = 0;
+    this.joints.length = 0;
     this.nContacts = 0;
     this.maxParticleRadius = 0.02;
   }
@@ -829,6 +1059,7 @@ class World {
     const { bodies, particles, constraints, volumeConstraints, walls, omega, omegaDot, accel, center } = this;
 
     for (let s = 0; s < this.substeps; s++){
+      if (this.joints.length > 0) resetJointLambdas(this.joints);
       // 1. integrate rigid bodies
       for (const b of bodies){
         b.px.copy(b.x); b.pq.copy(b.q);
@@ -996,7 +1227,10 @@ class World {
         }
       }
       for (let i = 0; i < bodies.length; i++)
-        for (let j = i + 1; j < bodies.length; j++) collideBoxes(this, bodies[i], bodies[j]);
+        for (let j = i + 1; j < bodies.length; j++){
+          if (areConnected(this, bodies[i], bodies[j])) continue;
+          collideBoxes(this, bodies[i], bodies[j]);
+        }
 
       solvePositions(this, h, maxPush, this.positionIterations);
 
@@ -1020,7 +1254,7 @@ class World {
   }
 }
 
-const CubePhysics = { World, Body, Particle, DistanceConstraint, Cloth, TetVolumeConstraint, TetMesh, DEFAULTS };
+const CubePhysics = { World, Body, Particle, DistanceConstraint, Cloth, TetVolumeConstraint, TetMesh, SphericalJoint, HingeJoint, DistanceJoint, DEFAULTS };
 
 // Export
 global.CubePhysics = CubePhysics;

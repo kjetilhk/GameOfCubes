@@ -45,6 +45,18 @@ The repository hosts standalone interactive test scenes located in `tests/`, acc
   - "Drop Cube": spawns falling rigid cubes onto the draped cloth.
   - "Reset": restores the cloth at $1\,\text{m}$ above the sphere center to fall again.
 
+### Test 5: Joints & Articulated Bodies (`tests/test5/index.html`)
+- **Focus**: Articulated multibody physics, XPBD spherical & distance joints, character dynamics.
+- **Scene**: Interactive 15-body humanoid ragdoll with 14 spherical joints and a hanging 6-link metallic articulated chain with heavy tip pendulum in the 3.0m studio room.
+- **Interactions**:
+  - Touch/Mouse Drag: raycast grab lifts, poses, and tosses any ragdoll limb or chain link with momentum transfer.
+  - 3D Orbit Camera: dragging background orbits smoothly around the character, mouse wheel zooms in/out.
+  - "Drop Ragdoll": drops the humanoid from height with random angular tumbling spin to land on the floor.
+  - "Suspend / Free": toggles suspension cords anchoring hands and head to ceiling anchors.
+  - "Drop Cube": spawns falling rigid cubes directly onto the ragdoll and chain.
+  - "Wireframe": toggles mesh wireframe rendering.
+  - "Reset": restores default suspended pose.
+
 ---
 
 ## Running Locally

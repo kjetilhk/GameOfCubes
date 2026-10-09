@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Test 5: Joints & Articulated Bodies — XPBD Dynamics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../src/common.css">
+</head>
+<body>
+<div id="fps">-- FPS</div>
+<div id="note"></div>
+<div id="hud">
+  <a id="back" href="../../">← Tests</a>
+  <button id="reset">Reset</button>
+  <button id="drop-ragdoll">Drop Ragdoll</button>
+  <button id="pin-ragdoll">Suspend / Free</button>
+  <button id="cube">Drop Cube</button>
+  <button id="wire">Wireframe</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="../../src/xpbd.js"></script>
+<script src="../../src/room.js"></script>
+<script>
+(() => {
+'use strict';
+
+const V = THREE.Vector3;
+const world = new XPBD.World({ dt: 1/60, substeps: 20, linearDamping: 0.5, angularDamping: 1.2 });
+
+/* ================= rendering & studio room ================= */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
+const lights = RoomEnv.createLighting(scene);
+let wallGroup = null;
+
+function resize(){
+  wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
+}
+window.addEventListener('resize', resize);
+
+/* ================= 3D Orbit Camera ================= */
+const orbitTarget = new V(0, -0.2, -1.2);
+let orbitDist = 3.6;
+let orbitPitch = 0.18;
+let orbitYaw = 0.0;
+
+function updateCameraTransform(){
+  const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
+  const cy = Math.cos(orbitYaw), sy = Math.sin(orbitYaw);
+  camera.position.set(
+    orbitTarget.x + orbitDist * sy * cp,
+    orbitTarget.y + orbitDist * sp,
+    orbitTarget.z + orbitDist * cy * cp
+  );
+  camera.lookAt(orbitTarget);
+}
+resize();
+updateCameraTransform();
+
+/* ================= Visual Materials ================= */
+const woodTorsoMat = new THREE.MeshPhysicalMaterial({
+  color: 0xcca068,
+  roughness: 0.40,
+  metalness: 0.04,
+  clearcoat: 0.35,
+  clearcoatRoughness: 0.15
+});
+
+const woodHeadMat = new THREE.MeshPhysicalMaterial({
+  color: 0xdeb887,
+  roughness: 0.38,
+  metalness: 0.04,
+  clearcoat: 0.40,
+  clearcoatRoughness: 0.12
+});
+
+const woodLimbMat = new THREE.MeshPhysicalMaterial({
+  color: 0xd9ab73,
+  roughness: 0.42,
+  metalness: 0.04,
+  clearcoat: 0.30,
+  clearcoatRoughness: 0.18
+});
+
+const brassChainMat = new THREE.MeshPhysicalMaterial({
+  color: 0xd4af37,
+  roughness: 0.28,
+  metalness: 0.85,
+  clearcoat: 0.30
+});
+
+const heavyWeightMat = new THREE.MeshPhysicalMaterial({
+  color: 0x444b58,
+  roughness: 0.22,
+  metalness: 0.75,
+  clearcoat: 0.40
+});
+
+const pinCordsMat = new THREE.LineBasicMaterial({
+  color: 0xe0e6ed,
+  transparent: true,
+  opacity: 0.65
+});
+
+/* ================= Geometry & Scene Meshes ================= */
+const cubeGeometries = new Map();
+function getCubeGeom(size){
+  const key = size.toFixed(4);
+  if (!cubeGeometries.has(key)){
+    cubeGeometries.set(key, RoomEnv.roundedCube(size, size * 0.12, 4));
+  }
+  return cubeGeometries.get(key);
+}
+
+const bodyMeshes = [];
+const ragdollBodies = [];
+const chainBodies = [];
+let pinJoints = [];
+let isSuspended = false;
+let wireActive = false;
+
+function createBodyMesh(body, material){
+  const mesh = new THREE.Mesh(getCubeGeom(body.size), material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.userData.body = body;
+  scene.add(mesh);
+  bodyMeshes.push({ body, mesh });
+  return mesh;
+}
+
+/* ================= Articulated Chain ================= */
+function buildChain(){
+  const numLinks = 6;
+  const linkSize = 0.16;
+  const spacing = 0.20;
+  const anchorPos = new V(-0.75, 1.45, -1.2);
+  let prevBody = null;
+
+  for (let i = 0; i < numLinks; i++){
+    const isTip = (i === numLinks - 1);
+    const size = isTip ? 0.24 : linkSize;
+    const y = anchorPos.y - (i + 1) * spacing;
+    const density = isTip ? 3500 : 900; // heavy end weight
+    const b = new XPBD.Body(size, density);
+    b.x.set(anchorPos.x, y, anchorPos.z);
+    b.sync();
+    world.bodies.push(b);
+    chainBodies.push(b);
+
+    const mat = isTip ? heavyWeightMat : brassChainMat;
+    createBodyMesh(b, mat);
+
+    if (i === 0){
+      world.addSphericalJoint(b, new V(0, size/2, 0), null, anchorPos);
+    } else {
+      world.addSphericalJoint(b, new V(0, size/2, 0), prevBody, new V(0, -prevBody.size/2, 0));
+    }
+    prevBody = b;
+  }
+}
+
+/* ================= Humanoid Ragdoll ================= */
+function buildRagdoll(originY = 0.1, originX = 0.15){
+  const parts = {};
+  function makePart(name, size, relX, relY, relZ, mat){
+    const b = new XPBD.Body(size, 750);
+    b.x.set(originX + relX, originY + relY, -1.2 + relZ);
+    b.sync();
+    b.name = name;
+    world.bodies.push(b);
+    ragdollBodies.push(b);
+    parts[name] = b;
+    createBodyMesh(b, mat);
+    return b;
+  }
+
+  const torso = makePart('torso', 0.36, 0, 0.25, 0, woodTorsoMat);
+  const head = makePart('head', 0.24, 0, 0.60, 0, woodHeadMat);
+  const pelvis = makePart('pelvis', 0.30, 0, -0.15, 0, woodTorsoMat);
+
+  const lUpperArm = makePart('lUpperArm', 0.18, -0.30, 0.25, 0, woodLimbMat);
+  const lForearm = makePart('lForearm', 0.16, -0.50, 0.25, 0, woodLimbMat);
+  const lHand = makePart('lHand', 0.13, -0.68, 0.25, 0, woodHeadMat);
+
+  const rUpperArm = makePart('rUpperArm', 0.18, 0.30, 0.25, 0, woodLimbMat);
+  const rForearm = makePart('rForearm', 0.16, 0.50, 0.25, 0, woodLimbMat);
+  const rHand = makePart('rHand', 0.13, 0.68, 0.25, 0, woodHeadMat);
+
+  const lThigh = makePart('lThigh', 0.20, -0.11, -0.44, 0, woodLimbMat);
+  const lShin = makePart('lShin', 0.18, -0.11, -0.67, 0, woodLimbMat);
+  const lFoot = makePart('lFoot', 0.15, -0.11, -0.87, 0.04, woodHeadMat);
+
+  const rThigh = makePart('rThigh', 0.20, 0.11, -0.44, 0, woodLimbMat);
+  const rShin = makePart('rShin', 0.18, 0.11, -0.67, 0, woodLimbMat);
+  const rFoot = makePart('rFoot', 0.15, 0.11, -0.87, 0.04, woodHeadMat);
+
+  // Connect limbs via XPBD Spherical Joints
+  world.addSphericalJoint(head, new V(0, -0.12, 0), torso, new V(0, 0.18, 0));
+  world.addSphericalJoint(pelvis, new V(0, 0.15, 0), torso, new V(0, -0.18, 0));
+
+  world.addSphericalJoint(lUpperArm, new V(0.09, 0, 0), torso, new V(-0.18, 0.12, 0));
+  world.addSphericalJoint(lForearm, new V(0.08, 0, 0), lUpperArm, new V(-0.09, 0, 0));
+  world.addSphericalJoint(lHand, new V(0.065, 0, 0), lForearm, new V(-0.08, 0, 0));
+
+  world.addSphericalJoint(rUpperArm, new V(-0.09, 0, 0), torso, new V(0.18, 0.12, 0));
+  world.addSphericalJoint(rForearm, new V(-0.08, 0, 0), rUpperArm, new V(0.09, 0, 0));
+  world.addSphericalJoint(rHand, new V(-0.065, 0, 0), rForearm, new V(0.08, 0, 0));
+
+  world.addSphericalJoint(lThigh, new V(0, 0.10, 0), pelvis, new V(-0.10, -0.15, 0));
+  world.addSphericalJoint(lShin, new V(0, 0.09, 0), lThigh, new V(0, -0.10, 0));
+  world.addSphericalJoint(lFoot, new V(0, 0.075, -0.04), lShin, new V(0, -0.09, 0));
+
+  world.addSphericalJoint(rThigh, new V(0, 0.10, 0), pelvis, new V(0.10, -0.15, 0));
+  world.addSphericalJoint(rShin, new V(0, 0.09, 0), rThigh, new V(0, -0.10, 0));
+  world.addSphericalJoint(rFoot, new V(0, 0.075, -0.04), rShin, new V(0, -0.09, 0));
+
+  return parts;
+}
+
+/* ================= Suspension Cords Lines ================= */
+const cordGeom = new THREE.BufferGeometry();
+const cordPositions = new Float32Array(6 * 3); // 3 cords * 2 points * 3 coords
+cordGeom.setAttribute('position', new THREE.BufferAttribute(cordPositions, 3));
+const cordLines = new THREE.LineSegments(cordGeom, pinCordsMat);
+scene.add(cordLines);
+
+function updateCordLines(){
+  if (!isSuspended || pinJoints.length === 0){
+    cordLines.visible = false;
+    return;
+  }
+  cordLines.visible = true;
+  const arr = cordGeom.attributes.position.array;
+  let idx = 0;
+  const pA = new V();
+  for (const j of pinJoints){
+    j.a.toWorld(j.rA, pA);
+    arr[idx++] = pA.x; arr[idx++] = pA.y; arr[idx++] = pA.z;
+    arr[idx++] = j.rB.x; arr[idx++] = j.rB.y; arr[idx++] = j.rB.z;
+  }
+  cordGeom.attributes.position.needsUpdate = true;
+}
+
+/* ================= Suspend / Release Ragdoll ================= */
+let ragdollParts = null;
+
+function setSuspension(active){
+  // Remove previous pin joints
+  for (const pj of pinJoints){
+    const idx = world.joints.indexOf(pj);
+    if (idx !== -1) world.joints.splice(idx, 1);
+  }
+  pinJoints = [];
+  isSuspended = active;
+
+  if (active && ragdollParts){
+    // Suspend by hands and head
+    const leftAnchor = new V(ragdollParts.lHand.x.x, 1.45, ragdollParts.lHand.x.z);
+    const rightAnchor = new V(ragdollParts.rHand.x.x, 1.45, ragdollParts.rHand.x.z);
+    const headAnchor = new V(ragdollParts.head.x.x, 1.45, ragdollParts.head.x.z);
+
+    pinJoints.push(world.addSphericalJoint(ragdollParts.lHand, new V(0, 0.065, 0), null, leftAnchor));
+    pinJoints.push(world.addSphericalJoint(ragdollParts.rHand, new V(0, 0.065, 0), null, rightAnchor));
+    pinJoints.push(world.addSphericalJoint(ragdollParts.head, new V(0, 0.12, 0), null, headAnchor));
+    RoomEnv.showNote('Ragdoll suspended by suspension cords');
+  } else {
+    RoomEnv.showNote('Ragdoll released to tumble under gravity');
+  }
+}
+
+/* ================= Dynamic Cube Spawner ================= */
+const cubeSpawner = RoomEnv.createCubeSpawner({
+  scene,
+  world,
+  palette: [0xe05a47, 0x4299e1, 0x48bb78, 0xed8936, 0x9f7aea],
+  maxCubes: 18,
+  sizeRange: 0.28,
+  spawnPos: () => new V(
+    (Math.random() - 0.5) * 0.8,
+    1.25,
+    -1.2 + (Math.random() - 0.5) * 0.4
+  )
+});
+
+/* ================= Reset Scene ================= */
+function initScene(dropFromHeight = false){
+  cubeSpawner.clear();
+  for (const bm of bodyMeshes){
+    scene.remove(bm.mesh);
+  }
+  bodyMeshes.length = 0;
+  ragdollBodies.length = 0;
+  chainBodies.length = 0;
+  pinJoints.length = 0;
+  world.clear();
+
+  buildChain();
+
+  const startY = dropFromHeight ? 0.75 : 0.05;
+  ragdollParts = buildRagdoll(startY, 0.15);
+
+  if (dropFromHeight){
+    // Give slight tumbling spin when dropped from height
+    for (const b of ragdollBodies){
+      b.w.set((Math.random()-0.5)*3, (Math.random()-0.5)*3, (Math.random()-0.5)*3);
+    }
+    setSuspension(false);
+  } else {
+    setSuspension(true);
+  }
+}
+initScene(false);
+
+/* ================= Interactive Raycast Dragging ================= */
+const raycaster = new THREE.Raycaster();
+const mouseVec = new THREE.Vector2();
+const dragPlane = new THREE.Plane();
+const dragHit = new V();
+let grabbedBody = null;
+let grabLocal = new V();
+let dragStartPointer = { x: 0, y: 0 };
+let hasMovedPointer = false;
+
+function handlePointerDrag(e, type){
+  mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+  if (type === 'down'){
+    raycaster.setFromCamera(mouseVec, camera);
+    const meshes = bodyMeshes.map(bm => bm.mesh).concat(cubeSpawner.getMeshes());
+    const hits = raycaster.intersectObjects(meshes, false);
+
+    if (hits.length > 0){
+      const hit = hits[0];
+      const body = hit.object.userData.body;
+      if (body){
+        grabbedBody = body;
+        body.toLocal(hit.point, grabLocal);
+        dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new V()).negate(), hit.point);
+        dragStartPointer = { x: e.clientX, y: e.clientY };
+        hasMovedPointer = false;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (type === 'move' && grabbedBody){
+    hasMovedPointer = true;
+    raycaster.setFromCamera(mouseVec, camera);
+    if (raycaster.ray.intersectPlane(dragPlane, dragHit)){
+      const curWorld = new V();
+      grabbedBody.toWorld(grabLocal, curWorld);
+      const delta = new V().subVectors(dragHit, curWorld);
+      grabbedBody.x.addScaledVector(delta, 0.45);
+      grabbedBody.v.copy(delta).multiplyScalar(18);
+      grabbedBody.px.copy(grabbedBody.x);
+    }
+    return true;
+  }
+
+  if (type === 'up'){
+    if (grabbedBody){
+      grabbedBody = null;
+      return true;
+    }
+    return false;
+  }
+
+  return false;
+}
+
+/* ================= Orbit Controls ================= */
+let orbitDragging = false;
+let lastPointerX = 0, lastPointerY = 0;
+
+window.addEventListener('pointerdown', e => {
+  if (e.target && e.target.closest && (e.target.closest('#hud') || e.target.closest('#back'))) return;
+  if (handlePointerDrag(e, 'down')) return;
+  orbitDragging = true;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+});
+
+window.addEventListener('pointermove', e => {
+  if (handlePointerDrag(e, 'move')) return;
+  if (!orbitDragging) return;
+  const dx = e.clientX - lastPointerX;
+  const dy = e.clientY - lastPointerY;
+  lastPointerX = e.clientX;
+  lastPointerY = e.clientY;
+  orbitYaw -= dx * 0.007;
+  orbitPitch = THREE.MathUtils.clamp(orbitPitch + dy * 0.007, -0.6, 1.3);
+  updateCameraTransform();
+});
+
+window.addEventListener('pointerup', e => {
+  handlePointerDrag(e, 'up');
+  orbitDragging = false;
+});
+
+window.addEventListener('wheel', e => {
+  orbitDist = THREE.MathUtils.clamp(orbitDist + e.deltaY * 0.002, 1.8, 6.5);
+  updateCameraTransform();
+}, { passive: true });
+
+/* ================= UI Button Controls ================= */
+document.getElementById('reset').addEventListener('click', () => {
+  initScene(false);
+  RoomEnv.showNote('Scene reset to default suspended pose');
+});
+
+document.getElementById('drop-ragdoll').addEventListener('click', () => {
+  initScene(true);
+  RoomEnv.showNote('Ragdoll dropped from height with tumble spin');
+});
+
+document.getElementById('pin-ragdoll').addEventListener('click', () => {
+  setSuspension(!isSuspended);
+});
+
+document.getElementById('cube').addEventListener('click', () => {
+  cubeSpawner.spawn();
+  RoomEnv.showNote('Spawned rigid cube');
+});
+
+document.getElementById('wire').addEventListener('click', function(){
+  wireActive = !wireActive;
+  this.classList.toggle('active', wireActive);
+  for (const bm of bodyMeshes){
+    bm.mesh.material.wireframe = wireActive;
+  }
+  for (const m of cubeSpawner.getMeshes()){
+    m.material.wireframe = wireActive;
+  }
+  RoomEnv.showNote(wireActive ? 'Wireframe enabled' : 'Wireframe disabled');
+});
+
+/* ================= Main Animation Loop ================= */
+const fps = RoomEnv.createFpsMeter();
+
+function animate(){
+  requestAnimationFrame(animate);
+  fps.tick();
+
+  // Physics step
+  world.step();
+
+  // Sync rigid body meshes
+  for (let i = 0; i < bodyMeshes.length; i++){
+    const { body, mesh } = bodyMeshes[i];
+    mesh.position.copy(body.x);
+    mesh.quaternion.copy(body.q);
+  }
+  cubeSpawner.sync();
+
+  // Sync cords lines
+  updateCordLines();
+
+  renderer.render(scene, camera);
+}
+animate();
+
+})();
+</script>
+</body>
+</html>
