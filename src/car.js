@@ -125,7 +125,7 @@ class RCCar {
     const defaultY = groundY + this.wheelRadius + initialSuspLength - mountY;
 
     const posX = options.x !== undefined ? options.x : 0.0;
-    const posY = options.y !== undefined ? options.y : defaultY;
+    const posY = (options.y !== undefined && options.y !== null) ? options.y : defaultY;
     const posZ = options.z !== undefined ? options.z : -world.box.d * 0.5;
 
     // 1. Create Core XPBD Rigid Body (Chassis)
@@ -605,13 +605,13 @@ class RCCar {
 
         const totalSuspensionForce = Math.max(0, springForce + dampingForce);
 
-        // Apply suspension force to chassis
-        const suspForceVec = _v3.copy(upDir).multiplyScalar(totalSuspensionForce * dt * body.invM);
+        // Apply suspension force to chassis vertically opposing gravity
+        const suspForceVec = _v3.set(0, 1, 0).multiplyScalar(totalSuspensionForce * dt * body.invM);
         body.v.add(suspForceVec);
 
         // Suspension torque on chassis (produces authentic squat, dive, and body roll!)
         _v4.subVectors(mountWorldPos, body.x);
-        const suspTorque = _v2.crossVectors(_v4, _v3.copy(upDir).multiplyScalar(totalSuspensionForce * dt));
+        const suspTorque = _v2.crossVectors(_v4, _v3.set(0, 1, 0).multiplyScalar(totalSuspensionForce * dt));
         body.w.addScaledVector(suspTorque, body.invI);
 
         // 3. Tire Traction: Longitudinal & Lateral
@@ -632,7 +632,7 @@ class RCCar {
           // 4WD torque distribution
           driveThrust = this.throttle * this.engineForce * 0.25;
         } else {
-          driveThrust = -wheelLongSpeed * 6.0; // rolling drag
+          driveThrust = -wheelLongSpeed * 50.0; // firm idle rolling resistance
         }
 
         const driveForceVec = _v4.copy(wheelHeading).multiplyScalar(driveThrust * dt * body.invM);
@@ -656,10 +656,15 @@ class RCCar {
       }
     }
 
-    // Zero-velocity resting lock when no throttle is applied and moving very slowly
-    if (Math.abs(this.throttle) < 0.01 && !this.isBraking && body.v.lengthSq() < 0.008) {
-      body.v.set(0, 0, 0);
-      body.w.set(0, 0, 0);
+    // Zero-velocity resting lock when no throttle is applied and buggy is settled
+    if (Math.abs(this.throttle) < 0.01 && !this.isBraking && groundedWheelCount >= 2) {
+      body.v.x *= 0.82;
+      body.v.z *= 0.82;
+      if (Math.hypot(body.v.x, body.v.z) < 0.06) {
+        body.v.x = 0;
+        body.v.z = 0;
+        body.w.set(0, 0, 0);
+      }
     }
 
     // Mid-air RC gyro pitch/roll stabilizer

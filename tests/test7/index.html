@@ -6,7 +6,7 @@
 <title>Test 7: RC Buggy & Suspension Dynamics — XPBD Dynamics</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../../src/common.css?v=2">
+<link rel="stylesheet" href="../../src/common.css?v=3">
 <style>
   #hud {
     position: fixed;
@@ -98,9 +98,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=2"></script>
-<script src="../../src/room.js?v=2"></script>
-<script src="../../src/car.js?v=2"></script>
+<script src="../../src/xpbd.js?v=3"></script>
+<script src="../../src/room.js?v=3"></script>
+<script src="../../src/car.js?v=3"></script>
 <script>
 (() => {
 'use strict';
@@ -183,10 +183,13 @@ function resize(){
 window.addEventListener('resize', resize);
 resize();
 
+// Strictly disable phone gyro / accelerometer sensors for Test 7
+window.addEventListener('devicemotion', e => e.stopImmediatePropagation(), true);
+window.addEventListener('deviceorientation', e => e.stopImmediatePropagation(), true);
+
 /* ================= Instantiate Reusable Buggy ================= */
 const buggy = new RCCar(world, scene, {
   x: 0,
-  y: null,
   z: -1.2,
   scale: 1.0,
   chassisMass: 4.2,
@@ -342,6 +345,11 @@ function frame(now){
     const thumbY = -kThrottle * maxJoystickRadius;
     thumbEl.style.transform = `translate(calc(-50% + ${thumbX}px), calc(-50% + ${thumbY}px))`;
   }
+
+  // Strictly lock gravity vertically downward (no phone gyro tilt)
+  world.accel.set(0, -9.81, 0);
+  world.omega.set(0, 0, 0);
+  world.omegaDot.set(0, 0, 0);
 
   // Physics substeps
   acc += dt;
