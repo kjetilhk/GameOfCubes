@@ -51,9 +51,9 @@ function resize(){
 window.addEventListener('resize', resize);
 
 /* ================= 3D Orbit Camera ================= */
-const orbitTarget = new V(0, -0.2, -1.2);
+const orbitTarget = new V(-0.15, 0.25, -1.2);
 let orbitDist = 3.6;
-let orbitPitch = 0.18;
+let orbitPitch = 0.08;
 let orbitYaw = 0.0;
 
 function updateCameraTransform(){
@@ -146,7 +146,7 @@ function buildChain(){
   const numLinks = 6;
   const linkSize = 0.16;
   const spacing = 0.20;
-  const anchorPos = new V(-0.75, 1.45, -1.2);
+  const anchorPos = new V(-0.75, 1.25, -1.2);
   let prevBody = null;
 
   for (let i = 0; i < numLinks; i++){
@@ -268,9 +268,9 @@ function setSuspension(active){
 
   if (active && ragdollParts){
     // Suspend by hands and head
-    const leftAnchor = new V(ragdollParts.lHand.x.x, 1.45, ragdollParts.lHand.x.z);
-    const rightAnchor = new V(ragdollParts.rHand.x.x, 1.45, ragdollParts.rHand.x.z);
-    const headAnchor = new V(ragdollParts.head.x.x, 1.45, ragdollParts.head.x.z);
+    const leftAnchor = new V(ragdollParts.lHand.x.x, 1.15, ragdollParts.lHand.x.z);
+    const rightAnchor = new V(ragdollParts.rHand.x.x, 1.15, ragdollParts.rHand.x.z);
+    const headAnchor = new V(ragdollParts.head.x.x, 1.15, ragdollParts.head.x.z);
 
     pinJoints.push(world.addSphericalJoint(ragdollParts.lHand, new V(0, 0.065, 0), null, leftAnchor));
     pinJoints.push(world.addSphericalJoint(ragdollParts.rHand, new V(0, 0.065, 0), null, rightAnchor));
@@ -340,7 +340,7 @@ function handlePointerDrag(e, type){
 
   if (type === 'down'){
     raycaster.setFromCamera(mouseVec, camera);
-    const meshes = bodyMeshes.map(bm => bm.mesh).concat(cubeSpawner.getMeshes());
+    const meshes = bodyMeshes.map(bm => bm.mesh).concat(cubeSpawner.meshes);
     const hits = raycaster.intersectObjects(meshes, false);
 
     if (hits.length > 0){
@@ -433,7 +433,7 @@ document.getElementById('pin-ragdoll').addEventListener('click', () => {
 });
 
 document.getElementById('cube').addEventListener('click', () => {
-  cubeSpawner.spawn();
+  cubeSpawner.spawnCube();
   RoomEnv.showNote('Spawned rigid cube');
 });
 
@@ -443,21 +443,23 @@ document.getElementById('wire').addEventListener('click', function(){
   for (const bm of bodyMeshes){
     bm.mesh.material.wireframe = wireActive;
   }
-  for (const m of cubeSpawner.getMeshes()){
+  for (const m of cubeSpawner.meshes){
     m.material.wireframe = wireActive;
   }
   RoomEnv.showNote(wireActive ? 'Wireframe enabled' : 'Wireframe disabled');
 });
 
 /* ================= Main Animation Loop ================= */
-const fps = RoomEnv.createFpsMeter();
+const tickFps = RoomEnv.createFpsMeter();
+let acc = 0, last = performance.now();
 
-function animate(){
-  requestAnimationFrame(animate);
-  fps.tick();
-
-  // Physics step
-  world.step();
+function frame(now){
+  tickFps(now);
+  acc += Math.min((now - last) / 1000, 0.1);
+  last = now;
+  let n = 0;
+  while (acc >= world.dt && n < 3){ world.step(); acc -= world.dt; n++; }
+  if (n === 3) acc = 0;
 
   // Sync rigid body meshes
   for (let i = 0; i < bodyMeshes.length; i++){
@@ -471,8 +473,9 @@ function animate(){
   updateCordLines();
 
   renderer.render(scene, camera);
+  requestAnimationFrame(frame);
 }
-animate();
+requestAnimationFrame(frame);
 
 })();
 </script>
