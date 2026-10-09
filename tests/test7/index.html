@@ -50,11 +50,12 @@
     border-color: rgba(0, 229, 255, 0.90);
   }
 
-  /* Compact low-profile analog joystick in bottom-left corner */
+  /* Compact low-profile analog joystick at bottom center */
   #joystick-container {
     position: fixed;
-    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-    left: calc(16px + env(safe-area-inset-left, 0px));
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -127,9 +128,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=8"></script>
-<script src="../../src/room.js?v=8"></script>
-<script src="../../src/car.js?v=8"></script>
+<script src="../../src/xpbd.js?v=9"></script>
+<script src="../../src/room.js?v=9"></script>
+<script src="../../src/car.js?v=9"></script>
 <script>
 (() => {
 'use strict';
@@ -196,7 +197,8 @@ sunLight.shadow.camera.left = -14;
 sunLight.shadow.camera.right = 14;
 sunLight.shadow.camera.top = 14;
 sunLight.shadow.camera.bottom = -14;
-sunLight.shadow.bias = -0.0005;
+sunLight.shadow.bias = -0.0002;
+sunLight.shadow.normalBias = 0.02;
 sunLight.shadow.radius = 2.0;
 scene.add(sunLight);
 scene.add(sunLight.target);
@@ -213,7 +215,8 @@ const groundGeom = new THREE.PlaneGeometry(180, 180);
 const groundMat = new THREE.MeshStandardMaterial({
   color: 0x13171f,
   roughness: 0.88,
-  metalness: 0.08
+  metalness: 0.08,
+  side: THREE.DoubleSide
 });
 const groundMesh = new THREE.Mesh(groundGeom, groundMat);
 groundMesh.rotation.x = -Math.PI / 2;
@@ -378,7 +381,8 @@ roadGeom.setIndex(roadIndices);
 const roadMat = new THREE.MeshStandardMaterial({
   color: 0x1a1e27,
   roughness: 0.82,
-  metalness: 0.12
+  metalness: 0.12,
+  side: THREE.DoubleSide
 });
 const roadMesh = new THREE.Mesh(roadGeom, roadMat);
 roadMesh.receiveShadow = true;
@@ -393,7 +397,8 @@ innerGeom.computeVertexNormals();
 const borderMat = new THREE.MeshStandardMaterial({
   vertexColors: true,
   roughness: 0.45,
-  metalness: 0.08
+  metalness: 0.08,
+  side: THREE.DoubleSide
 });
 const innerMesh = new THREE.Mesh(innerGeom, borderMat);
 innerMesh.receiveShadow = true;
@@ -414,7 +419,7 @@ const lineGeom = new THREE.BufferGeometry();
 lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
 lineGeom.setIndex(lineIndices);
 lineGeom.computeVertexNormals();
-const lineMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+const lineMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide });
 trackGroup.add(new THREE.Mesh(lineGeom, lineMat));
 
 // Checkered Start / Finish Line across full 3.8m lane width
@@ -425,7 +430,7 @@ for (let c = 0; c < sfChecks; c++) {
   for (let r = 0; r < 2; r++) {
     const isWhite = (c + r) % 2 === 0;
     const checkGeom = new THREE.PlaneGeometry(trackWidth / sfChecks, sfLen / 2);
-    const checkMat = new THREE.MeshBasicMaterial({ color: isWhite ? 0xf0f4f8 : 0x11141a });
+    const checkMat = new THREE.MeshBasicMaterial({ color: isWhite ? 0xf0f4f8 : 0x11141a, side: THREE.DoubleSide });
     const checkMesh = new THREE.Mesh(checkGeom, checkMat);
     checkMesh.rotation.x = -Math.PI / 2;
     checkMesh.position.set(
@@ -440,7 +445,7 @@ startFinishGroup.position.set(0, 0, -2.5);
 trackGroup.add(startFinishGroup);
 
 // Infield Island Turf Beds (North & South Loop Interiors)
-const turfMat = new THREE.MeshStandardMaterial({ color: 0x15221b, roughness: 0.90, metalness: 0.05 });
+const turfMat = new THREE.MeshStandardMaterial({ color: 0x15221b, roughness: 0.90, metalness: 0.05, side: THREE.DoubleSide });
 const northTurfGeom = new THREE.CircleGeometry(8.5, 32);
 const northTurfMesh = new THREE.Mesh(northTurfGeom, turfMat);
 northTurfMesh.rotation.x = -Math.PI / 2;
@@ -457,7 +462,7 @@ trackGroup.add(southTurfMesh);
 
 // Corner Apex Cones
 const coneGeom = new THREE.ConeGeometry(0.18, 0.42, 12);
-const coneMat = new THREE.MeshStandardMaterial({ color: 0xff4500, roughness: 0.35 });
+const coneMat = new THREE.MeshStandardMaterial({ color: 0xff4500, roughness: 0.35, side: THREE.DoubleSide });
 const apexPositions = [
   [0, 23.5],
   [13.5, 0.0],
@@ -567,7 +572,8 @@ function buildRampMesh(ramp) {
   const mat = new THREE.MeshStandardMaterial({
     color: ramp.type === 'wedge' ? 0x2e3848 : 0x222a36,
     roughness: 0.65,
-    metalness: 0.20
+    metalness: 0.20,
+    side: THREE.DoubleSide
   });
 
   const mesh = new THREE.Mesh(geom, mat);
@@ -578,7 +584,7 @@ function buildRampMesh(ramp) {
 
   // Add decorative neon hazard trim along ramp edges
   const edgeGeom = new THREE.BoxGeometry(ramp.width * 0.98, 0.04, 0.08);
-  const edgeMat = new THREE.MeshBasicMaterial({ color: ramp.type === 'wedge' ? 0xff2a40 : 0x00e5ff });
+  const edgeMat = new THREE.MeshBasicMaterial({ color: ramp.type === 'wedge' ? 0xff2a40 : 0x00e5ff, side: THREE.DoubleSide });
   const edgeMesh = new THREE.Mesh(edgeGeom, edgeMat);
   edgeMesh.position.set(0, ramp.height, ramp.type === 'wedge' ? ramp.length * 0.48 : 0);
   mesh.add(edgeMesh);
@@ -646,7 +652,8 @@ function getCubeMaterial(color) {
       roughness: 0.25,
       metalness: 0.10,
       clearcoat: 0.75,
-      clearcoatRoughness: 0.10
+      clearcoatRoughness: 0.10,
+      side: THREE.DoubleSide
     }));
   }
   return cubeMatMap.get(color);
@@ -739,7 +746,12 @@ const buggy = new RCCar(world, scene, {
   chassisMass: 4.2,
   bodyColor: 0x00e5ff, // Electric Cyan
   rimColor: 0xffb300,  // Racing Anodized Gold
-  suspensionPreset: 'medium'
+  suspensionPreset: 'medium',
+  maxSpeed: 13.0,
+  engineForce: 58.0,
+  brakeForce: 70.0,
+  maxSteerAngle: 0.40,
+  steerSpeed: 4.5
 });
 window.buggy = buggy;
 window.world = world;
@@ -816,8 +828,11 @@ function updateJoystick(clientX, clientY) {
   }
   thumbEl.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
 
-  const steer = dx / maxJoystickRadius;       // -1 (left) to +1 (right)
-  const throttle = -dy / maxJoystickRadius;   // -1 (reverse) to +1 (forward)
+  const rawSteer = dx / maxJoystickRadius;       // -1 (left) to +1 (right)
+  const throttle = -dy / maxJoystickRadius;      // -1 (reverse) to +1 (forward)
+
+  // Progressive exponential curve: gentle near center, full throw at edges
+  const steer = Math.sign(rawSteer) * Math.pow(Math.abs(rawSteer), 1.6);
 
   buggy.setSteering(steer);
   buggy.setThrottle(throttle);

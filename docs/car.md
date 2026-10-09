@@ -23,8 +23,8 @@ Calibrated to the standard $3.0\,\text{m}$ high studio room:
 | **Suspension Stroke (Travel)** | $0.22\,\text{m}$ | Extra long-travel bouncy compression stroke |
 | **Spring Stiffness ($k$)** | $130\,\text{N/m}$ (Medium) | Soft, highly compliant bouncy restoration stiffness ($85\,\text{N/m}$ Soft, $240\,\text{N/m}$ Stiff) |
 | **Damper Coefficient ($c$)** | $7.0\,\text{N}\cdot\text{s/m}$ (Medium) | Under-damped shock dissipation allowing expressive body roll & bounce |
-| **Motor Thrust Force** | $170\,\text{N}$ | 4WD electric motor torque (42.5 N per wheel) |
-| **Max Steering Angle** | $\pm 31^\circ$ ($0.54\,\text{rad}$) | Front wheel steering sweep |
+| **Max Steering Angle** | $\pm 23^\circ$ ($0.40\,\text{rad}$) | Progressive speed-damped front wheel steering sweep |
+| **Top Speed** | $13.0\,\text{m/s}$ ($\approx 47\,\text{km/h}$) | High-speed electric brushless motor cap |
 
 ---
 

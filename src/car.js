@@ -117,11 +117,11 @@ class RCCar {
     this.suspensionPreset = 'medium';
 
     // Drivetrain & Handling (Scaled RC buggy speed & responsiveness)
-    this.engineForce = options.engineForce || 28.0;      // 4WD motor thrust (realistic acceleration ~6 m/s²)
-    this.maxSpeed = options.maxSpeed || 6.5;            // Top speed cap ~23 km/h
-    this.brakeForce = options.brakeForce || 35.0;       // Progressive braking force
-    this.maxSteerAngle = options.maxSteerAngle || 0.54; // ~31 degrees max steer
-    this.steerSpeed = options.steerSpeed || 8.0;        // Rad/s steering response
+    this.engineForce = options.engineForce || 58.0;      // 4WD motor thrust (accelerates to top speed ~13 m/s)
+    this.maxSpeed = options.maxSpeed || 13.0;           // Doubled top speed cap ~47 km/h (~13 m/s)
+    this.brakeForce = options.brakeForce || 70.0;       // Progressive braking force
+    this.maxSteerAngle = options.maxSteerAngle || 0.40; // ~23 degrees (reduced from 0.54 to eliminate twitchiness)
+    this.steerSpeed = options.steerSpeed || 4.5;        // Smooth steering rate
     this.tireFrictionForward = options.tireFrictionForward || 1.5;
     this.tireFrictionSide = options.tireFrictionSide || 1.8;
 
@@ -153,7 +153,7 @@ class RCCar {
     this.body.sync();
     this.world.bodies.push(this.body);
 
-    // 2. Visual Theme & PBR Materials
+    // 2. Visual Theme & PBR Materials (All double-sided shading)
     const bodyColor = options.bodyColor !== undefined ? options.bodyColor : 0x00e5ff; // Electric Cyan
     const cageColor = options.cageColor !== undefined ? options.cageColor : 0x1f242d; // Dark matte titanium
     const rimColor = options.rimColor !== undefined ? options.rimColor : 0xffb300;   // Anodized racing gold
@@ -164,52 +164,61 @@ class RCCar {
         roughness: 0.28,
         metalness: 0.15,
         clearcoat: 0.90,
-        clearcoatRoughness: 0.10
+        clearcoatRoughness: 0.10,
+        side: THREE.DoubleSide
       }),
       cockpit: new THREE.MeshPhysicalMaterial({
         color: 0x0a0c10,
         roughness: 0.12,
         metalness: 0.85,
         clearcoat: 1.0,
-        clearcoatRoughness: 0.08
+        clearcoatRoughness: 0.08,
+        side: THREE.DoubleSide
       }),
       rollcage: new THREE.MeshStandardMaterial({
         color: cageColor,
         roughness: 0.45,
-        metalness: 0.85
+        metalness: 0.85,
+        side: THREE.DoubleSide
       }),
       springs: new THREE.MeshPhysicalMaterial({
         color: rimColor,
         roughness: 0.22,
         metalness: 0.90,
-        clearcoat: 0.50
+        clearcoat: 0.50,
+        side: THREE.DoubleSide
       }),
       damperShaft: new THREE.MeshStandardMaterial({
         color: 0xedf2f7,
         roughness: 0.12,
-        metalness: 0.95
+        metalness: 0.95,
+        side: THREE.DoubleSide
       }),
       tires: new THREE.MeshStandardMaterial({
         color: 0x181a1f,
         roughness: 0.88,
-        metalness: 0.05
+        metalness: 0.05,
+        side: THREE.DoubleSide
       }),
       rims: new THREE.MeshPhysicalMaterial({
         color: rimColor,
         roughness: 0.30,
         metalness: 0.85,
-        clearcoat: 0.40
+        clearcoat: 0.40,
+        side: THREE.DoubleSide
       }),
       hub: new THREE.MeshStandardMaterial({
         color: 0x0f1115,
         roughness: 0.50,
-        metalness: 0.80
+        metalness: 0.80,
+        side: THREE.DoubleSide
       }),
       lights: new THREE.MeshStandardMaterial({
         color: 0xffffff,
         emissive: 0x88ccff,
         emissiveIntensity: 0.9,
-        roughness: 0.1
+        roughness: 0.1,
+        side: THREE.DoubleSide
       }),
       flag: new THREE.MeshBasicMaterial({
         color: 0xff2a5f,
@@ -566,18 +575,20 @@ class RCCar {
     const restLen = this.suspensionRestLength;
     const minLen = restLen - maxTravel;
 
-    // Smooth steering input interpolation (steer < 0 is left, steer > 0 is right)
-    const targetSteerAngle = -this.steering * this.maxSteerAngle;
+    // Chassis local orientation directions in world space
+    const forwardDir = _forwardDir.set(0, 0, -1).applyQuaternion(body.q);
+    const rightDir = _rightDir.set(1, 0, 0).applyQuaternion(body.q);
+    const upDir = _upDir.set(0, 1, 0).applyQuaternion(body.q);
+
+    // Speed-sensitive steering (eliminates high-speed twitchiness while keeping full lock at low speed)
+    const fwdSpeed = Math.abs(body.v.dot(forwardDir));
+    const speedDamping = Math.max(0.42, 1.0 - (fwdSpeed / this.maxSpeed) * 0.52);
+    const targetSteerAngle = -this.steering * (this.maxSteerAngle * speedDamping);
     this.currentSteerAngle = THREE.MathUtils.lerp(
       this.currentSteerAngle,
       targetSteerAngle,
       Math.min(1.0, this.steerSpeed * dt)
     );
-
-    // Chassis local orientation directions in world space
-    const forwardDir = _forwardDir.set(0, 0, -1).applyQuaternion(body.q);
-    const rightDir = _rightDir.set(1, 0, 0).applyQuaternion(body.q);
-    const upDir = _upDir.set(0, 1, 0).applyQuaternion(body.q);
 
     let groundedWheelCount = 0;
 
