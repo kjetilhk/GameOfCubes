@@ -336,15 +336,29 @@ function roundedCube(size, radius, segments = 4) {
 }
 
 /* ================= 9. Reusable Cube Spawner Utility ================= */
-function createCubeSpawner({
-  scene,
-  world,
-  palette = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x4fbf9f, 0xf3efe6, 0x7a5cc4, 0xff9f43],
-  maxCubes = 30,
-  sizeRange = [0.36, 0.50],
-  spawnPos = null,
-  materialProps = { roughness: 0.28, metalness: 0.04, clearcoat: 0.25, clearcoatRoughness: 0.15 }
-}) {
+function createCubeSpawner(optsOrWorld, sceneArg = null, optsArg = {}) {
+  let opts;
+  if (optsOrWorld && optsOrWorld.scene && optsOrWorld.world) {
+    opts = optsOrWorld;
+  } else if (optsOrWorld && sceneArg) {
+    if (optsOrWorld.bodies) {
+      opts = Object.assign({}, optsArg, { world: optsOrWorld, scene: sceneArg });
+    } else {
+      opts = Object.assign({}, optsArg, { scene: optsOrWorld, world: sceneArg });
+    }
+  } else {
+    opts = optsOrWorld || {};
+  }
+
+  const {
+    scene,
+    world,
+    palette = [0x2a5bd7, 0xf2b632, 0xef6f6c, 0x4fbf9f, 0xf3efe6, 0x7a5cc4, 0xff9f43],
+    maxCubes = 30,
+    sizeRange = [0.36, 0.50],
+    spawnPos = null,
+    materialProps = { roughness: 0.28, metalness: 0.04, clearcoat: 0.25, clearcoatRoughness: 0.15 }
+  } = opts;
   const meshes = [];
   const geometryCache = new Map();
 
@@ -398,10 +412,16 @@ function createCubeSpawner({
   }
 
   function sync() {
-    const n = Math.min(meshes.length, world.bodies.length);
-    for (let i = 0; i < n; i++) {
-      meshes[i].position.copy(world.bodies[i].x);
-      meshes[i].quaternion.copy(world.bodies[i].q);
+    if (!world) return;
+    for (let i = 0; i < meshes.length; i++) {
+      const b = meshes[i].userData.body;
+      if (b) {
+        meshes[i].position.copy(b.x);
+        meshes[i].quaternion.copy(b.q);
+      } else if (world.bodies[i]) {
+        meshes[i].position.copy(world.bodies[i].x);
+        meshes[i].quaternion.copy(world.bodies[i].q);
+      }
     }
   }
 

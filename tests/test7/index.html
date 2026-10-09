@@ -71,7 +71,7 @@
   <button id="reset">Reset</button>
   <button id="flip">Flip Upright</button>
   <button id="susp">Suspension: Medium</button>
-  <button id="cam-mode">Cam: Chase</button>
+  <button id="cam-mode">Cam: Orbit</button>
   <button id="bumps">Add Bumps</button>
   <button id="cube">Drop Cube</button>
   <button id="wire">Wireframe</button>
@@ -129,11 +129,11 @@ function resize(){
 window.addEventListener('resize', resize);
 
 /* ================= Camera Modes ================= */
-let cameraMode = 'chase'; // 'chase' or 'orbit'
+let cameraMode = 'orbit'; // 'orbit' or 'chase'
 const orbitTarget = new V(0, -0.9, -1.2);
-let orbitDist = 3.8;
-let orbitPitch = 0.25;
-let orbitYaw = 0.0;
+let orbitDist = 3.5;
+let orbitPitch = 0.26;
+let orbitYaw = 0.52;
 
 function updateOrbitCameraTransform(){
   const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
@@ -161,9 +161,11 @@ const buggy = new RCCar(world, scene, {
 });
 
 /* ================= Dynamic Cube Spawner ================= */
-const cubeSpawner = RoomEnv.createCubeSpawner(world, scene, {
+const cubeSpawner = RoomEnv.createCubeSpawner({
+  scene,
+  world,
   color: 0xcca068,
-  size: 0.36,
+  sizeRange: [0.28, 0.36],
   metalness: 0.05,
   roughness: 0.45
 });
@@ -402,10 +404,14 @@ suspBtn.addEventListener('click', () => {
 
 const camBtn = document.getElementById('cam-mode');
 camBtn.addEventListener('click', () => {
-  cameraMode = (cameraMode === 'chase') ? 'orbit' : 'chase';
-  camBtn.textContent = (cameraMode === 'chase') ? 'Cam: Chase' : 'Cam: Orbit';
-  RoomEnv.showNote(`Camera mode: ${cameraMode === 'chase' ? 'Chase Follow Cam' : 'Free 3D Orbit Cam'}`);
-  if (cameraMode === 'orbit') updateOrbitCameraTransform();
+  cameraMode = (cameraMode === 'orbit') ? 'chase' : 'orbit';
+  camBtn.textContent = (cameraMode === 'orbit') ? 'Cam: Orbit' : 'Cam: Chase';
+  RoomEnv.showNote(`Camera mode: ${cameraMode === 'orbit' ? 'Free 3D Orbit Cam' : 'Chase Follow Cam'}`);
+  if (cameraMode === 'orbit') {
+    updateOrbitCameraTransform();
+  } else {
+    updateChaseCamera(1.0);
+  }
 });
 
 const bumpsBtn = document.getElementById('bumps');
