@@ -614,9 +614,9 @@ class RCCar {
         }
       }
 
-      // Test obstacles and cubes in world
+      // Test obstacles and heavy rigid bodies in world (ignore lightweight plastic debris)
       for (const b of this.world.bodies) {
-        if (b === body || b.collisionGroup === 'rccar') continue;
+        if (b === body || b.collisionGroup === 'rccar' || b.invM > 2.0) continue;
         const dx = Math.abs(mountWorldPos.x - b.x.x);
         const dz = Math.abs(mountWorldPos.z - b.x.z);
         if (dx < b.h + this.wheelWidth * 0.6 && dz < b.h + this.wheelRadius * 0.7) {

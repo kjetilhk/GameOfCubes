@@ -128,9 +128,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=10"></script>
-<script src="../../src/room.js?v=10"></script>
-<script src="../../src/car.js?v=10"></script>
+<script src="../../src/xpbd.js?v=11"></script>
+<script src="../../src/room.js?v=11"></script>
+<script src="../../src/car.js?v=11"></script>
 <script>
 (() => {
 'use strict';
@@ -244,13 +244,13 @@ window.addEventListener('devicemotion', e => e.stopImmediatePropagation(), true)
 window.addEventListener('deviceorientation', e => e.stopImmediatePropagation(), true);
 
 /* ================= 2X FIGURE-8 RACETRACK WITH INNER & OUTER BORDERS ================= */
-// Dimensions doubled: Rx = 28m, Rz = 48m (Span: 96m long x 56m wide)
-// Road lane width doubled: 7.6m with distinct 3D inner and outer border curbs
+// Dimensions: Rx = 56m, Rz = 48m (Span: 96m long x 112m wide)
+// Road lane width doubled: 15.2m with distinct 3D inner and outer border curbs
 const trackGroup = new THREE.Group();
 scene.add(trackGroup);
 
-const Rx = 28.0, Rz = 48.0;
-const trackWidth = 7.6;
+const Rx = 56.0, Rz = 48.0;
+const trackWidth = 15.2;
 const halfW = trackWidth * 0.5;
 const N_SEGS = 360;
 
@@ -314,21 +314,21 @@ for (let i = 0; i <= N_SEGS; i++) {
     const lxN = xcN + nxN * halfW, lzN = zcN + nzN * halfW;
     const rxN = xcN - nxN * halfW, rzN = zcN - nzN * halfW;
 
-    const kw = 0.45; // curb width
+    const kw = 0.60; // curb width
 
     // 1. INNER BORDER (Raised 3D curb along inner edge facing loop infield)
     // Runs all the way around each loop, opening cleanly at central intersection
-    if (distCenter > 7.5) {
+    if (distCenter > 19.0) {
       const k0 = innerVertCount;
       // Beveled curb face
       innerPositions.push(lx, -1.492, lz);
-      innerPositions.push(lx + nx * (kw * 0.5), -1.36, lz + nz * (kw * 0.5));
+      innerPositions.push(lx + nx * (kw * 0.5), -1.34, lz + nz * (kw * 0.5));
       innerPositions.push(lxN, -1.492, lzN);
-      innerPositions.push(lxN + nxN * (kw * 0.5), -1.36, lzN + nzN * (kw * 0.5));
+      innerPositions.push(lxN + nxN * (kw * 0.5), -1.34, lzN + nzN * (kw * 0.5));
 
-      innerPositions.push(lx + nx * (kw * 0.5), -1.36, lz + nz * (kw * 0.5));
+      innerPositions.push(lx + nx * (kw * 0.5), -1.34, lz + nz * (kw * 0.5));
       innerPositions.push(lx + nx * kw, -1.492, lz + nz * kw);
-      innerPositions.push(lxN + nxN * (kw * 0.5), -1.36, lzN + nzN * (kw * 0.5));
+      innerPositions.push(lxN + nxN * (kw * 0.5), -1.34, lzN + nzN * (kw * 0.5));
       innerPositions.push(lxN + nxN * kw, -1.492, lzN + nzN * kw);
 
       for (let c = 0; c < 8; c++) innerColors.push(r, g, b);
@@ -338,27 +338,27 @@ for (let i = 0; i <= N_SEGS; i++) {
     }
 
     // 2. OUTER BORDER (Raised 3D curb along perimeter edge of racetrack)
-    if (distCenter > 7.5) {
+    if (distCenter > 19.0) {
       const k0 = outerVertCount;
       outerPositions.push(rx, -1.492, rz);
-      outerPositions.push(rx - nx * (kw * 0.5), -1.36, rz - nz * (kw * 0.5));
+      outerPositions.push(rx - nx * (kw * 0.5), -1.34, rz - nz * (kw * 0.5));
       outerPositions.push(rxN, -1.492, rzN);
-      outerPositions.push(rxN - nxN * (kw * 0.5), -1.36, rzN - nzN * (kw * 0.5));
+      outerPositions.push(rxN - nxN * (kw * 0.5), -1.34, rzN - nzN * (kw * 0.5));
 
-      outerPositions.push(rx - nx * (kw * 0.5), -1.36, rz - nz * (kw * 0.5));
+      outerPositions.push(rx - nx * (kw * 0.5), -1.34, rz - nz * (kw * 0.5));
       outerPositions.push(rx - nx * kw, -1.492, rz - nz * kw);
-      outerPositions.push(rxN - nxN * (kw * 0.5), -1.36, rzN - nzN * (kw * 0.5));
+      outerPositions.push(rxN - nxN * (kw * 0.5), -1.34, rzN - nzN * (kw * 0.5));
       outerPositions.push(rxN - nxN * kw, -1.492, rzN - nzN * kw);
 
       for (let c = 0; c < 8; c++) outerColors.push(r, g, b);
-      outerIndices.push(k0, k0+1, k0+2, k0+2, k0+1, k0+3);
-      outerIndices.push(k0+4, k0+5, k0+6, k0+6, k0+5, k0+7);
+      innerIndices.push(k0, k0+1, k0+2, k0+2, k0+1, k0+3);
+      innerIndices.push(k0+4, k0+5, k0+6, k0+6, k0+5, k0+7);
       outerVertCount += 8;
     }
 
     // 3. Yellow Dashed Centerline on straights
-    if (distCenter > 5.5 && (i % 4 < 2)) {
-      const lw = 0.12;
+    if (distCenter > 15.0 && (i % 4 < 2)) {
+      const lw = 0.16;
       const ly = -1.490;
       const l0 = lineVertCount;
       linePositions.push(xc + nx * lw, ly, zc + nz * lw);
@@ -422,10 +422,10 @@ lineGeom.computeVertexNormals();
 const lineMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide });
 trackGroup.add(new THREE.Mesh(lineGeom, lineMat));
 
-// Checkered Start / Finish Line across full 7.6m lane width
+// Checkered Start / Finish Line across full 15.2m lane width
 const startFinishGroup = new THREE.Group();
-const sfChecks = 16;
-const sfLen = 0.8;
+const sfChecks = 20;
+const sfLen = 1.0;
 for (let c = 0; c < sfChecks; c++) {
   for (let r = 0; r < 2; r++) {
     const isWhite = (c + r) % 2 === 0;
@@ -441,37 +441,41 @@ for (let c = 0; c < sfChecks; c++) {
     startFinishGroup.add(checkMesh);
   }
 }
-startFinishGroup.position.set(0, 0, -4.5);
+startFinishGroup.position.set(0, 0, -8.0);
 trackGroup.add(startFinishGroup);
 
 // Infield Island Turf Beds (North & South Loop Interiors)
 const turfMat = new THREE.MeshStandardMaterial({ color: 0x15221b, roughness: 0.90, metalness: 0.05, side: THREE.DoubleSide });
-const northTurfGeom = new THREE.CircleGeometry(17.0, 36);
+const northTurfGeom = new THREE.CircleGeometry(16.0, 36);
 const northTurfMesh = new THREE.Mesh(northTurfGeom, turfMat);
 northTurfMesh.rotation.x = -Math.PI / 2;
+northTurfMesh.scale.set(1.9, 1.0, 1.0);
 northTurfMesh.position.set(0, -1.496, 27.0);
 northTurfMesh.receiveShadow = true;
 trackGroup.add(northTurfMesh);
 
-const southTurfGeom = new THREE.CircleGeometry(17.0, 36);
+const southTurfGeom = new THREE.CircleGeometry(16.0, 36);
 const southTurfMesh = new THREE.Mesh(southTurfGeom, turfMat);
 southTurfMesh.rotation.x = -Math.PI / 2;
+southTurfMesh.scale.set(1.9, 1.0, 1.0);
 southTurfMesh.position.set(0, -1.496, -27.0);
 southTurfMesh.receiveShadow = true;
 trackGroup.add(southTurfMesh);
 
 // Corner Apex Cones
-const coneGeom = new THREE.ConeGeometry(0.24, 0.55, 12);
+const coneGeom = new THREE.ConeGeometry(0.26, 0.60, 12);
 const coneMat = new THREE.MeshStandardMaterial({ color: 0xff4500, roughness: 0.35, side: THREE.DoubleSide });
 const apexPositions = [
-  [0, 47.0],
-  [27.0, 0.0],
-  [0, -47.0],
-  [-27.0, 0.0]
+  [0, 48.0],
+  [56.0, 33.9],
+  [-56.0, 33.9],
+  [0, -48.0],
+  [56.0, -33.9],
+  [-56.0, -33.9]
 ];
 for (const [cx, cz] of apexPositions) {
   const cone = new THREE.Mesh(coneGeom, coneMat);
-  cone.position.set(cx, -1.5 + 0.275, cz);
+  cone.position.set(cx, -1.5 + 0.30, cz);
   cone.castShadow = true;
   trackGroup.add(cone);
 }
@@ -594,34 +598,34 @@ function buildRampMesh(ramp) {
 
 // 1. North Straight Tabletop Jump (launch along North approach straight)
 const ramp1 = new Ramp({
-  x: 17.0,
-  z: 16.0,
-  width: 5.6,
-  length: 6.4,
-  height: 0.72,
-  heading: 0.76,
+  x: 36.0,
+  z: 16.4,
+  width: 10.0,
+  length: 8.5,
+  height: 0.80,
+  heading: 1.08,
   type: 'tabletop'
 });
 
 // 2. South Return Tabletop Jump (launch along South return straight towards origo)
 const ramp2 = new Ramp({
-  x: -17.0,
-  z: -16.0,
-  width: 5.6,
-  length: 6.4,
-  height: 0.72,
-  heading: 0.76,
+  x: -36.0,
+  z: -16.4,
+  width: 10.0,
+  length: 8.5,
+  height: 0.80,
+  heading: 1.08,
   type: 'tabletop'
 });
 
 // 3. Infield Stunt Kicker Mega Ramp (high-angle kicker aimed at cube pyramid)
 const ramp3 = new Ramp({
-  x: -11.0,
-  z: 9.0,
-  width: 4.8,
-  length: 4.5,
-  height: 0.85,
-  heading: 0.55,
+  x: -22.0,
+  z: 10.0,
+  width: 8.0,
+  length: 6.0,
+  height: 0.95,
+  heading: 0.85,
   type: 'wedge'
 });
 
@@ -630,7 +634,7 @@ scene.add(buildRampMesh(ramp1));
 scene.add(buildRampMesh(ramp2));
 scene.add(buildRampMesh(ramp3));
 
-/* ================= 36 DYNAMIC CRASHABLE CUBES ON THE TRACK ================= */
+/* ================= 44 DYNAMIC HOLLOW PLASTIC SHELL CUBES ================= */
 const cubeBodies = [];
 const cubeMeshes = [];
 const cubeInitialStates = [];
@@ -649,10 +653,10 @@ function getCubeMaterial(color) {
   if (!cubeMatMap.has(color)) {
     cubeMatMap.set(color, new THREE.MeshPhysicalMaterial({
       color: color,
-      roughness: 0.25,
-      metalness: 0.10,
-      clearcoat: 0.75,
-      clearcoatRoughness: 0.10,
+      roughness: 0.35,
+      metalness: 0.04,
+      clearcoat: 0.60,
+      clearcoatRoughness: 0.15,
       side: THREE.DoubleSide
     }));
   }
@@ -661,8 +665,9 @@ function getCubeMaterial(color) {
 
 function spawnCrashCube(size, x, y, z, colorIndex = 0) {
   const b = world.addCube(size, new V(x, y, z));
-  // Lightweight mass so crashing at speed creates explosive dynamic momentum transfer
-  const m = 28 * size * size * size; // mass ~ 0.5 - 1.1 kg
+  // Ultra-lightweight hollow plastic shell: mass ~40-50 grams (0.045 kg)
+  // Car (4.2 kg) has 93x more inertia, so crashing sends cubes flying while car barely reacts
+  const m = 0.045; // 45 grams hollow plastic shell
   b.invM = 1 / m;
   b.invI = 6 / (m * size * size);
 
@@ -687,65 +692,67 @@ function spawnCrashCube(size, x, y, z, colorIndex = 0) {
 
 let cIdx = 0;
 
-// 1. Formation 1: North Straight Crash Barrier (10 Cubes spanning across the 7.6m roadway)
-// Positioned at x = 11.6, z = 10.4 spanning across the road lane
-const bw1 = 0.42;
-const nx1 = -0.72, nz1 = 0.69;
+// 1. Formation 1: North Straight Crash Barrier (12 Hollow Plastic Shell Cubes across 15.2m roadway)
+// Positioned at x = 22.0, z = 10.0 spanning across the wide road lane
+const bw1 = 0.44;
+const nx1 = -0.47, nz1 = 0.88;
 for (let r = 0; r < 2; r++) {
   const cy = -1.5 + bw1 * 0.5 + r * bw1;
-  for (let col = -2; col <= 2; col++) {
-    const cx = 11.6 + nx1 * (col * bw1 * 1.25);
-    const cz = 10.4 + nz1 * (col * bw1 * 1.25);
+  for (let col = -2.5; col <= 2.5; col += 1.0) {
+    const cx = 22.0 + nx1 * (col * bw1 * 1.35);
+    const cz = 10.0 + nz1 * (col * bw1 * 1.35);
     spawnCrashCube(bw1, cx, cy, cz, cIdx++);
   }
 }
 
-// 2. Formation 2: South Straight Crash Barrier (10 Cubes spanning across the 7.6m roadway)
-const bw2 = 0.42;
-const nx2 = -0.72, nz2 = 0.69;
+// 2. Formation 2: South Straight Crash Barrier (12 Hollow Plastic Shell Cubes across 15.2m roadway)
+const bw2 = 0.44;
+const nx2 = -0.47, nz2 = 0.88;
 for (let r = 0; r < 2; r++) {
   const cy = -1.5 + bw2 * 0.5 + r * bw2;
-  for (let col = -2; col <= 2; col++) {
-    const cx = -11.6 + nx2 * (col * bw2 * 1.25);
-    const cz = -10.4 + nz2 * (col * bw2 * 1.25);
+  for (let col = -2.5; col <= 2.5; col += 1.0) {
+    const cx = -22.0 + nx2 * (col * bw2 * 1.35);
+    const cz = -10.0 + nz2 * (col * bw2 * 1.35);
     spawnCrashCube(bw2, cx, cy, cz, cIdx++);
   }
 }
 
-// 3. Formation 3: Stunt Jump Landing Pyramid (6 Cubes in flight path of Ramp 1)
-const s3 = 0.42;
-const jpx = 22.4, jpz = 21.5;
-// Row 1 (3 cubes)
-spawnCrashCube(s3, jpx - s3, -1.5 + s3 * 0.5, jpz - s3 * 0.5, cIdx++);
-spawnCrashCube(s3, jpx, -1.5 + s3 * 0.5, jpz, cIdx++);
-spawnCrashCube(s3, jpx + s3, -1.5 + s3 * 0.5, jpz + s3 * 0.5, cIdx++);
-// Row 2 (2 cubes)
-spawnCrashCube(s3, jpx - s3 * 0.5, -1.5 + s3 * 1.5, jpz - s3 * 0.25, cIdx++);
-spawnCrashCube(s3, jpx + s3 * 0.5, -1.5 + s3 * 1.5, jpz + s3 * 0.25, cIdx++);
-// Row 3 (1 apex cube)
+// 3. Formation 3: Stunt Jump Landing Pyramid (8 Hollow Plastic Shell Cubes in flight path of Ramp 1)
+const s3 = 0.44;
+const jpx = 45.0, jpz = 22.0;
+// Tier 1 (4 cubes)
+for (let c = 0; c < 4; c++) {
+  spawnCrashCube(s3, jpx + (c - 1.5) * s3, -1.5 + s3 * 0.5, jpz + (c - 1.5) * 0.5 * s3, cIdx++);
+}
+// Tier 2 (3 cubes)
+for (let c = 0; c < 3; c++) {
+  spawnCrashCube(s3, jpx + (c - 1.0) * s3, -1.5 + s3 * 1.5, jpz + (c - 1.0) * 0.5 * s3, cIdx++);
+}
+// Tier 3 (1 apex cube)
 spawnCrashCube(s3, jpx, -1.5 + s3 * 2.5, jpz, cIdx++);
 
-// 4. Formation 4: North Turn Apex Drift Pyramid (6 Cubes on apex curve)
-const s4 = 0.42;
-const ax = 0.0, az = 47.5;
-spawnCrashCube(s4, ax - s4, -1.5 + s4 * 0.5, az, cIdx++);
-spawnCrashCube(s4, ax, -1.5 + s4 * 0.5, az, cIdx++);
-spawnCrashCube(s4, ax + s4, -1.5 + s4 * 0.5, az, cIdx++);
-spawnCrashCube(s4, ax - s4 * 0.5, -1.5 + s4 * 1.5, az, cIdx++);
-spawnCrashCube(s4, ax + s4 * 0.5, -1.5 + s4 * 1.5, az, cIdx++);
+// 4. Formation 4: North Turn Apex Drift Pyramid (8 Hollow Plastic Shell Cubes on apex curve)
+const s4 = 0.44;
+const ax = 0.0, az = 48.0;
+for (let c = 0; c < 4; c++) {
+  spawnCrashCube(s4, ax + (c - 1.5) * s4, -1.5 + s4 * 0.5, az, cIdx++);
+}
+for (let c = 0; c < 3; c++) {
+  spawnCrashCube(s4, ax + (c - 1.0) * s4, -1.5 + s4 * 1.5, az, cIdx++);
+}
 spawnCrashCube(s4, ax, -1.5 + s4 * 2.5, az, cIdx++);
 
-// 5. Formation 5: Central Crossover Block (4 Cubes right at center crossing)
-const s5 = 0.40;
-spawnCrashCube(s5, -s5 * 0.6, -1.5 + s5 * 0.5, -s5 * 0.6, cIdx++);
-spawnCrashCube(s5,  s5 * 0.6, -1.5 + s5 * 0.5, -s5 * 0.6, cIdx++);
-spawnCrashCube(s5, -s5 * 0.6, -1.5 + s5 * 0.5,  s5 * 0.6, cIdx++);
-spawnCrashCube(s5,  s5 * 0.6, -1.5 + s5 * 0.5,  s5 * 0.6, cIdx++);
+// 5. Formation 5: Central Crossover Block (4 Hollow Plastic Shell Cubes right at center crossing)
+const s5 = 0.42;
+spawnCrashCube(s5, -s5 * 0.7, -1.5 + s5 * 0.5, -s5 * 0.7, cIdx++);
+spawnCrashCube(s5,  s5 * 0.7, -1.5 + s5 * 0.5, -s5 * 0.7, cIdx++);
+spawnCrashCube(s5, -s5 * 0.7, -1.5 + s5 * 0.5,  s5 * 0.7, cIdx++);
+spawnCrashCube(s5,  s5 * 0.7, -1.5 + s5 * 0.5,  s5 * 0.7, cIdx++);
 
 /* ================= Instantiate Reusable Buggy ================= */
 const buggy = new RCCar(world, scene, {
   x: 0,
-  z: -3.5,
+  z: -6.5,
   scale: 1.0,
   chassisMass: 4.2,
   bodyColor: 0x00e5ff, // Electric Cyan
@@ -799,7 +806,7 @@ updateChaseCamera(0, null, null, true);
 
 /* ================= Reset Scene Function ================= */
 function resetScene() {
-  buggy.reset(0, null, -3.5);
+  buggy.reset(0, null, -6.5);
   updateChaseCamera(0, null, null, true);
   for (const s of cubeInitialStates) {
     s.body.x.copy(s.initX);
@@ -966,7 +973,7 @@ function frame(now) {
   // Sync visuals with interpolated transform
   buggy.updateVisuals(interpPos, interpQuat);
 
-  // Sync all 36 dynamic crash cube visual meshes with XPBD rigid bodies
+  // Sync all 44 dynamic crash cube visual meshes with XPBD rigid bodies
   for (let i = 0; i < cubeBodies.length; i++) {
     cubeMeshes[i].position.copy(cubeBodies[i].x);
     cubeMeshes[i].quaternion.copy(cubeBodies[i].q);
@@ -984,7 +991,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-RoomEnv.showNote('Race the 96m × 56m figure-8 track, smash through cube barriers & hit jumps!', 4500);
+RoomEnv.showNote('Race the 15.2m wide track, smash through plastic shell cubes & hit jumps!', 4500);
 
 })();
 </script>
