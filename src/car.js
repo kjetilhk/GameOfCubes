@@ -27,8 +27,10 @@ const _suspForceVec = new V();
 const _suspTorque = new V();
 const _wheelHeading = new V();
 const _wheelSideDir = new V();
-const _driveForceVec = new V();
-const _sideForceVec = new V();
+const _driveForce = new V();
+const _sideForce = new V();
+const _tireForceTotal = new V();
+const _tireTorque = new V();
 const _q1 = new Q();
 const _up = new V(0, 1, 0);
 const _forward = new V(0, 0, -1);
@@ -111,11 +113,12 @@ class RCCar {
     this.suspensionDamping = options.suspensionDamping || 7.0;                       // Low damping for visible bounce
     this.suspensionPreset = 'medium';
 
-    // Drivetrain & Handling
-    this.engineForce = options.engineForce || 170.0;    // 4WD motor thrust
-    this.brakeForce = options.brakeForce || 130.0;      // Braking force
+    // Drivetrain & Handling (Scaled RC buggy speed & responsiveness)
+    this.engineForce = options.engineForce || 28.0;      // 4WD motor thrust (realistic acceleration ~6 m/s²)
+    this.maxSpeed = options.maxSpeed || 6.5;            // Top speed cap ~23 km/h
+    this.brakeForce = options.brakeForce || 35.0;       // Progressive braking force
     this.maxSteerAngle = options.maxSteerAngle || 0.54; // ~31 degrees max steer
-    this.steerSpeed = options.steerSpeed || 7.0;        // Rad/s steering response
+    this.steerSpeed = options.steerSpeed || 8.0;        // Rad/s steering response
     this.tireFrictionForward = options.tireFrictionForward || 1.5;
     this.tireFrictionSide = options.tireFrictionSide || 1.8;
 
@@ -553,8 +556,8 @@ class RCCar {
     const restLen = this.suspensionRestLength;
     const minLen = restLen - maxTravel;
 
-    // Smooth steering input interpolation
-    const targetSteerAngle = this.steering * this.maxSteerAngle;
+    // Smooth steering input interpolation (steer < 0 is left, steer > 0 is right)
+    const targetSteerAngle = -this.steering * this.maxSteerAngle;
     this.currentSteerAngle = THREE.MathUtils.lerp(
       this.currentSteerAngle,
       targetSteerAngle,
@@ -626,42 +629,51 @@ class RCCar {
         // 3. Tire Traction: Longitudinal & Lateral
         _wheelHeading.copy(forwardDir);
         if (mount.isFront) {
-          _wheelHeading.applyAxisAngle(upDir, -this.currentSteerAngle);
+          _wheelHeading.applyAxisAngle(upDir, this.currentSteerAngle);
         }
         _wheelSideDir.crossVectors(upDir, _wheelHeading).normalize();
 
         const wheelLongSpeed = _pointVel.dot(_wheelHeading);
         const wheelLatSpeed = _pointVel.dot(_wheelSideDir);
 
-        // Longitudinal Motor / Brake Force
+        // Longitudinal Motor / Brake Force (scaled for realistic RC speed)
         let driveThrust = 0;
         if (this.isBraking) {
-          driveThrust = -Math.sign(wheelLongSpeed) * Math.min(Math.abs(wheelLongSpeed) * 35.0, this.brakeForce);
+          driveThrust = -Math.sign(wheelLongSpeed) * Math.min(Math.abs(wheelLongSpeed) * 20.0, this.brakeForce);
         } else if (Math.abs(this.throttle) > 0.01) {
-          // 4WD torque distribution
-          driveThrust = this.throttle * this.engineForce * 0.25;
+          const currentSpeed = Math.abs(wheelLongSpeed);
+          const speedGovernor = Math.max(0, 1.0 - currentSpeed / this.maxSpeed);
+          driveThrust = this.throttle * (this.engineForce * 0.25) * speedGovernor;
         } else {
           driveThrust = -wheelLongSpeed * 25.0; // firm resting rolling resistance
         }
 
-        _driveForceVec.copy(_wheelHeading).multiplyScalar(driveThrust * dt * body.invM);
-        body.v.add(_driveForceVec);
+        _driveForce.copy(_wheelHeading).multiplyScalar(driveThrust);
 
         // Lateral Tire Grip (cornering traction)
-        const sideGripForce = -wheelLatSpeed * (this.tireFrictionSide * 40.0);
-        _sideForceVec.copy(_wheelSideDir).multiplyScalar(sideGripForce * dt * body.invM);
-        body.v.add(_sideForceVec);
+        const sideGripForce = -wheelLatSpeed * (this.tireFrictionSide * 25.0);
+        _sideForce.copy(_wheelSideDir).multiplyScalar(sideGripForce);
 
-        // Update wheel spin rotation angle (negative around X rolls forward)
+        // Total horizontal tire contact force
+        _tireForceTotal.addVectors(_driveForce, _sideForce);
+
+        // Linear tire acceleration
+        body.v.addScaledVector(_tireForceTotal, dt * body.invM);
+
+        // Tire yaw / steering torque on chassis (enables authentic turning and carving!)
+        _tireTorque.crossVectors(_relMount, _tireForceTotal);
+        body.w.addScaledVector(_tireTorque, dt * body.invI);
+
+        // Update wheel spin rotation angle
         const angularDelta = (wheelLongSpeed / this.wheelRadius) * dt;
-        this.wheelSpinAngles[i] -= angularDelta;
+        this.wheelSpinAngles[i] += angularDelta;
 
       } else {
         // Airborne: suspension fully drooped / extended
         wheel.isGrounded = false;
         wheel.suspensionLength = restLen;
         wheel.compression = 0.0;
-        this.wheelSpinAngles[i] -= (this.throttle * 25.0) * dt;
+        this.wheelSpinAngles[i] += (this.throttle * 20.0) * dt;
       }
     }
 
