@@ -117,9 +117,15 @@ class RCCar {
     this.isBraking = false;
     this.wheelSpinAngles = [0, 0, 0, 0]; // FL, FR, RL, RR
 
-    // Initial Position & Orientation
+    // Initial Position & Orientation: calculate exact static equilibrium sag
+    const mountY = -this.chassisSize * 0.08;
+    const staticSag = (this.chassisMass * 9.81 * 0.25) / this.suspensionStiffness;
+    const initialSuspLength = this.suspensionRestLength - staticSag;
+    const groundY = -world.box.hy;
+    const defaultY = groundY + this.wheelRadius + initialSuspLength - mountY;
+
     const posX = options.x !== undefined ? options.x : 0.0;
-    const posY = options.y !== undefined ? options.y : -world.box.hy + this.wheelRadius + this.suspensionRestLength + 0.05;
+    const posY = options.y !== undefined ? options.y : defaultY;
     const posZ = options.z !== undefined ? options.z : -world.box.d * 0.5;
 
     // 1. Create Core XPBD Rigid Body (Chassis)
@@ -207,7 +213,6 @@ class RCCar {
     // 4. Wheel & Suspension Mount Anchors (Local Chassis Space)
     const hx = this.trackWidth * 0.5;
     const hz = this.wheelbase * 0.5;
-    const mountY = -this.chassisSize * 0.08;
 
     this.wheelMounts = [
       { id: 'FL', isFront: true,  isLeft: true,  localPos: new V(-hx, mountY, -hz) },
@@ -218,6 +223,12 @@ class RCCar {
 
     this.wheels = [];
     this._buildSuspensionAndWheels();
+
+    for (const w of this.wheels) {
+      w.suspensionLength = initialSuspLength;
+      w.compression = staticSag / this.suspensionTravel;
+      w.isGrounded = true;
+    }
 
     // 5. RC Dynamic Whip Antenna
     this._buildAntenna();
@@ -493,8 +504,11 @@ class RCCar {
   }
 
   reset(x = 0, y = null, z = -1.2) {
+    const mountY = -this.chassisSize * 0.08;
+    const staticSag = (this.chassisMass * 9.81 * 0.25) / this.suspensionStiffness;
+    const initialSuspLength = this.suspensionRestLength - staticSag;
     const groundY = -this.world.box.hy;
-    const targetY = y !== null ? y : groundY + this.wheelRadius + this.suspensionRestLength + 0.05;
+    const targetY = y !== null ? y : groundY + this.wheelRadius + initialSuspLength - mountY;
     this.body.x.set(x, targetY, z);
     this.body.px.copy(this.body.x);
     this.body.v.set(0, 0, 0);
@@ -505,6 +519,11 @@ class RCCar {
     this.throttle = 0;
     this.steering = 0;
     this.currentSteerAngle = 0;
+    for (const w of this.wheels) {
+      w.suspensionLength = initialSuspLength;
+      w.compression = staticSag / this.suspensionTravel;
+      w.isGrounded = true;
+    }
     this.updateVisuals();
   }
 
@@ -624,17 +643,23 @@ class RCCar {
         const sideForceVec = _v4.copy(wheelSideDir).multiplyScalar(sideGripForce * dt * body.invM);
         body.v.add(sideForceVec);
 
-        // Update wheel spin rotation angle
+        // Update wheel spin rotation angle (negative around X rolls forward)
         const angularDelta = (wheelLongSpeed / this.wheelRadius) * dt;
-        this.wheelSpinAngles[i] += angularDelta;
+        this.wheelSpinAngles[i] -= angularDelta;
 
       } else {
         // Airborne: suspension fully drooped / extended
         wheel.isGrounded = false;
         wheel.suspensionLength = restLen;
         wheel.compression = 0.0;
-        this.wheelSpinAngles[i] += (this.throttle * 25.0) * dt;
+        this.wheelSpinAngles[i] -= (this.throttle * 25.0) * dt;
       }
+    }
+
+    // Zero-velocity resting lock when no throttle is applied and moving very slowly
+    if (Math.abs(this.throttle) < 0.01 && !this.isBraking && body.v.lengthSq() < 0.008) {
+      body.v.set(0, 0, 0);
+      body.w.set(0, 0, 0);
     }
 
     // Mid-air RC gyro pitch/roll stabilizer
