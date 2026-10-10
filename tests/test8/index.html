@@ -1240,11 +1240,11 @@ function createCyanCheckerShirtTextures() {
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeat, repeat);
+  tex.repeat.set(repeat, 9);
 
   const bump = new THREE.CanvasTexture(bCanvas);
   bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
-  bump.repeat.set(repeat * 3, repeat * 3);
+  bump.repeat.set(repeat * 3, 27);
 
   return { map: tex, bumpMap: bump };
 }
@@ -1264,9 +1264,9 @@ const shirtMat = new THREE.MeshStandardMaterial({
   polygonOffsetUnits: -1
 });
 
-const sNx = 31, sNy = 22;
+const sNx = 31, sNy = 32;
 const shirtHalfW = 0.455;
-const shirtTopY = 0.068, shirtBotY = -0.572;
+const shirtTopY = 0.068, shirtBotY = -0.872;
 const sDx = (2 * shirtHalfW) / (sNx - 1);
 const sDy = (shirtTopY - shirtBotY) / (sNy - 1);
 const sleeveBotJ = 9;
@@ -1316,7 +1316,7 @@ const shirtFrontIdx = Array.from({ length: sNy }, () => new Int32Array(sNx).fill
 const shirtBackIdx  = Array.from({ length: sNy }, () => new Int32Array(sNx).fill(-1));
 const shirtParticles = [];
 const shirtUVs = [];
-const shirtParticleMass = 1.4 / 1024;
+const shirtParticleMass = 1.4 / 1400;
 
 function createShirtParticle(x, y, z, side, i, j) {
   const idx = shirtParticles.length;
@@ -1380,7 +1380,7 @@ for (let j = 0; j < sNy - 1; j++) {
   }
 }
 
-// Mold the 20% bigger 3D T-Shirt in Bind Pose so every vertex starts at least +0.042m (4.2cm) outside Marshmallow Man skin
+// Mold the 30cm longer 3D T-Shirt in Bind Pose so every vertex starts at least +0.042m (4.2cm) outside Marshmallow Man skin
 const shirtTargetOffset = 0.042;
 for (let iter = 0; iter < 14; iter++) {
   for (let v = 0; v < shirtParticles.length; v++) {
@@ -1471,7 +1471,7 @@ for (const grid of [shirtFrontIdx, shirtBackIdx]) {
 
 // Bind each shirt particle to its anatomical bone for smooth frame transport & pre-link local Marshmallow Man skin particles
 characterRoot.updateMatrixWorld(true);
-const shirtBoneNames = ['Spine', 'Spine1', 'Spine2', 'LeftArm', 'RightArm'];
+const shirtBoneNames = ['Hips', 'Spine', 'Spine1', 'Spine2', 'LeftArm', 'RightArm'];
 const shirtBoneInvBind = {};
 for (const bName of shirtBoneNames) {
   bonesByName[bName].updateMatrixWorld(true);
@@ -1482,7 +1482,7 @@ for (let i = 0; i < shirtParticles.length; i++) {
   const p = shirtParticles[i];
   p._bindPos = p.x.clone();
 
-  // 1. Assign primary anatomical bone & transport weight (carries sleeves with rotating arms while torso cloth drapes freely)
+  // 1. Assign primary anatomical bone & transport weight (carries sleeves with rotating arms while torso/hem cloth drapes freely)
   let bName = 'Spine1';
   let transportW = 0.34;
   if (p._bindPos.y > -0.24 && p._bindPos.x > 0.215) {
@@ -1494,9 +1494,12 @@ for (let i = 0; i < shirtParticles.length; i++) {
   } else if (p._bindPos.y > -0.22) {
     bName = 'Spine2';
     transportW = p._bindPos.y > -0.05 ? 0.86 : 0.56;
+  } else if (p._bindPos.y <= -0.55) {
+    bName = 'Hips';
+    transportW = 0.14;
   } else if (p._bindPos.y <= -0.38) {
     bName = 'Spine';
-    transportW = 0.28;
+    transportW = 0.26;
   }
   p._boneRef = bonesByName[bName];
   p._boneLocalBind = p._bindPos.clone().applyMatrix4(shirtBoneInvBind[bName]);
@@ -1511,7 +1514,7 @@ for (let i = 0; i < shirtParticles.length; i++) {
     const bp = blobParticles[k];
     if (!bp._isBoundary) continue;
     const d0 = p._bindPos.distanceTo(bp._bindPos);
-    if (d0 < 0.20) {
+    if (d0 < 0.24) {
       p._skinNeighbors.push(bp);
     }
   }
@@ -1584,10 +1587,9 @@ function solveShirtBodyCollision(h) {
       }
     }
 
-    // 3. Watertight fallback against upper-body skeleton capsules (prevents tunneling during fast arm swings or mouse grabs)
+    // 3. Watertight fallback against skeleton capsules (prevents tunneling during fast arm/thigh swings or mouse grabs)
     for (let s = 0; s < boneSegments.length; s++) {
       const seg = boneSegments[s];
-      if (s > 12) continue; // upper body & arms only
       const a = cachedSegA[s];
       const b = cachedSegB[s];
       const minR = seg.radius * 1.35 + p.radius;
