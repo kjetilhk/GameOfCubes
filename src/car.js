@@ -146,12 +146,11 @@ class RCCar {
     const mountY = -this.chassisSize * 0.08;
     const staticSag = (this.chassisMass * 9.81 * 0.25) / this.suspensionStiffness;
     const initialSuspLength = this.suspensionRestLength - staticSag;
-    const groundY = -world.box.hy;
-    const defaultY = groundY + this.wheelRadius + initialSuspLength - mountY;
-
     const posX = options.x !== undefined ? options.x : 0.0;
-    const posY = (options.y !== undefined && options.y !== null) ? options.y : defaultY;
     const posZ = options.z !== undefined ? options.z : -world.box.d * 0.5;
+    const groundY = world.getTerrainHeight ? world.getTerrainHeight(posX, posZ) : -world.box.hy;
+    const defaultY = groundY + this.wheelRadius + initialSuspLength - mountY;
+    const posY = (options.y !== undefined && options.y !== null) ? options.y : defaultY;
 
     // 1. Create Core XPBD Rigid Body (Chassis)
     this.body = new XPBD.Body(this.chassisSize, this.chassisMass / Math.pow(this.chassisSize, 3));
@@ -828,7 +827,15 @@ class RCCar {
       body.w.addScaledVector(correctionAxis, 4.0 * dt);
     }
 
-    // Chassis bottom clearance on ramps
+    // Chassis bottom clearance on deformed terrain hills & ramps
+    if (this.world.getTerrainHeight) {
+      const ty = this.world.getTerrainHeight(body.x.x, body.x.z);
+      const minTerrainY = ty + this.chassisSize * 0.22;
+      if (body.x.y < minTerrainY) {
+        body.x.y = minTerrainY;
+        if (body.v.y < 0) body.v.y = 0;
+      }
+    }
     if (this.world.ramps) {
       for (let r = 0; r < this.world.ramps.length; r++) {
         const ry = this.world.ramps[r].getHeight(body.x.x, body.x.z);

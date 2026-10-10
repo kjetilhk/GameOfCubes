@@ -50,15 +50,15 @@
     border-color: rgba(0, 229, 255, 0.90);
   }
 
-  /* Top RC Remote Trim & Sensitivity Sliders */
+  /* Top RC Remote & Course Deformer Sliders */
   #rc-remote {
     position: fixed;
-    top: calc(12px + env(safe-area-inset-top, 0px));
+    top: calc(10px + env(safe-area-inset-top, 0px));
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    align-items: center;
-    gap: 14px;
+    flex-direction: column;
+    gap: 5px;
     background: rgba(14, 18, 26, 0.72);
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 14px;
@@ -71,18 +71,24 @@
     -webkit-user-select: none;
   }
 
+  .rc-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
   .rc-dial {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    min-width: 92px;
+    gap: 1px;
+    min-width: 96px;
   }
 
   .rc-dial-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.66rem;
+    font-size: 0.64rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -99,19 +105,19 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 5px;
+    height: 4px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.18);
     outline: none;
-    margin: 3px 0;
+    margin: 2px 0;
     cursor: pointer;
     touch-action: pan-x;
   }
   .rc-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     border-radius: 50%;
     background: #00e5ff;
     border: 2px solid #ffffff;
@@ -119,8 +125,8 @@
     cursor: pointer;
   }
   .rc-slider::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     border-radius: 50%;
     background: #00e5ff;
     border: 2px solid #ffffff;
@@ -128,10 +134,10 @@
     cursor: pointer;
   }
 
-  /* Simple text-only Speed HUD (centered directly below RC remote sliders) */
+  /* Simple text-only Speed HUD (centered directly below RC remote & deformer sliders) */
   #speed-hud {
     position: fixed;
-    top: calc(60px + env(safe-area-inset-top, 0px));
+    top: calc(86px + env(safe-area-inset-top, 0px));
     left: 50%;
     transform: translateX(-50%);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -147,16 +153,19 @@
   }
 
   #note {
-    top: calc(88px + env(safe-area-inset-top, 0px));
+    top: calc(114px + env(safe-area-inset-top, 0px));
   }
 
   @media (max-width: 720px) {
     #rc-remote {
-      top: calc(50px + env(safe-area-inset-top, 0px));
-      gap: 10px;
+      top: calc(48px + env(safe-area-inset-top, 0px));
+      gap: 4px;
       padding: 5px 10px;
       width: calc(100vw - 28px);
       max-width: 360px;
+    }
+    .rc-row {
+      gap: 10px;
       justify-content: space-between;
     }
     .rc-dial {
@@ -164,11 +173,11 @@
       flex: 1;
     }
     #speed-hud {
-      top: calc(98px + env(safe-area-inset-top, 0px));
+      top: calc(122px + env(safe-area-inset-top, 0px));
       font-size: 1.0rem;
     }
     #note {
-      top: calc(124px + env(safe-area-inset-top, 0px));
+      top: calc(148px + env(safe-area-inset-top, 0px));
     }
   }
 
@@ -244,26 +253,51 @@
 </div>
 
 <div id="rc-remote">
-  <div class="rc-dial">
-    <div class="rc-dial-header">
-      <span>Max-Speed</span>
-      <span id="val-max-speed" class="rc-dial-val">100%</span>
+  <div class="rc-row">
+    <div class="rc-dial">
+      <div class="rc-dial-header">
+        <span>Max-Speed</span>
+        <span id="val-max-speed" class="rc-dial-val">100%</span>
+      </div>
+      <input id="slider-max-speed" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
     </div>
-    <input id="slider-max-speed" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+    <div class="rc-dial">
+      <div class="rc-dial-header">
+        <span>Steer</span>
+        <span id="val-steer" class="rc-dial-val">100%</span>
+      </div>
+      <input id="slider-steer" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+    </div>
+    <div class="rc-dial">
+      <div class="rc-dial-header">
+        <span>Speed Sens</span>
+        <span id="val-speed-sens" class="rc-dial-val">100%</span>
+      </div>
+      <input id="slider-speed-sens" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+    </div>
   </div>
-  <div class="rc-dial">
-    <div class="rc-dial-header">
-      <span>Steer</span>
-      <span id="val-steer" class="rc-dial-val">100%</span>
+  <div class="rc-row">
+    <div class="rc-dial">
+      <div class="rc-dial-header">
+        <span>Hill Height</span>
+        <span id="val-deform-height" class="rc-dial-val">1.0m</span>
+      </div>
+      <input id="slider-deform-height" class="rc-slider" type="range" min="0" max="3.0" step="0.1" value="1.0">
     </div>
-    <input id="slider-steer" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
-  </div>
-  <div class="rc-dial">
-    <div class="rc-dial-header">
-      <span>Speed Sens</span>
-      <span id="val-speed-sens" class="rc-dial-val">100%</span>
+    <div class="rc-dial">
+      <div class="rc-dial-header">
+        <span>Hill Waves</span>
+        <span id="val-deform-freq" class="rc-dial-val">1.0x</span>
+      </div>
+      <input id="slider-deform-freq" class="rc-slider" type="range" min="0.2" max="2.5" step="0.1" value="1.0">
     </div>
-    <input id="slider-speed-sens" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+    <div class="rc-dial">
+      <div class="rc-dial-header">
+        <span>Roughness</span>
+        <span id="val-deform-rough" class="rc-dial-val">100%</span>
+      </div>
+      <input id="slider-deform-rough" class="rc-slider" type="range" min="0" max="200" step="10" value="100">
+    </div>
   </div>
 </div>
 
@@ -275,9 +309,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=17"></script>
-<script src="../../src/room.js?v=17"></script>
-<script src="../../src/car.js?v=17"></script>
+<script src="../../src/xpbd.js?v=18"></script>
+<script src="../../src/room.js?v=18"></script>
+<script src="../../src/car.js?v=18"></script>
 <script>
 (() => {
 'use strict';
@@ -358,24 +392,53 @@ scene.add(fillLight);
 const ambLight = new THREE.AmbientLight(0x222a36, 0.65);
 scene.add(ambLight);
 
-/* ================= Procedural Uneven Off-Road Surface ================= */
-// Continuous mathematical height function providing authentic off-road bumps,
-// washboard whoops, swells, and ruts for the buggy suspension and cubes.
+/* ================= Procedural Course Deformer & Uneven Off-Road Surface ================= */
+// Macro course deformer parameters (adjustable in real time via top sliders):
+// - deformHeight: highest point of the course hills in meters (default 1.0m)
+// - deformFreq:   spatial wave frequency of the hills across the course (default 1.0x)
+// - deformRough:  intensity multiplier for small-scale off-road ruts & whoops (default 1.0)
+let deformHeight = 1.0;
+let deformFreq = 1.0;
+let deformRough = 1.0;
+let waveMin = -1.0, waveSpan = 2.0;
+
+function rawHillWave(x, z, f) {
+  return 0.60 * Math.sin(x * 0.042 * f + 0.45) * Math.cos(z * 0.048 * f - 0.30)
+       + 0.40 * Math.sin((x * 0.7 - z * 0.7) * 0.038 * f + 0.85);
+}
+
+function calibrateDeformerBounds() {
+  let mn = Infinity, mx = -Infinity;
+  for (let gx = -64; gx <= 64; gx += 4) {
+    for (let gz = -56; gz <= 56; gz += 4) {
+      const w = rawHillWave(gx, gz, deformFreq);
+      if (w < mn) mn = w;
+      if (w > mx) mx = w;
+    }
+  }
+  waveMin = mn;
+  waveSpan = Math.max(0.001, mx - mn);
+}
+calibrateDeformerBounds();
+
+// Continuous mathematical height function combining the 1.0m macro course deformer
+// with authentic small-scale off-road bumps, washboard whoops, swells, and ruts.
 function getTrackSurfaceHeight(x, z) {
   const baseFloor = -1.50;
-  // 1. Broad rolling swells across the 96m x 112m circuit (wavelength ~15-25m, amplitude ~5cm)
+
+  // 1. Macro Course Deformer: normalized to [0, 1] so the highest point on the course is strictly deformHeight (1.0m default)
+  const normHill = THREE.MathUtils.clamp((rawHillWave(x, z, deformFreq) - waveMin) / waveSpan, 0.0, 1.0);
+  const hillElevation = deformHeight * normHill;
+
+  // 2. Micro Off-Road Unevenness: rolling swells, washboard whoops, and packed dirt chatter
   const roll = 0.050 * Math.sin(x * 0.12 + 0.3) * Math.cos(z * 0.16 - 0.2)
              + 0.030 * Math.sin((x + z) * 0.09);
-
-  // 2. Off-road washboard whoops & rhythm bumps (wavelength ~3-6m, amplitude ~2.5cm)
   const wash = 0.025 * Math.sin(x * 0.60 + z * 0.35)
              + 0.018 * Math.cos(x * 0.45 - z * 0.65);
-
-  // 3. Compact packed dirt chatter and tyre ruts (wavelength ~1-2m, amplitude ~1.2cm)
   const chatter = 0.012 * Math.sin(x * 1.3 - z * 0.9) * Math.cos(x * 0.8 + z * 1.1);
+  const unevenMicro = Math.max(0.008, (roll + wash + chatter + 0.070) * deformRough);
 
-  // Elevation smoothly undulating between 0.008m and 0.20m above base floor (-1.50)
-  return baseFloor + Math.max(0.008, roll + wash + chatter + 0.070);
+  return baseFloor + hillElevation + unevenMicro;
 }
 world.getTerrainHeight = getTrackSurfaceHeight;
 
@@ -682,11 +745,13 @@ const apexPositions = [
   [56.0, -33.9],
   [-56.0, -33.9]
 ];
+const apexConeMeshes = [];
 for (const [cx, cz] of apexPositions) {
   const cone = new THREE.Mesh(coneGeom, coneMat);
   cone.position.set(cx, getTrackSurfaceHeight(cx, cz) + 0.30, cz);
   cone.castShadow = true;
   trackGroup.add(cone);
+  apexConeMeshes.push(cone);
 }
 
 /* ================= Jumps & Ramps Physics System ================= */
@@ -710,6 +775,9 @@ class Ramp {
     this.cos = Math.cos(heading);
     this.sin = Math.sin(heading);
     this.floorY = getTrackSurfaceHeight(x, z);
+    this.mesh = null;
+    this.edgeMesh = null;
+    this.baseLocalY = null;
   }
 
   getHeight(px, pz) {
@@ -719,12 +787,35 @@ class Ramp {
     const v = dx * this.sin + dz * this.cos;
     if (Math.abs(u) > this.width * 0.5 || Math.abs(v) > this.length * 0.5) return null;
     const s = (v + this.length * 0.5) / this.length;
+    const baseH = getTrackSurfaceHeight(px, pz);
     if (this.type === 'tabletop') {
-      if (s < 0.40) return this.floorY + (s / 0.40) * this.height;
-      if (s < 0.60) return this.floorY + this.height;
-      return this.floorY + ((1.0 - s) / 0.40) * this.height;
+      if (s < 0.40) return baseH + (s / 0.40) * this.height;
+      if (s < 0.60) return baseH + this.height;
+      return baseH + ((1.0 - s) / 0.40) * this.height;
     } else { // wedge kicker ramp
-      return this.floorY + s * this.height;
+      return baseH + s * this.height;
+    }
+  }
+
+  updateMesh() {
+    if (!this.mesh) return;
+    const geom = this.mesh.geometry;
+    const pos = geom.attributes.position;
+    const baseY = this.baseLocalY;
+    for (let i = 0; i < pos.count; i++) {
+      const lx = pos.getX(i);
+      const lz = pos.getZ(i);
+      const wx = this.x + lx * this.cos + lz * this.sin;
+      const wz = this.z - lx * this.sin + lz * this.cos;
+      pos.setY(i, getTrackSurfaceHeight(wx, wz) + baseY[i]);
+    }
+    pos.needsUpdate = true;
+    geom.computeVertexNormals();
+    if (this.edgeMesh) {
+      const ez = this.edgeMesh.position.z;
+      const wx = this.x + ez * this.sin;
+      const wz = this.z + ez * this.cos;
+      this.edgeMesh.position.y = getTrackSurfaceHeight(wx, wz) + this.height;
     }
   }
 }
@@ -747,11 +838,12 @@ function buildRampMesh(ramp) {
     indices.push(idx, idx + 1, idx + 2);
   }
 
+  const y0 = -0.02; // slight ground skirt so edges sit flush on sloped hills
   if (ramp.type === 'tabletop') {
-    const z0 = -L * 0.5, y0 = 0;
+    const z0 = -L * 0.5;
     const z1 = -L * 0.5 + L * 0.40, y1 = H;
     const z2 = -L * 0.5 + L * 0.60, y2 = H;
-    const z3 = L * 0.5, y3 = 0;
+    const z3 = L * 0.5, y3 = -0.02;
 
     addQuad([-halfW, y0, z0], [halfW, y0, z0], [-halfW, y1, z1], [halfW, y1, z1]);
     addQuad([-halfW, y1, z1], [halfW, y1, z1], [-halfW, y2, z2], [halfW, y2, z2]);
@@ -767,7 +859,7 @@ function buildRampMesh(ramp) {
 
     addQuad([-halfW, y0, z3], [halfW, y0, z3], [-halfW, y0, z0], [halfW, y0, z0]);
   } else {
-    const z0 = -L * 0.5, y0 = 0;
+    const z0 = -L * 0.5;
     const z1 = L * 0.5, y1 = H;
 
     addQuad([-halfW, y0, z0], [halfW, y0, z0], [-halfW, y1, z1], [halfW, y1, z1]);
@@ -780,7 +872,12 @@ function buildRampMesh(ramp) {
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geom.setIndex(indices);
-  geom.computeVertexNormals();
+
+  const posAttr = geom.attributes.position;
+  ramp.baseLocalY = new Float32Array(posAttr.count);
+  for (let i = 0; i < posAttr.count; i++) {
+    ramp.baseLocalY[i] = posAttr.getY(i);
+  }
 
   const mat = new THREE.MeshStandardMaterial({
     color: ramp.type === 'wedge' ? 0x2e3848 : 0x222a36,
@@ -790,7 +887,7 @@ function buildRampMesh(ramp) {
   });
 
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(ramp.x, ramp.floorY, ramp.z);
+  mesh.position.set(ramp.x, 0, ramp.z);
   mesh.rotation.y = ramp.heading;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -801,6 +898,10 @@ function buildRampMesh(ramp) {
   const edgeMesh = new THREE.Mesh(edgeGeom, edgeMat);
   edgeMesh.position.set(0, ramp.height, ramp.type === 'wedge' ? ramp.length * 0.48 : 0);
   mesh.add(edgeMesh);
+
+  ramp.mesh = mesh;
+  ramp.edgeMesh = edgeMesh;
+  ramp.updateMesh();
 
   return mesh;
 }
@@ -892,6 +993,7 @@ function spawnCrashCube(size, x, y, z, colorIndex = 0) {
   cubeInitialStates.push({
     body: b,
     initX: new V(x, y, z),
+    heightOffset: y - getTrackSurfaceHeight(x, z),
     initQ: new THREE.Quaternion(0, 0, 0, 1),
     size: size
   });
@@ -1014,6 +1116,12 @@ function updateChaseCamera(dt, targetPos = null, targetQuat = null, instant = fa
     .addScaledVector(forwardDir, -chaseDistance)
     .addScaledVector(upDir, chaseHeight);
 
+  // Prevent camera from dipping underground when backing up or climbing steep 1m-3m hills
+  const camGroundY = getTrackSurfaceHeight(desiredPos.x, desiredPos.z);
+  if (desiredPos.y < camGroundY + 0.35) {
+    desiredPos.y = camGroundY + 0.35;
+  }
+
   if (instant) {
     camera.position.copy(desiredPos);
     currentLookAt.copy(chaseCamTarget);
@@ -1034,8 +1142,9 @@ function resetScene() {
   buggy.reset(0, null, -6.5);
   updateChaseCamera(0, null, null, true);
   for (const s of cubeInitialStates) {
-    s.body.x.copy(s.initX);
-    s.body.px.copy(s.initX);
+    const ty = getTrackSurfaceHeight(s.initX.x, s.initX.z) + s.heightOffset;
+    s.body.x.set(s.initX.x, ty, s.initX.z);
+    s.body.px.set(s.initX.x, ty, s.initX.z);
     s.body.q.copy(s.initQ);
     s.body.pq.copy(s.initQ);
     s.body.v.set(0, 0, 0);
@@ -1046,13 +1155,19 @@ function resetScene() {
 window.resetScene = resetScene;
 document.getElementById('btn-reset').addEventListener('click', resetScene);
 
-/* ================= RC Remote Trim & Sensitivity Sliders ================= */
+/* ================= RC Remote Trim & Course Deformer Sliders ================= */
 const sliderMaxSpeed = document.getElementById('slider-max-speed');
 const valMaxSpeed = document.getElementById('val-max-speed');
 const sliderSteer = document.getElementById('slider-steer');
 const valSteer = document.getElementById('val-steer');
 const sliderSpeedSens = document.getElementById('slider-speed-sens');
 const valSpeedSens = document.getElementById('val-speed-sens');
+const sliderDeformHeight = document.getElementById('slider-deform-height');
+const valDeformHeight = document.getElementById('val-deform-height');
+const sliderDeformFreq = document.getElementById('slider-deform-freq');
+const valDeformFreq = document.getElementById('val-deform-freq');
+const sliderDeformRough = document.getElementById('slider-deform-rough');
+const valDeformRough = document.getElementById('val-deform-rough');
 const speedHudEl = document.getElementById('speed-hud');
 
 sliderMaxSpeed.addEventListener('input', () => {
@@ -1072,6 +1187,123 @@ sliderSpeedSens.addEventListener('input', () => {
   valSpeedSens.textContent = pct + '%';
   buggy.setSpeedSensitivity(pct / 100);
 });
+
+function updateCourseDeformation() {
+  // Record current ground heights beneath car and cubes before updating terrain
+  const oldCarGround = world.getTerrainHeight(buggy.body.x.x, buggy.body.x.z);
+  const oldCubeGrounds = new Float32Array(cubeBodies.length);
+  for (let i = 0; i < cubeBodies.length; i++) {
+    oldCubeGrounds[i] = world.getTerrainHeight(cubeBodies[i].x.x, cubeBodies[i].x.z);
+  }
+
+  deformHeight = Number(sliderDeformHeight.value);
+  deformFreq = Number(sliderDeformFreq.value);
+  deformRough = Number(sliderDeformRough.value) / 100;
+
+  valDeformHeight.textContent = deformHeight.toFixed(1) + 'm';
+  valDeformFreq.textContent = deformFreq.toFixed(1) + 'x';
+  valDeformRough.textContent = Math.round(deformRough * 100) + '%';
+
+  calibrateDeformerBounds();
+
+  // 1. Update Ground Mesh
+  for (let i = 0; i < gPos.count; i++) {
+    gPos.setY(i, getTrackSurfaceHeight(gPos.getX(i), gPos.getZ(i)) - 0.14);
+  }
+  gPos.needsUpdate = true;
+  groundGeom.computeVertexNormals();
+
+  // 2. Update Road Mesh
+  const rPos = roadGeom.attributes.position;
+  for (let i = 0; i < rPos.count; i++) {
+    rPos.setY(i, getTrackSurfaceHeight(rPos.getX(i), rPos.getZ(i)));
+  }
+  rPos.needsUpdate = true;
+  roadGeom.computeVertexNormals();
+
+  // 3. Update 3D Border Curbs (inner & outer)
+  for (const curbGeom of [innerGeom, outerGeom]) {
+    const cPos = curbGeom.attributes.position;
+    for (let i = 0; i < cPos.count; i++) {
+      const mod = i & 7;
+      const isTop = (mod === 1 || mod === 3 || mod === 4 || mod === 6);
+      cPos.setY(i, getTrackSurfaceHeight(cPos.getX(i), cPos.getZ(i)) + (isTop ? 0.145 : 0.005));
+    }
+    cPos.needsUpdate = true;
+  }
+
+  // 4. Update Centerline Dashed Stripe
+  const lPos = lineGeom.attributes.position;
+  for (let i = 0; i < lPos.count; i++) {
+    lPos.setY(i, getTrackSurfaceHeight(lPos.getX(i), lPos.getZ(i)) + 0.006);
+  }
+  lPos.needsUpdate = true;
+
+  // 5. Update Start/Finish Line Checkered Tiles
+  for (let i = 0; i < startFinishGroup.children.length; i++) {
+    const tile = startFinishGroup.children[i];
+    const wx = tile.position.x;
+    const wz = -3.5 + tile.position.z;
+    tile.position.y = getTrackSurfaceHeight(wx, wz) + 0.009;
+  }
+
+  // 6. Update North & South Turf Islands
+  for (let i = 0; i < ntPos.count; i++) {
+    const vx = ntPos.getX(i);
+    const vz = ntPos.getZ(i) + 27.0;
+    const r = Math.hypot(vx, vz - 27.0);
+    const dome = Math.max(0, 1 - (r / 7.5) ** 2) * 0.18;
+    ntPos.setY(i, getTrackSurfaceHeight(vx, vz) - 0.04 + dome);
+  }
+  ntPos.needsUpdate = true;
+  northTurfGeom.computeVertexNormals();
+
+  for (let i = 0; i < stPos.count; i++) {
+    const vx = stPos.getX(i);
+    const vz = stPos.getZ(i) - 27.0;
+    const r = Math.hypot(vx, vz + 27.0);
+    const dome = Math.max(0, 1 - (r / 7.5) ** 2) * 0.18;
+    stPos.setY(i, getTrackSurfaceHeight(vx, vz) - 0.04 + dome);
+  }
+  stPos.needsUpdate = true;
+  southTurfGeom.computeVertexNormals();
+
+  // 7. Update Corner Apex Cones
+  for (let i = 0; i < apexConeMeshes.length; i++) {
+    const cone = apexConeMeshes[i];
+    cone.position.y = getTrackSurfaceHeight(cone.position.x, cone.position.z) + 0.30;
+  }
+
+  // 8. Update Ramps
+  for (let i = 0; i < world.ramps.length; i++) {
+    world.ramps[i].updateMesh();
+  }
+
+  // 9. Shift Buggy and 44 Dynamic Cubes seamlessly with terrain delta
+  const newCarGround = world.getTerrainHeight(buggy.body.x.x, buggy.body.x.z);
+  const dyCar = newCarGround - oldCarGround;
+  buggy.body.x.y += dyCar;
+  buggy.body.px.y += dyCar;
+  buggy.prevPos.y += dyCar;
+  buggy.body.sync();
+  buggy.syncVisuals(1.0);
+
+  for (let i = 0; i < cubeBodies.length; i++) {
+    const b = cubeBodies[i];
+    const newCubeGround = world.getTerrainHeight(b.x.x, b.x.z);
+    const dyCube = newCubeGround - oldCubeGrounds[i];
+    b.x.y += dyCube;
+    b.px.y += dyCube;
+    b.sync();
+    cubeMeshes[i].position.copy(b.x);
+  }
+  updateChaseCamera(0, null, null, true);
+}
+window.updateCourseDeformation = updateCourseDeformation;
+
+sliderDeformHeight.addEventListener('input', updateCourseDeformation);
+sliderDeformFreq.addEventListener('input', updateCourseDeformation);
+sliderDeformRough.addEventListener('input', updateCourseDeformation);
 
 /* ================= Virtual Joystick Controls ================= */
 const baseEl = document.getElementById('joystick-base');

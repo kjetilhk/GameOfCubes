@@ -696,7 +696,7 @@ function collideWalls(world, a, walls){
       const pen = w.o - w.n.dot(corner);
       if (pen > -world.margin) world.addContact(a, null, corner, wallPt.copy(corner).addScaledVector(w.n, pen), w.n);
     }
-    if (world.getTerrainHeight){
+    if (world.getTerrainHeight && a.collisionGroup !== 'rccar'){
       const ty = world.getTerrainHeight(corner.x, corner.z);
       const pen = ty - corner.y;
       if (pen > -world.margin){
