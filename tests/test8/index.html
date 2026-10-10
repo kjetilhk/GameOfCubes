@@ -27,19 +27,70 @@
   }
 
   #state-banner {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     font-size: 0.74rem;
     font-weight: 700;
     letter-spacing: 0.02em;
     color: var(--ink);
-    padding-bottom: 3px;
+    padding-bottom: 4px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     white-space: nowrap;
+  }
+
+  #soft-controls.collapsed #state-banner {
+    padding-bottom: 0;
+    border-bottom: none;
   }
 
   #state-banner span {
     color: #f2b632;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  .panel-tabs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .panel-tab {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--muted);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    padding: 2px 9px;
+    font: inherit;
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .panel-tab:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--ink);
+  }
+
+  .panel-tab.active {
+    background: #f2b632;
+    color: #11151c;
+    border-color: #f2b632;
+  }
+
+  .panel-tab.cloth-active {
+    background: #20d6ee;
+    color: #09181d;
+    border-color: #20d6ee;
+  }
+
+  .slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
   }
 
   .soft-row {
@@ -72,6 +123,10 @@
     font-size: 0.70rem;
   }
 
+  #sliders-cloth .soft-dial-val {
+    color: #20d6ee;
+  }
+
   .soft-slider {
     -webkit-appearance: none;
     appearance: none;
@@ -96,6 +151,11 @@
     cursor: pointer;
   }
 
+  #sliders-cloth .soft-slider::-webkit-slider-thumb {
+    background: #20d6ee;
+    box-shadow: 0 0 6px rgba(32, 214, 238, 0.7);
+  }
+
   .soft-slider::-moz-range-thumb {
     width: 13px;
     height: 13px;
@@ -106,17 +166,27 @@
     cursor: pointer;
   }
 
+  #sliders-cloth .soft-slider::-moz-range-thumb {
+    background: #20d6ee;
+    box-shadow: 0 0 6px rgba(32, 214, 238, 0.7);
+  }
+
   #note {
-    top: calc(114px + env(safe-area-inset-top, 0px));
+    top: calc(118px + env(safe-area-inset-top, 0px));
   }
 
   @media (max-width: 720px) {
     #soft-controls {
       top: calc(44px + env(safe-area-inset-top, 0px));
       width: calc(100% - 20px);
-      max-width: 420px;
+      max-width: 440px;
       padding: 6px 10px;
       gap: 4px;
+    }
+    #state-banner {
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
     }
     .soft-row {
       justify-content: space-between;
@@ -127,7 +197,7 @@
       min-width: 0;
     }
     #note {
-      top: calc(146px + env(safe-area-inset-top, 0px));
+      top: calc(156px + env(safe-area-inset-top, 0px));
     }
   }
 </style>
@@ -137,58 +207,119 @@
 <div id="note"></div>
 
 <div id="soft-controls" class="ui-panel">
-  <div id="state-banner">Pose: <span id="state-label">Bind Pose (T-Pose)</span></div>
-  <div class="soft-row">
-    <div class="soft-dial">
-      <div class="soft-dial-header">
-        <span>Walk Speed</span>
-        <span id="val-walkspeed" class="soft-dial-val">1.00x</span>
-      </div>
-      <input id="slider-walkspeed" class="soft-slider" type="range" min="0" max="2.5" step="0.05" value="1.0">
-    </div>
-    <div class="soft-dial">
-      <div class="soft-dial-header">
-        <span>Softness</span>
-        <span id="val-softness" class="soft-dial-val">40%</span>
-      </div>
-      <input id="slider-softness" class="soft-slider" type="range" min="0" max="100" step="1" value="40">
-    </div>
-    <div class="soft-dial">
-      <div class="soft-dial-header">
-        <span>Bending</span>
-        <span id="val-bending" class="soft-dial-val">55%</span>
-      </div>
-      <input id="slider-bending" class="soft-slider" type="range" min="0" max="100" step="1" value="55">
-    </div>
-    <div class="soft-dial">
-      <div class="soft-dial-header">
-        <span>Volume</span>
-        <span id="val-volume" class="soft-dial-val">100%</span>
-      </div>
-      <input id="slider-volume" class="soft-slider" type="range" min="0" max="100" step="1" value="100">
+  <div id="state-banner">
+    <div>Pose: <span id="state-label">Bind Pose (T-Pose)</span></div>
+    <div class="panel-tabs">
+      <button id="tab-softbody" class="panel-tab active" title="Show Softbody Dynamics Sliders">Softbody</button>
+      <button id="tab-cloth" class="panel-tab" title="Show Cloth Dynamics Sliders">Cloth</button>
+      <button id="tab-toggle" class="panel-tab active" title="Turn Sliders On or Off">Sliders: On</button>
     </div>
   </div>
-  <div class="soft-row">
-    <div class="soft-dial">
-      <div class="soft-dial-header">
-        <span>Damping</span>
-        <span id="val-damping" class="soft-dial-val">1.25</span>
+
+  <!-- Softbody Dynamics Sliders -->
+  <div id="sliders-softbody" class="slider-group">
+    <div class="soft-row">
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Walk Speed</span>
+          <span id="val-walkspeed" class="soft-dial-val">1.0x</span>
+        </div>
+        <input id="slider-walkspeed" class="soft-slider" type="range" min="0" max="2.5" step="0.05" value="1.0">
       </div>
-      <input id="slider-damping" class="soft-slider" type="range" min="0" max="4.0" step="0.05" value="1.25">
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Softness</span>
+          <span id="val-softness" class="soft-dial-val">40%</span>
+        </div>
+        <input id="slider-softness" class="soft-slider" type="range" min="0" max="100" step="1" value="40">
+      </div>
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Bending</span>
+          <span id="val-bending" class="soft-dial-val">55%</span>
+        </div>
+        <input id="slider-bending" class="soft-slider" type="range" min="0" max="100" step="1" value="55">
+      </div>
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Volume</span>
+          <span id="val-volume" class="soft-dial-val">100%</span>
+        </div>
+        <input id="slider-volume" class="soft-slider" type="range" min="0" max="100" step="1" value="100">
+      </div>
     </div>
-    <div class="soft-dial">
-      <div class="soft-dial-header">
-        <span>Gravity</span>
-        <span id="val-gravity" class="soft-dial-val">6.2</span>
+    <div class="soft-row">
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Damping</span>
+          <span id="val-damping" class="soft-dial-val">1.25</span>
+        </div>
+        <input id="slider-damping" class="soft-slider" type="range" min="0" max="4.0" step="0.05" value="1.25">
       </div>
-      <input id="slider-gravity" class="soft-slider" type="range" min="0" max="15.0" step="0.2" value="6.2">
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Gravity</span>
+          <span id="val-gravity" class="soft-dial-val">6.2</span>
+        </div>
+        <input id="slider-gravity" class="soft-slider" type="range" min="0" max="15.0" step="0.2" value="6.2">
+      </div>
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Mass</span>
+          <span id="val-mass" class="soft-dial-val">1.0x</span>
+        </div>
+        <input id="slider-mass" class="soft-slider" type="range" min="0.2" max="4.0" step="0.1" value="1.0">
+      </div>
     </div>
-    <div class="soft-dial">
-      <div class="soft-dial-header">
-        <span>Mass</span>
-        <span id="val-mass" class="soft-dial-val">1.0x</span>
+  </div>
+
+  <!-- Cloth Dynamics Sliders (Cyan Checker Shirt) -->
+  <div id="sliders-cloth" class="slider-group" style="display: none;">
+    <div class="soft-row">
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Stretch</span>
+          <span id="val-cloth-stretch" class="soft-dial-val">10%</span>
+        </div>
+        <input id="slider-cloth-stretch" class="soft-slider" type="range" min="0" max="100" step="1" value="10">
       </div>
-      <input id="slider-mass" class="soft-slider" type="range" min="0.2" max="4.0" step="0.1" value="1.0">
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Shear</span>
+          <span id="val-cloth-shear" class="soft-dial-val">20%</span>
+        </div>
+        <input id="slider-cloth-shear" class="soft-slider" type="range" min="0" max="100" step="1" value="20">
+      </div>
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Bending</span>
+          <span id="val-cloth-bend" class="soft-dial-val">0%</span>
+        </div>
+        <input id="slider-cloth-bend" class="soft-slider" type="range" min="0" max="100" step="1" value="0">
+      </div>
+    </div>
+    <div class="soft-row">
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Friction</span>
+          <span id="val-cloth-friction" class="soft-dial-val">32%</span>
+        </div>
+        <input id="slider-cloth-friction" class="soft-slider" type="range" min="0" max="100" step="1" value="32">
+      </div>
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Damping</span>
+          <span id="val-cloth-damping" class="soft-dial-val">0.80</span>
+        </div>
+        <input id="slider-cloth-damping" class="soft-slider" type="range" min="0" max="3.0" step="0.05" value="0.80">
+      </div>
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Mass</span>
+          <span id="val-cloth-mass" class="soft-dial-val">1.4kg</span>
+        </div>
+        <input id="slider-cloth-mass" class="soft-slider" type="range" min="0.2" max="5.0" step="0.1" value="1.4">
+      </div>
     </div>
   </div>
 </div>
@@ -199,6 +330,8 @@
   <button id="btn-walk1" class="active">Mocap 1: Natural Walk</button>
   <button id="btn-walk2">Mocap 2: Brisk Stride</button>
   <button id="btn-walk3">Mocap 3: Heavy Prowl</button>
+  <button id="btn-sliders" class="active">Sliders: On</button>
+  <button id="btn-slider-mode">Mode: Softbody</button>
   <button id="btn-wire">Wireframe</button>
 </div>
 
@@ -987,20 +1120,99 @@ function syncBlobMesh() {
 }
 syncBlobMesh();
 
-/* ================= Cotton Shirt (One-Way Body Collision, Cotton Preset, No Self-Collision) ================= */
-const cottonTex = RoomEnv.createFabricTextures({
-  color: '#ebe2d4',
-  threads: 32,
-  size: 512,
-  repeat: 24
-});
+/* ================= Cyan Checker Cotton Shirt (One-Way Body Collision, Cotton Preset, No Self-Collision) ================= */
+function createCyanCheckerShirtTextures() {
+  const size = 512, threads = 32, repeat = 6;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const bCanvas = document.createElement('canvas');
+  bCanvas.width = bCanvas.height = size;
+  const bCtx = bCanvas.getContext('2d');
+
+  ctx.fillStyle = '#1498b4';
+  ctx.fillRect(0, 0, size, size);
+  bCtx.fillStyle = '#808080';
+  bCtx.fillRect(0, 0, size, size);
+
+  const step = size / threads;
+  const halfThreads = threads / 2;
+
+  for (let y = 0; y < size; y += step) {
+    for (let x = 0; x < size; x += step) {
+      const cx = Math.floor(x / step);
+      const cy = Math.floor(y / step);
+      const checkX = cx < halfThreads ? 0 : 1;
+      const checkY = cy < halfThreads ? 0 : 1;
+      const isBrightCyan = (checkX + checkY) % 2 === 0;
+      const warpOnTop = (cx + cy) % 2 === 0;
+      const lum = ((cx * 17 + cy * 11) % 15) - 7;
+
+      // Crisp 2-tone Cyan Checkerboard: Vibrant Cyan (#20d6ee) vs Deep Cyan (#0b647e)
+      const baseR = (isBrightCyan ? 32 : 11) + lum;
+      const baseG = (isBrightCyan ? 214 : 100) + lum;
+      const baseB = (isBrightCyan ? 238 : 126) + lum;
+
+      const cDark = `rgb(${Math.max(0, baseR - 26)}, ${Math.max(0, baseG - 26)}, ${Math.max(0, baseB - 26)})`;
+      const cMid  = `rgb(${Math.min(255, baseR + 5)}, ${Math.min(255, baseG + 5)}, ${Math.min(255, baseB + 5)})`;
+      const cPeak = `rgb(${Math.min(255, baseR + 18)}, ${Math.min(255, baseG + 18)}, ${Math.min(255, baseB + 18)})`;
+
+      if (warpOnTop) {
+        const grad = ctx.createLinearGradient(x, 0, x + step, 0);
+        grad.addColorStop(0, cDark);
+        grad.addColorStop(0.2, cMid);
+        grad.addColorStop(0.5, cPeak);
+        grad.addColorStop(0.8, cMid);
+        grad.addColorStop(1, cDark);
+        ctx.fillStyle = grad;
+        ctx.fillRect(x + 1, y, step - 2, step);
+
+        const bGrad = bCtx.createLinearGradient(x, 0, x + step, 0);
+        bGrad.addColorStop(0, '#484848');
+        bGrad.addColorStop(0.5, '#ffffff');
+        bGrad.addColorStop(1, '#484848');
+        bCtx.fillStyle = bGrad;
+        bCtx.fillRect(x + 1, y, step - 2, step);
+      } else {
+        const grad = ctx.createLinearGradient(0, y, 0, y + step);
+        grad.addColorStop(0, cDark);
+        grad.addColorStop(0.2, cMid);
+        grad.addColorStop(0.5, cPeak);
+        grad.addColorStop(0.8, cMid);
+        grad.addColorStop(1, cDark);
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, y + 1, step, step - 2);
+
+        const bGrad = bCtx.createLinearGradient(0, y, 0, y + step);
+        bGrad.addColorStop(0, '#484848');
+        bGrad.addColorStop(0.5, '#ffffff');
+        bGrad.addColorStop(1, '#484848');
+        bCtx.fillStyle = bGrad;
+        bCtx.fillRect(x, y + 1, step, step - 2);
+      }
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeat, repeat);
+
+  const bump = new THREE.CanvasTexture(bCanvas);
+  bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
+  bump.repeat.set(repeat * 3, repeat * 3);
+
+  return { map: tex, bumpMap: bump };
+}
+
+const cottonTex = createCyanCheckerShirtTextures();
 
 const shirtMat = new THREE.MeshStandardMaterial({
-  color: 0xe6dac8,
+  color: 0xffffff,
   map: cottonTex.map,
   bumpMap: cottonTex.bumpMap,
   bumpScale: 0.0012,
-  roughness: 0.90,
+  roughness: 0.88,
   metalness: 0.0,
   side: THREE.DoubleSide,
   polygonOffset: true,
@@ -1158,12 +1370,19 @@ for (let iter = 0; iter < 14; iter++) {
 
 // Add Cotton Preset XPBD Distance Constraints (compliance = 0.000004 warp/weft, shearCompliance = 0.02, bendCompliance = 0)
 const shirtEdgeSet = new Set();
-function addShirtEdge(u, v, compliance) {
+const shirtStructConstraints = [];
+const shirtShearConstraints  = [];
+const shirtBendConstraints   = [];
+
+function addShirtEdge(u, v, compliance, bucket, enabled = true, isCollarLock = false) {
   if (u < 0 || v < 0 || u === v) return;
   const key = u < v ? u + ',' + v : v + ',' + u;
   if (!shirtEdgeSet.has(key)) {
     shirtEdgeSet.add(key);
-    world.addDistanceConstraint(shirtParticles[u], shirtParticles[v], compliance);
+    const c = world.addDistanceConstraint(shirtParticles[u], shirtParticles[v], compliance);
+    c.enabled = enabled;
+    c._isCollarLock = isCollarLock;
+    if (bucket) bucket.push(c);
   }
 }
 
@@ -1174,17 +1393,34 @@ for (let j = 0; j < sNy - 1; j++) {
   for (let i = 0; i < sNx - 1; i++) {
     if (!isCellInShirt(i, j)) continue;
     // Collar & top shoulder seam reinforcement keeps neckline inextensible
-    const structComp = (j <= 2 && i >= 8 && i <= 22) ? 0.0 : COTTON_STRUCT_COMPLIANCE;
+    const isCollar = (j <= 2 && i >= 8 && i <= 22);
+    const structComp = isCollar ? 0.0 : COTTON_STRUCT_COMPLIANCE;
     for (const grid of [shirtFrontIdx, shirtBackIdx]) {
       const a = grid[j][i], b = grid[j][i + 1], c = grid[j + 1][i], d = grid[j + 1][i + 1];
       // Structural warp & weft
-      addShirtEdge(a, b, structComp);
-      addShirtEdge(c, d, structComp);
-      addShirtEdge(a, c, structComp);
-      addShirtEdge(b, d, structComp);
+      addShirtEdge(a, b, structComp, shirtStructConstraints, true, isCollar);
+      addShirtEdge(c, d, structComp, shirtStructConstraints, true, isCollar);
+      addShirtEdge(a, c, structComp, shirtStructConstraints, true, isCollar);
+      addShirtEdge(b, d, structComp, shirtStructConstraints, true, isCollar);
       // Diagonal cotton weave shear
-      addShirtEdge(a, d, COTTON_SHEAR_COMPLIANCE);
-      addShirtEdge(b, c, COTTON_SHEAR_COMPLIANCE);
+      addShirtEdge(a, d, COTTON_SHEAR_COMPLIANCE, shirtShearConstraints, true, false);
+      addShirtEdge(b, c, COTTON_SHEAR_COMPLIANCE, shirtShearConstraints, true, false);
+    }
+  }
+}
+
+// 2-hop bending constraints along warp & weft (disabled at 0% Bending for Cotton preset; enabled when Cloth Bending > 0%)
+for (const grid of [shirtFrontIdx, shirtBackIdx]) {
+  for (let j = 0; j < sNy; j++) {
+    for (let i = 0; i < sNx; i++) {
+      const a = grid[j][i];
+      if (a < 0) continue;
+      if (i + 2 < sNx && grid[j][i + 1] >= 0 && grid[j][i + 2] >= 0) {
+        addShirtEdge(a, grid[j][i + 2], 0.01, shirtBendConstraints, false, false);
+      }
+      if (j + 2 < sNy && grid[j + 1][i] >= 0 && grid[j + 2][i] >= 0) {
+        addShirtEdge(a, grid[j + 2][i], 0.01, shirtBendConstraints, false, false);
+      }
     }
   }
 }
@@ -1270,10 +1506,16 @@ syncShirtMesh();
 const skinCenter = new V(), skinDiff = new V(), skinRelDisp = new V();
 const R_SKIN_SPHERE = 0.048;
 const R_SKIN_INSET  = 0.030;
+let shirtBodyFriction = 0.32;
+let clothDampingVal   = 0.80;
 
-function solveShirtBodyCollision() {
+function solveShirtBodyCollision(h) {
+  const dragK = Math.max(0, Math.min(1, clothDampingVal * h));
+  const contactFric = Math.min(0.35, shirtBodyFriction * 0.35);
+
   for (let i = 0; i < shirtParticles.length; i++) {
     const p = shirtParticles[i];
+    let hadSkinContact = false;
 
     // 1. Softly seat the top shoulder/collar seam onto the moving shoulder frame so the shirt hangs naturally from the shoulders
     if (p._sj === 0 && p._si >= 6 && p._si <= sNx - 1 - 6) {
@@ -1294,6 +1536,7 @@ function solveShirtBodyCollision() {
         const pen = R_SKIN_SPHERE - d;
         skinDiff.divideScalar(d); // outward unit normal n
         p.x.addScaledVector(skinDiff, pen);
+        hadSkinContact = true;
       }
     }
 
@@ -1318,10 +1561,17 @@ function solveShirtBodyCollision() {
         const pen = minR - d;
         pushDir.divideScalar(d);
         p.x.addScaledVector(pushDir, pen);
+        hadSkinContact = true;
       }
     }
 
-    // 4. Clamp per-substep relative displacement so one-way depenetration never injects explosive velocity
+    // 4. Apply cloth contact friction & cloth damping (strictly damps p.px toward p.x)
+    const dampFactor = hadSkinContact ? Math.max(dragK, contactFric) : dragK;
+    if (dampFactor > 0) {
+      p.px.lerp(p.x, dampFactor);
+    }
+
+    // 5. Clamp per-substep relative displacement so one-way depenetration never injects explosive velocity
     skinRelDisp.subVectors(p.x, p.px);
     const maxStepDisp = 0.0032; // <= 1.9 m/s at 600Hz substep rate
     const dispLenSq = skinRelDisp.lengthSq();
@@ -1449,8 +1699,8 @@ world.onParticleSubstep = function(wWorld, h, substepIdx) {
 };
 
 // 4. Single-pass post-constraint one-way collision: project Cotton Shirt outside the solved Marshmallow Man surface before velocity derivation
-world.onPostParticleSubstep = function() {
-  solveShirtBodyCollision();
+world.onPostParticleSubstep = function(wWorld, h) {
+  solveShirtBodyCollision(h);
 };
 
 /* ================= 3 Motion-Captured Walk Cycle Profiles ================= */
@@ -1852,7 +2102,7 @@ orbitControls = RoomEnv.createOrbitControls(camera, orbitTarget, {
 });
 resize();
 
-/* ================= Real-Time Soft-Body Dynamics & Walk Speed Sliders ================= */
+/* ================= Real-Time Soft-Body & Cloth Dynamics Sliders ================= */
 const sliderSoftness  = document.getElementById('slider-softness');
 const sliderBending   = document.getElementById('slider-bending');
 const sliderVolume    = document.getElementById('slider-volume');
@@ -1912,7 +2162,7 @@ function applySoftBodySliders() {
   world.linearDamping = dampingVal;
   world.accel.set(0, -gravityVal, 0);
 
-  // 5. Unpinned Marshmallow Man particle mass scaling (Cotton Shirt keeps its Cotton preset mass)
+  // 5. Unpinned Marshmallow Man particle mass scaling (Cotton Shirt keeps its cloth mass)
   const invParticleMass = 1 / (0.048 * massScale);
   for (let i = 0; i < blobParticles.length; i++) {
     const p = blobParticles[i];
@@ -1926,6 +2176,138 @@ function applySoftBodySliders() {
   el.addEventListener('input', applySoftBodySliders);
 });
 applySoftBodySliders();
+
+// Cloth Dynamics Sliders (for Cyan Checker Cotton Shirt)
+const sliderClothStretch  = document.getElementById('slider-cloth-stretch');
+const sliderClothShear    = document.getElementById('slider-cloth-shear');
+const sliderClothBend     = document.getElementById('slider-cloth-bend');
+const sliderClothFriction = document.getElementById('slider-cloth-friction');
+const sliderClothDamping  = document.getElementById('slider-cloth-damping');
+const sliderClothMass     = document.getElementById('slider-cloth-mass');
+
+const valClothStretch  = document.getElementById('val-cloth-stretch');
+const valClothShear    = document.getElementById('val-cloth-shear');
+const valClothBend     = document.getElementById('val-cloth-bend');
+const valClothFriction = document.getElementById('val-cloth-friction');
+const valClothDamping  = document.getElementById('val-cloth-damping');
+const valClothMass     = document.getElementById('val-cloth-mass');
+
+function applyClothSliders() {
+  const stretchPct  = parseFloat(sliderClothStretch.value);
+  const shearPct    = parseFloat(sliderClothShear.value);
+  const bendPct     = parseFloat(sliderClothBend.value);
+  const frictionPct = parseFloat(sliderClothFriction.value);
+  const dampingVal  = parseFloat(sliderClothDamping.value);
+  const massVal     = parseFloat(sliderClothMass.value);
+
+  valClothStretch.textContent  = Math.round(stretchPct) + '%';
+  valClothShear.textContent    = Math.round(shearPct) + '%';
+  valClothBend.textContent     = Math.round(bendPct) + '%';
+  valClothFriction.textContent = Math.round(frictionPct) + '%';
+  valClothDamping.textContent  = dampingVal.toFixed(2);
+  valClothMass.textContent     = massVal.toFixed(1) + 'kg';
+
+  // 1. Structural warp & weft stretch compliance (10% -> 0.000004 Cotton preset)
+  const stretchComp = stretchPct <= 0 ? 0 : 0.004 * Math.pow(stretchPct / 100, 3);
+  for (let i = 0; i < shirtStructConstraints.length; i++) {
+    const c = shirtStructConstraints[i];
+    c.compliance = c._isCollarLock ? 0.0 : stretchComp;
+  }
+
+  // 2. Diagonal weave shear compliance (20% -> 0.02 Cotton preset)
+  const shearComp = (shearPct / 100) * 0.10;
+  for (let i = 0; i < shirtShearConstraints.length; i++) {
+    shirtShearConstraints[i].compliance = shearComp;
+  }
+
+  // 3. 2-hop bending stiffness (0% -> disabled for Cotton preset; >0% -> enabled with compliance)
+  const bendEnabled = bendPct > 0;
+  const bendComp = bendEnabled ? (0.02 * Math.pow(1 - bendPct / 100, 3) + 0.00002) : 0.01;
+  for (let i = 0; i < shirtBendConstraints.length; i++) {
+    const c = shirtBendConstraints[i];
+    c.enabled = bendEnabled;
+    c.compliance = bendComp;
+  }
+
+  // 4. Shirt-on-body contact friction & cloth air damping
+  shirtBodyFriction = frictionPct / 100;
+  clothDampingVal   = dampingVal;
+
+  // 5. Shirt particle mass & friction
+  const invShirtMass = 1 / Math.max(0.0001, massVal / shirtParticles.length);
+  for (let i = 0; i < shirtParticles.length; i++) {
+    const sp = shirtParticles[i];
+    sp.friction = shirtBodyFriction;
+    sp.invM = invShirtMass;
+  }
+}
+
+[sliderClothStretch, sliderClothShear, sliderClothBend, sliderClothFriction, sliderClothDamping, sliderClothMass].forEach(el => {
+  el.addEventListener('input', applyClothSliders);
+});
+applyClothSliders();
+
+/* ================= Sliders Visibility (On/Off) & Mode Chooser (Softbody / Cloth) ================= */
+const softControlsPanel = document.getElementById('soft-controls');
+const groupSoftbody     = document.getElementById('sliders-softbody');
+const groupCloth        = document.getElementById('sliders-cloth');
+const tabSoftbody       = document.getElementById('tab-softbody');
+const tabCloth          = document.getElementById('tab-cloth');
+const tabToggle         = document.getElementById('tab-toggle');
+const btnSliders        = document.getElementById('btn-sliders');
+const btnSliderMode     = document.getElementById('btn-slider-mode');
+
+let slidersVisible = true;
+let activeSliderMode = 'softbody'; // 'softbody' | 'cloth'
+
+function updateSlidersUI() {
+  softControlsPanel.classList.toggle('collapsed', !slidersVisible);
+  groupSoftbody.style.display = (slidersVisible && activeSliderMode === 'softbody') ? 'flex' : 'none';
+  groupCloth.style.display    = (slidersVisible && activeSliderMode === 'cloth') ? 'flex' : 'none';
+
+  tabSoftbody.classList.toggle('active', slidersVisible && activeSliderMode === 'softbody');
+  tabCloth.classList.toggle('cloth-active', slidersVisible && activeSliderMode === 'cloth');
+
+  tabToggle.classList.toggle('active', slidersVisible);
+  tabToggle.textContent = slidersVisible ? 'Sliders: On' : 'Sliders: Off';
+
+  btnSliders.classList.toggle('active', slidersVisible);
+  btnSliders.textContent = slidersVisible ? 'Sliders: On' : 'Sliders: Off';
+
+  btnSliderMode.textContent = activeSliderMode === 'softbody' ? 'Mode: Softbody' : 'Mode: Cloth';
+  btnSliderMode.classList.toggle('active', activeSliderMode === 'cloth');
+}
+
+tabSoftbody.addEventListener('click', () => {
+  activeSliderMode = 'softbody';
+  slidersVisible = true;
+  updateSlidersUI();
+});
+
+tabCloth.addEventListener('click', () => {
+  activeSliderMode = 'cloth';
+  slidersVisible = true;
+  updateSlidersUI();
+});
+
+tabToggle.addEventListener('click', () => {
+  slidersVisible = !slidersVisible;
+  updateSlidersUI();
+});
+
+btnSliders.addEventListener('click', () => {
+  slidersVisible = !slidersVisible;
+  updateSlidersUI();
+});
+
+btnSliderMode.addEventListener('click', () => {
+  activeSliderMode = activeSliderMode === 'softbody' ? 'cloth' : 'softbody';
+  slidersVisible = true;
+  updateSlidersUI();
+  RoomEnv.showNote(activeSliderMode === 'softbody' ? 'Showing Softbody Dynamics Sliders' : 'Showing Cloth Dynamics Sliders (Cyan Checker Shirt)', 1800);
+});
+
+updateSlidersUI();
 
 /* ================= HUD Controls & Keyboard Shortcuts ================= */
 let wireActive = false;
