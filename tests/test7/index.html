@@ -128,10 +128,10 @@
     cursor: pointer;
   }
 
-  /* Simple text-only Speed HUD */
+  /* Simple text-only Speed HUD (centered directly below RC remote sliders) */
   #speed-hud {
     position: fixed;
-    top: calc(58px + env(safe-area-inset-top, 0px));
+    top: calc(60px + env(safe-area-inset-top, 0px));
     left: 50%;
     transform: translateX(-50%);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -147,12 +147,12 @@
   }
 
   #note {
-    top: calc(86px + env(safe-area-inset-top, 0px));
+    top: calc(88px + env(safe-area-inset-top, 0px));
   }
 
   @media (max-width: 720px) {
     #rc-remote {
-      top: calc(48px + env(safe-area-inset-top, 0px));
+      top: calc(50px + env(safe-area-inset-top, 0px));
       gap: 10px;
       padding: 5px 10px;
       width: calc(100vw - 28px);
@@ -164,11 +164,11 @@
       flex: 1;
     }
     #speed-hud {
-      top: calc(15px + env(safe-area-inset-top, 0px));
-      font-size: 0.95rem;
+      top: calc(98px + env(safe-area-inset-top, 0px));
+      font-size: 1.0rem;
     }
     #note {
-      top: calc(96px + env(safe-area-inset-top, 0px));
+      top: calc(124px + env(safe-area-inset-top, 0px));
     }
   }
 
@@ -275,9 +275,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=16"></script>
-<script src="../../src/room.js?v=16"></script>
-<script src="../../src/car.js?v=16"></script>
+<script src="../../src/xpbd.js?v=17"></script>
+<script src="../../src/room.js?v=17"></script>
+<script src="../../src/car.js?v=17"></script>
 <script>
 (() => {
 'use strict';
