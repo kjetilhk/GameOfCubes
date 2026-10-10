@@ -105,13 +105,12 @@ Tire lateral grip opposes sideways velocity $v_{\text{lat}}$, but is physically 
 $$F_{\text{lat}} = \operatorname{clamp}\left(-v_{\text{lat}} \cdot C_{\alpha},\, -\mu_{\text{side}} \cdot F_{\text{normal}},\, \mu_{\text{side}} \cdot F_{\text{normal}}\right)$$
 where $F_{\text{normal}} = \max(12\,\text{N}, F_{\text{susp}})$. When lateral forces exceed this threshold during aggressive high-speed cornering ($26\,\text{m/s}$), the tires cleanly break away into a smooth, authentic powerslide/drift instead of tripping the buggy into a rollover.
 
-### 3.4 Rollover Prevention & Anti-Roll Sway Bars
+### 3.4 Rollover Prevention & Dynamic Stability
 High-speed stability is reinforced through multi-stage vehicle dynamics:
-1. **Yaw-Decoupled Steering Torque**: Tire traction torque is strictly projected onto the chassis vertical axis $\hat{\mathbf{u}}_{\text{chassis}}$, eliminating artificial roll moments caused by ground contact height offsets.
-2. **Front & Rear Anti-Roll Bars (ARB)**: Transfers stiffness between left and right suspension arms ($k_{\text{arb}} = 45\,\text{N}$ per unit compression delta), keeping the chassis level during cornering.
+1. **Yaw-Decoupled Steering Torque (`rollInfluence = 0`)**: Steering torque is calculated using horizontal mount offsets in the chassis plane ($r_y = 0$), strictly decoupling lateral tire forces from chassis roll moments and preventing cornering edge tripping.
+2. **Wide-Track Suspension Roll Scaling**: Suspension roll torque is scaled by $0.15$ to match the buggy's true wide-track roll inertia ($I_{\text{roll}} \approx 6.7 \times I_{\text{cube}}$), preventing roll over-gain while preserving 100% of authentic squat and dive.
 3. **Aerodynamic Downforce**: Progressive downforce from front and rear wings scales with $v_{\text{fwd}}^2$ ($F_{\text{down}} \le 32\,\text{N}$), sucking the buggy into the track at top speed.
-4. **Active Low-CoM Righting Moment**: Replicating a bottom-mounted LiPo battery and brushless motor, roll tilt is strongly resisted and damped:
-   $$\boldsymbol{\tau}_{\text{roll}} = \hat{\mathbf{f}}_{\text{forward}} \cdot \left(-38 \cdot \sin(\phi_{\text{roll}}) - 12 \cdot \omega_{\text{roll}}\right)$$
+4. **Active Upright Stabilization & Roll/Pitch Damping**: Replicating a bottom-mounted LiPo battery and brushless motor (ultra-low Center of Mass), restoring torque pulls the chassis toward vertical via the 3D cross-product axis ($\boldsymbol{\tau}_{\text{upright}} = 14 \cdot (\hat{\mathbf{u}}_{\text{chassis}} \times \hat{\mathbf{u}}_{\text{world}})$) while damping roll and pitch rates to eliminate wobble resonance while leaving yaw completely free.
 
 ### 3.5 Gyroscopic Air-Control Stabilizer
 When airborne (all 4 wheels disconnected from ground), a subtle attitude stabilizer applies corrective torque toward the world up-vector:

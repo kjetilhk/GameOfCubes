@@ -23,12 +23,14 @@ const _v4 = new V();
 const _mountWorldPos = new V();
 const _pointVel = new V();
 const _relMount = new V();
+const _relMountFlat = new V();
 const _suspForceVec = new V();
 const _suspTorque = new V();
 const _wheelHeading = new V();
 const _wheelSideDir = new V();
 const _driveForce = new V();
 const _sideForce = new V();
+const _sideTorque = new V();
 const _tireForceTotal = new V();
 const _tireTorque = new V();
 const _tireYawTorque = new V();
@@ -603,13 +605,6 @@ class RCCar {
 
     let groundedWheelCount = 0;
 
-    // Compute anti-roll bar (ARB) balance between left and right wheels
-    // Front: wheel[0] = FL, wheel[1] = FR
-    // Rear:  wheel[2] = RL, wheel[3] = RR
-    const frontArbDelta = (this.wheels[0].compression - this.wheels[1].compression);
-    const rearArbDelta = (this.wheels[2].compression - this.wheels[3].compression);
-    const arbStiffness = 45.0; // N per unit compression differential
-
     for (let i = 0; i < 4; i++) {
       const wheel = this.wheels[i];
       const mount = wheel.mount;
@@ -665,12 +660,7 @@ class RCCar {
 
         // Bouncy Suspension Spring Force (Hooke's Law: F_s = k * delta_x)
         const springCompression = restLen - wheel.suspensionLength;
-        let springForce = springCompression * this.suspensionStiffness;
-
-        // Anti-roll bar force transfer (stiffens outer compressed suspension & pushes inner down)
-        const isLeft = mount.isLeft;
-        const arbDelta = mount.isFront ? frontArbDelta : rearArbDelta;
-        springForce += (isLeft ? arbDelta : -arbDelta) * arbStiffness;
+        const springForce = springCompression * this.suspensionStiffness;
 
         // Suspension Damper Force (F_d = -c * v_rel)
         _relMount.subVectors(mountWorldPos, body.x);
@@ -684,8 +674,11 @@ class RCCar {
         _suspForceVec.set(0, 1, 0).multiplyScalar(totalSuspensionForce * dt * body.invM);
         body.v.add(_suspForceVec);
 
-        // Suspension torque on chassis (produces authentic squat, dive, and body roll!)
+        // Suspension torque on chassis:
+        // Scaled roll moment (0.15) matches wide 0.86m buggy roll inertia, while keeping full pitch/dive
         _suspTorque.crossVectors(_relMount, _up).multiplyScalar(totalSuspensionForce * dt);
+        const rollMoment = _suspTorque.dot(forwardDir);
+        _suspTorque.addScaledVector(forwardDir, -rollMoment * 0.85);
         body.w.addScaledVector(_suspTorque, body.invI);
 
         // 3. Tire Traction: Longitudinal & Lateral
@@ -742,16 +735,16 @@ class RCCar {
         const sideGripForce = Math.max(-maxLateralGrip, Math.min(maxLateralGrip, -wheelLatSpeed * (this.tireFrictionSide * 16.0)));
         _sideForce.copy(_wheelSideDir).multiplyScalar(sideGripForce);
 
-        // Total horizontal tire contact force
-        _tireForceTotal.addVectors(_driveForce, _sideForce);
+        // Apply linear traction acceleration to chassis
+        body.v.addScaledVector(_driveForce, dt * body.invM);
+        body.v.addScaledVector(_sideForce, dt * body.invM);
 
-        // Linear tire acceleration
-        body.v.addScaledVector(_tireForceTotal, dt * body.invM);
-
-        // Tire yaw / steering torque on chassis:
-        // Project onto chassis upDir to provide 100% carving turn authority WITHOUT tripping roll moments!
-        _tireTorque.crossVectors(_relMount, _tireForceTotal);
-        const yawTorqueMag = _tireTorque.dot(upDir);
+        // Steering yaw torque from lateral tire forces:
+        // Decoupled rollInfluence = 0 using flat chassis-plane mount offset (r_y = 0)
+        // so lateral cornering forces produce 100% pure yaw steering torque without tripping roll moments!
+        _relMountFlat.set(mount.localPos.x, 0, mount.localPos.z).applyQuaternion(body.q);
+        _sideTorque.crossVectors(_relMountFlat, _sideForce);
+        const yawTorqueMag = _sideTorque.dot(upDir);
         _tireYawTorque.copy(upDir).multiplyScalar(yawTorqueMag);
         body.w.addScaledVector(_tireYawTorque, dt * body.invI);
 
@@ -772,14 +765,19 @@ class RCCar {
       }
     }
 
-    // Active Low-CoM Righting Torque & Roll Damping:
+    // Active Upright Stabilization & Roll/Pitch Damping when wheels are on ground:
     // Models battery and brushless motor mounted on lowest chassis skid plate (ultra-low Center of Mass).
-    // If the buggy rolls in hard 26 m/s turns, righting torque firmly counters roll and damps roll oscillations!
+    // Restoring torque pulls chassis back towards vertical, while roll/pitch rate damping kills wobble resonance.
     if (groundedWheelCount >= 1) {
-      const rollTilt = rightDir.y; // sin(roll angle)
+      const currentUp = _v1.set(0, 1, 0).applyQuaternion(body.q);
+      const correctionAxis = _v2.crossVectors(currentUp, _up);
+      body.w.addScaledVector(correctionAxis, 14.0 * dt);
+
+      // Damp roll and pitch rates to eliminate wobble resonance while leaving yaw free
       const rollRate = body.w.dot(forwardDir);
-      const rightingTorque = -rollTilt * 38.0 - rollRate * 12.0;
-      body.w.addScaledVector(forwardDir, rightingTorque * dt * body.invI);
+      const pitchRate = body.w.dot(rightDir);
+      body.w.addScaledVector(forwardDir, -rollRate * Math.min(1.0, 12.0 * dt));
+      body.w.addScaledVector(rightDir, -pitchRate * Math.min(1.0, 8.0 * dt));
     }
 
     // Gentle resting stabilization only when buggy has naturally rolled to a near-stop (< 0.12 m/s)
