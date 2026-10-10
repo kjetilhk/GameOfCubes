@@ -200,6 +200,36 @@
       top: calc(156px + env(safe-area-inset-top, 0px));
     }
   }
+
+  #hud select {
+    pointer-events: auto;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' stroke='%23f3efe6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") no-repeat right 0.78rem center;
+    color: var(--ink);
+    border: 0;
+    font: inherit;
+    font-size: 0.92rem;
+    padding: 0.52rem 2.1rem 0.52rem 0.95rem;
+    border-radius: 999px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    outline: none;
+    transition: background-color 0.2s, color 0.2s;
+  }
+
+  #hud select.active {
+    background: var(--btn) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' stroke='%231d2632' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") no-repeat right 0.78rem center;
+    color: var(--btn-ink);
+    font-weight: 700;
+  }
+
+  #hud select option {
+    background: #141c26;
+    color: #f3efe6;
+    font-weight: 600;
+  }
 </style>
 </head>
 <body>
@@ -222,9 +252,9 @@
       <div class="soft-dial">
         <div class="soft-dial-header">
           <span>Walk Speed</span>
-          <span id="val-walkspeed" class="soft-dial-val">1.0x</span>
+          <span id="val-walkspeed" class="soft-dial-val">50%</span>
         </div>
-        <input id="slider-walkspeed" class="soft-slider" type="range" min="0" max="2.5" step="0.05" value="1.0">
+        <input id="slider-walkspeed" class="soft-slider" type="range" min="0" max="200" step="5" value="50">
       </div>
       <div class="soft-dial">
         <div class="soft-dial-header">
@@ -307,9 +337,9 @@
       <div class="soft-dial">
         <div class="soft-dial-header">
           <span>Bending</span>
-          <span id="val-cloth-bend" class="soft-dial-val">0%</span>
+          <span id="val-cloth-bend" class="soft-dial-val">2%</span>
         </div>
-        <input id="slider-cloth-bend" class="soft-slider" type="range" min="0" max="100" step="1" value="0">
+        <input id="slider-cloth-bend" class="soft-slider" type="range" min="0" max="100" step="1" value="2">
       </div>
     </div>
     <div class="soft-row">
@@ -341,11 +371,11 @@
 <div id="hud">
   <a id="back" href="../../">← Tests</a>
   <button id="btn-bindpose">Bind Pose → Walk</button>
-  <button id="btn-walk1" class="active">Mocap 1: Natural Walk</button>
-  <button id="btn-walk2">Mocap 2: Brisk Stride</button>
-  <button id="btn-walk3">Mocap 3: Heavy Prowl</button>
-  <button id="btn-sliders" class="active">Sliders: On</button>
-  <button id="btn-slider-mode">Mode: Softbody</button>
+  <select id="select-walk" class="active" aria-label="Choose Walk Animation">
+    <option value="0" selected>Mocap 1: Natural Walk</option>
+    <option value="1">Mocap 2: Brisk Stride</option>
+    <option value="2">Mocap 3: Heavy Prowl</option>
+  </select>
   <button id="btn-wire">Wireframe</button>
 </div>
 
@@ -2010,17 +2040,12 @@ let currentAction = bindPoseAction;
 let bindPoseTimer = null;
 const stateLabel = document.getElementById('state-label');
 
-const walkButtons = [
-  document.getElementById('btn-walk1'),
-  document.getElementById('btn-walk2'),
-  document.getElementById('btn-walk3')
-];
+const selectWalk = document.getElementById('select-walk');
 
 function updateButtonHighlights(inBindPose) {
   document.getElementById('btn-bindpose').classList.toggle('active', inBindPose);
-  for (let i = 0; i < walkButtons.length; i++) {
-    walkButtons[i].classList.toggle('active', !inBindPose && i === activeWalkIndex);
-  }
+  selectWalk.classList.toggle('active', !inBindPose);
+  selectWalk.value = String(activeWalkIndex);
 }
 
 function transitionToWalk(index, blendDuration = 0.75) {
@@ -2137,7 +2162,7 @@ const valWalkSpeed    = document.getElementById('val-walkspeed');
 const valArmLift      = document.getElementById('val-armlift');
 const valClothArmLift = document.getElementById('val-cloth-armlift');
 
-let walkSpeedScale = 1.0;
+let walkSpeedScale = 0.50;
 let armLiftRad = THREE.MathUtils.degToRad(22);
 
 function syncArmLiftValue(deg) {
@@ -2154,13 +2179,14 @@ sliderClothArmLift.addEventListener('input', () => syncArmLiftValue(parseFloat(s
 syncArmLiftValue(parseFloat(sliderArmLift.value));
 
 function applySoftBodySliders() {
-  const softnessPct = parseFloat(sliderSoftness.value);
-  const bendingPct  = parseFloat(sliderBending.value);
-  const volumePct   = parseFloat(sliderVolume.value);
-  const dampingVal  = parseFloat(sliderDamping.value);
-  const gravityVal  = parseFloat(sliderGravity.value);
-  const massScale   = parseFloat(sliderMass.value);
-  walkSpeedScale    = parseFloat(sliderWalkSpeed.value);
+  const softnessPct  = parseFloat(sliderSoftness.value);
+  const bendingPct   = parseFloat(sliderBending.value);
+  const volumePct    = parseFloat(sliderVolume.value);
+  const dampingVal   = parseFloat(sliderDamping.value);
+  const gravityVal   = parseFloat(sliderGravity.value);
+  const massScale    = parseFloat(sliderMass.value);
+  const walkSpeedPct = parseFloat(sliderWalkSpeed.value);
+  walkSpeedScale     = walkSpeedPct / 100;
 
   valSoftness.textContent  = Math.round(softnessPct) + '%';
   valBending.textContent   = Math.round(bendingPct) + '%';
@@ -2168,7 +2194,7 @@ function applySoftBodySliders() {
   valDamping.textContent   = dampingVal.toFixed(2);
   valGravity.textContent   = gravityVal.toFixed(1);
   valMass.textContent      = massScale.toFixed(1) + 'x';
-  valWalkSpeed.textContent = walkSpeedScale.toFixed(1) + 'x';
+  valWalkSpeed.textContent = Math.round(walkSpeedPct) + '%';
 
   // 1. 1-hop tetrahedral edge compliance (40% -> 0.0040)
   const edgeCompliance = softnessPct <= 0
@@ -2252,7 +2278,7 @@ function applyClothSliders() {
     shirtShearConstraints[i].compliance = shearComp;
   }
 
-  // 3. 2-hop bending stiffness (0% -> disabled for Cotton preset; >0% -> enabled with compliance)
+  // 3. 2-hop bending stiffness (0% -> disabled; >0% -> enabled with compliance, default 2%)
   const bendEnabled = bendPct > 0;
   const bendComp = bendEnabled ? (0.02 * Math.pow(1 - bendPct / 100, 3) + 0.00002) : 0.01;
   for (let i = 0; i < shirtBendConstraints.length; i++) {
@@ -2286,8 +2312,6 @@ const groupCloth        = document.getElementById('sliders-cloth');
 const tabSoftbody       = document.getElementById('tab-softbody');
 const tabCloth          = document.getElementById('tab-cloth');
 const tabToggle         = document.getElementById('tab-toggle');
-const btnSliders        = document.getElementById('btn-sliders');
-const btnSliderMode     = document.getElementById('btn-slider-mode');
 
 let slidersVisible = true;
 let activeSliderMode = 'softbody'; // 'softbody' | 'cloth'
@@ -2302,12 +2326,6 @@ function updateSlidersUI() {
 
   tabToggle.classList.toggle('active', slidersVisible);
   tabToggle.textContent = slidersVisible ? 'Sliders: On' : 'Sliders: Off';
-
-  btnSliders.classList.toggle('active', slidersVisible);
-  btnSliders.textContent = slidersVisible ? 'Sliders: On' : 'Sliders: Off';
-
-  btnSliderMode.textContent = activeSliderMode === 'softbody' ? 'Mode: Softbody' : 'Mode: Cloth';
-  btnSliderMode.classList.toggle('active', activeSliderMode === 'cloth');
 }
 
 tabSoftbody.addEventListener('click', () => {
@@ -2327,18 +2345,6 @@ tabToggle.addEventListener('click', () => {
   updateSlidersUI();
 });
 
-btnSliders.addEventListener('click', () => {
-  slidersVisible = !slidersVisible;
-  updateSlidersUI();
-});
-
-btnSliderMode.addEventListener('click', () => {
-  activeSliderMode = activeSliderMode === 'softbody' ? 'cloth' : 'softbody';
-  slidersVisible = true;
-  updateSlidersUI();
-  RoomEnv.showNote(activeSliderMode === 'softbody' ? 'Showing Softbody Dynamics Sliders' : 'Showing Cloth Dynamics Sliders (Cyan Checker Shirt)', 1800);
-});
-
 updateSlidersUI();
 
 /* ================= HUD Controls & Keyboard Shortcuts ================= */
@@ -2353,11 +2359,10 @@ document.getElementById('btn-wire').addEventListener('click', () => {
 });
 
 document.getElementById('btn-bindpose').addEventListener('click', startBindPoseSequence);
-walkButtons.forEach((btn, idx) => {
-  btn.addEventListener('click', () => {
-    transitionToWalk(idx, 0.55);
-    RoomEnv.showNote('Swapped to ' + MOCAP_PROFILES[idx].name, 1800);
-  });
+selectWalk.addEventListener('change', () => {
+  const idx = parseInt(selectWalk.value, 10) || 0;
+  transitionToWalk(idx, 0.55);
+  RoomEnv.showNote('Swapped to ' + MOCAP_PROFILES[idx].name, 1800);
 });
 
 window.addEventListener('keydown', e => {
