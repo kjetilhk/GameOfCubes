@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Test 8: Human Skeleton & Mocap Walk Cycles - XPBD Lab</title>
+<title>Test 8: Human Skeleton, Soft-Body Blob & Mocap Walk Cycles - XPBD Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../src/common.css">
@@ -60,11 +60,12 @@
   <button id="btn-walk1" class="active">Mocap 1: Natural Walk</button>
   <button id="btn-walk2">Mocap 2: Brisk Stride</button>
   <button id="btn-walk3">Mocap 3: Heavy Prowl</button>
+  <button id="btn-wire">Wireframe</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=19"></script>
-<script src="../../src/room.js?v=19"></script>
+<script src="../../src/xpbd.js?v=20"></script>
+<script src="../../src/room.js?v=20"></script>
 <script>
 (() => {
 'use strict';
@@ -73,42 +74,104 @@ const V = THREE.Vector3;
 const Q = THREE.Quaternion;
 const E = THREE.Euler;
 
-const world = new XPBD.World({ dt: 1/60, substeps: 12 });
+/* ================= XPBD Physics World in Open Empty Space ================= */
+const world = new XPBD.World({
+  dt: 1/60,
+  substeps: 18,
+  positionIterations: 3,
+  linearDamping: 1.4
+});
+// Gentle gravity so the head-pinned soft-body blob drapes and jiggles naturally around the skeleton
+world.accel.set(0, -3.2, 0);
 
-/* ================= Rendering & Empty Room Setup ================= */
+// Wide open empty-space bounds (no 3m box walls; open floor at y = -1.50m)
+world.box.hx = 50;
+world.box.hy = 1.5;
+world.box.d = 100;
+world.walls = [
+  { n: new V( 1, 0, 0), o: -50 },
+  { n: new V(-1, 0, 0), o: -50 },
+  { n: new V( 0, 1, 0), o: -1.5 }, // Open floor at y = -1.50m
+  { n: new V( 0,-1, 0), o: -50 },
+  { n: new V( 0, 0, 1), o: -50 },
+  { n: new V( 0, 0,-1), o: -50 }
+];
+world.center.set(0, 0, -1.2);
+
+/* ================= Rendering & Empty 3D Space Setup ================= */
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.05;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
-const lights = RoomEnv.createLighting(scene);
-let wallGroup = null;
+scene.background = new THREE.Color(0x0c1017);
+scene.fog = new THREE.FogExp2(0x0c1017, 0.045);
 
-const orbitTarget = new V(0, -0.58, -1.2);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 80);
+
+// Studio 3-point lighting in open empty space
+const keyLight = new THREE.DirectionalLight(0xfff4e6, 0.85);
+keyLight.position.set(2.8, 4.2, 2.5);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.camera.near = 0.5;
+keyLight.shadow.camera.far = 15;
+keyLight.shadow.camera.left = -2.2;
+keyLight.shadow.camera.right = 2.2;
+keyLight.shadow.camera.top = 2.5;
+keyLight.shadow.camera.bottom = -2.2;
+keyLight.shadow.bias = -0.0005;
+keyLight.shadow.radius = 2.5;
+scene.add(keyLight);
+keyLight.target.position.set(0, -0.5, -1.2);
+scene.add(keyLight.target);
+
+const fillLight = new THREE.DirectionalLight(0x90b8f8, 0.45);
+fillLight.position.set(-3.0, 2.2, 1.5);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0x60d0ff, 0.38);
+rimLight.position.set(0.0, 2.5, -4.2);
+scene.add(rimLight);
+
+const ambLight = new THREE.AmbientLight(0xd0dcf0, 0.32);
+scene.add(ambLight);
+
+// Open Infinite-Space Ground Plane (shadow receiver, no walls or ceiling)
+const groundMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(80, 80),
+  new THREE.MeshStandardMaterial({
+    color: 0x11161f,
+    roughness: 0.78,
+    metalness: 0.08
+  })
+);
+groundMesh.rotation.x = -Math.PI / 2;
+groundMesh.position.set(0, -1.50, -1.2);
+groundMesh.receiveShadow = true;
+scene.add(groundMesh);
+
+// Subtle open-space floor grid
+const gridHelper = new THREE.GridHelper(16, 32, 0x2a3648, 0x18202c);
+gridHelper.position.set(0, -1.499, -1.2);
+scene.add(gridHelper);
+
+const orbitTarget = new V(0, -0.52, -1.2);
 let orbitControls = null;
 
 function resize() {
-  wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / Math.max(1, h);
+  camera.updateProjectionMatrix();
   if (orbitControls) orbitControls.update();
 }
 window.addEventListener('resize', resize);
-
-orbitControls = RoomEnv.createOrbitControls(camera, orbitTarget, {
-  dist: 3.1,
-  pitch: 0.16,
-  yaw: 0.42,
-  minDist: 1.4,
-  maxDist: 6.0,
-  minPitch: -0.15,
-  maxPitch: 1.25
-});
-resize();
 
 /* ================= Humanoid Skeleton Hierarchy ================= */
 // Floor is at y = -1.50m.
@@ -123,8 +186,8 @@ const BONE_DEFS = [
   { name: 'Spine1',        parent: 'Spine',         pos: [0, 0.14, 0],        rSphere: 0.042, rCyl: 0.038 },
   { name: 'Spine2',        parent: 'Spine1',        pos: [0, 0.15, 0],        rSphere: 0.046, rCyl: 0.040 },
   { name: 'Neck',          parent: 'Spine2',        pos: [0, 0.13, 0],        rSphere: 0.032, rCyl: 0.026 },
-  { name: 'Head',          parent: 'Neck',          pos: [0, 0.09, 0],        rSphere: 0.038, rCyl: 0.026 },
-  { name: 'HeadTop_End',   parent: 'Head',          pos: [0, 0.17, 0],        rSphere: 0.056, rCyl: 0.038 },
+  { name: 'Head',          parent: 'Neck',          pos: [0, 0.11, 0],        rSphere: 0.072, rCyl: 0.028 },
+  { name: 'HeadTop_End',   parent: 'Head',          pos: [0, 0.14, 0],        rSphere: 0.048, rCyl: 0.036 },
 
   // Left Arm chain (T-Pose along +X)
   { name: 'LeftShoulder',  parent: 'Spine2',        pos: [0.045, 0.10, 0],    rSphere: 0.032, rCyl: 0.024 },
@@ -158,15 +221,23 @@ const BONE_DEFS = [
 // PBR Materials for Joint Spheres & Bone Cylinders
 const jointSphereMat = new THREE.MeshPhysicalMaterial({
   color: 0xf2b632,
-  roughness: 0.25,
+  roughness: 0.22,
   metalness: 0.18,
-  clearcoat: 0.35,
+  clearcoat: 0.40,
   clearcoatRoughness: 0.15
 });
 
+const headSphereMat = new THREE.MeshPhysicalMaterial({
+  color: 0xff9800,
+  roughness: 0.18,
+  metalness: 0.20,
+  clearcoat: 0.60,
+  clearcoatRoughness: 0.10
+});
+
 const boneCylinderMat = new THREE.MeshPhysicalMaterial({
-  color: 0x567a9e,
-  roughness: 0.32,
+  color: 0x6289b0,
+  roughness: 0.30,
   metalness: 0.25,
   clearcoat: 0.25,
   clearcoatRoughness: 0.20
@@ -174,6 +245,7 @@ const boneCylinderMat = new THREE.MeshPhysicalMaterial({
 
 const bonesByName = {};
 const boneList = [];
+const boneSegments = []; // Capsule segments { boneA, boneB, radius } for skeleton -> softbody collision
 const unitSphereGeom = new THREE.SphereGeometry(1, 20, 16);
 const unitCylGeom = new THREE.CylinderGeometry(0.82, 1.0, 1, 16, 1);
 const upVec = new V(0, 1, 0);
@@ -182,6 +254,8 @@ const characterRoot = new THREE.Group();
 characterRoot.name = 'CharacterRoot';
 scene.add(characterRoot);
 
+let headSphereMesh = null;
+
 // Build hierarchical THREE.Bone tree and parent a poly sphere + poly cylinder to every joint
 for (const def of BONE_DEFS) {
   const bone = new THREE.Bone();
@@ -189,11 +263,17 @@ for (const def of BONE_DEFS) {
   bone.position.set(def.pos[0], def.pos[1], def.pos[2]);
 
   // 1. Parent a poly sphere directly to the joint at its local origin (0, 0, 0)
-  const sphereMesh = new THREE.Mesh(unitSphereGeom, jointSphereMat);
+  const isHeadBone = def.name === 'Head';
+  const sphereMesh = new THREE.Mesh(unitSphereGeom, isHeadBone ? headSphereMat : jointSphereMat);
   sphereMesh.scale.setScalar(def.rSphere);
   sphereMesh.castShadow = true;
   sphereMesh.receiveShadow = true;
   bone.add(sphereMesh);
+  bone._sphereMesh = sphereMesh;
+  bone._rSphere = def.rSphere;
+  if (isHeadBone) {
+    headSphereMesh = sphereMesh;
+  }
 
   if (def.parent) {
     const parentBone = bonesByName[def.parent];
@@ -205,14 +285,18 @@ for (const def of BONE_DEFS) {
     if (len > 1e-4) {
       const cylMesh = new THREE.Mesh(unitCylGeom, boneCylinderMat);
       cylMesh.scale.set(def.rCyl, len, def.rCyl);
-      // Position at midpoint between parent joint and child joint
       cylMesh.position.copy(offset).multiplyScalar(0.5);
-      // Orient cylinder +Y axis along the bone direction vector
       const dir = offset.clone().normalize();
       cylMesh.quaternion.setFromUnitVectors(upVec, dir);
       cylMesh.castShadow = true;
       cylMesh.receiveShadow = true;
       parentBone.add(cylMesh);
+
+      boneSegments.push({
+        boneA: parentBone,
+        boneB: bone,
+        radius: Math.max(def.rCyl, Math.min(parentBone._rSphere, def.rSphere)) * 1.15
+      });
     }
   } else {
     characterRoot.add(bone);
@@ -223,12 +307,226 @@ for (const def of BONE_DEFS) {
 }
 
 const rootBone = bonesByName['Hips'];
+const headBone = bonesByName['Head'];
+characterRoot.updateMatrixWorld(true);
+
+/* ================= Soft-Body Character Blob Mesh (Pinned to Head Bone Sphere) ================= */
+// Build a volumetric 3D tetrahedral soft-body blob mesh around the character using XPBD.
+// Top particles in/around the Head bone's sphere are pinned directly to headSphereMesh!
+const blobTetMesh = world.addTetMesh({
+  nx: 7,
+  ny: 11,
+  nz: 7,
+  sizeX: 0.72,
+  sizeY: 1.32,
+  sizeZ: 0.56,
+  center: new V(0, -0.34, -1.2),
+  mass: 3.6,
+  edgeCompliance: 0.00004,
+  volCompliance: 0.0,
+  friction: 0.25
+});
+
+// Sculpt the 7x11x7 grid into a smooth, organic rounded Character Blob Mesh
+// using analytical elliptical grid-to-blob mapping so all 1,800 tetrahedra remain strictly positive-volume.
+const headWorldBindPos = new V();
+headSphereMesh.getWorldPosition(headWorldBindPos);
+
+const blobPinnedParticles = [];
+const pinMarkerGeom = new THREE.SphereGeometry(0.012, 10, 8);
+const pinMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+
+for (let i = 0; i < blobTetMesh.particles.length; i++) {
+  const p = blobTetMesh.particles[i];
+  // Normalized grid coordinates u, v, w in [-1, +1]
+  // Note: in TetMesh, _ty = 0 is the TOP (+Y) and _ty = ny - 1 is the BOTTOM (-Y)
+  const u = (p._tx / (blobTetMesh.nx - 1)) * 2 - 1;
+  const v = 1 - (p._ty / (blobTetMesh.ny - 1)) * 2; // +1 at top (head), -1 at bottom
+  const w = (p._tz / (blobTetMesh.nz - 1)) * 2 - 1;
+
+  // Map square horizontal cross-section (u, w) to smooth circular/elliptical blob cross-section
+  const sx = u * Math.sqrt(Math.max(0.04, 1 - 0.5 * v * v - 0.5 * w * w + (v * v * w * w) / 3));
+  const sy = v * Math.sqrt(Math.max(0.04, 1 - 0.35 * (u * u + w * w) * 0.5));
+  const sz = w * Math.sqrt(Math.max(0.04, 1 - 0.5 * u * u - 0.5 * v * v + (u * u * v * v) / 3));
+
+  // Organic character blob silhouette profile:
+  // Narrower dome at the headsphere (v > 0.55), fuller rounded torso/hips in the middle, tapered lower blob
+  const headTaper = v > 0.45 ? 1.0 - 0.32 * Math.pow((v - 0.45) / 0.55, 1.4) : 1.0;
+  const waistBelly = 1.0 + 0.18 * Math.exp(-Math.pow((v + 0.10) / 0.50, 2));
+  const rx = 0.37 * headTaper * waistBelly;
+  const rz = 0.29 * headTaper * waistBelly;
+
+  // Center Y at -0.34, spanning from y = +0.30 (top of head sphere) down to y = -0.98 (upper shins)
+  const bx = sx * rx;
+  const by = -0.34 + sy * 0.64;
+  const bz = -1.2 + sz * rz;
+
+  p.x.set(bx, by, bz);
+  p.px.copy(p.x);
+  p._bindPos = p.x.clone();
+  p._isSurface = (
+    p._tx === 0 || p._tx === blobTetMesh.nx - 1 ||
+    p._ty === 0 || p._ty === blobTetMesh.ny - 1 ||
+    p._tz === 0 || p._tz === blobTetMesh.nz - 1
+  );
+}
+
+// Recompute exact rest lengths and rest volumes for the sculpted organic blob mesh
+for (let i = 0; i < blobTetMesh.edgeConstraints.length; i++) {
+  const c = blobTetMesh.edgeConstraints[i];
+  c.restLength = c.p1.x.distanceTo(c.p2.x);
+  c.lambda = 0;
+}
+for (let i = 0; i < blobTetMesh.volumeConstraints.length; i++) {
+  const vc = blobTetMesh.volumeConstraints[i];
+  let v0 = vc.calcV();
+  if (v0 < 0) {
+    const tmp = vc.p2; vc.p2 = vc.p3; vc.p3 = tmp;
+    v0 = -v0;
+  }
+  vc.restVolume = Math.max(v0, 1e-12);
+  vc.lambda = 0;
+}
+
+// Pin the top crown/head particles of the soft-body blob mesh directly to the sphere in the Head bone!
+headSphereMesh.updateMatrixWorld(true);
+const headInvMatrix = new THREE.Matrix4().copy(headSphereMesh.matrixWorld).invert();
+
+for (let i = 0; i < blobTetMesh.particles.length; i++) {
+  const p = blobTetMesh.particles[i];
+  const distToHeadSphere = p.x.distanceTo(headWorldBindPos);
+  // Pin particles inside/around the Head bone's sphere (or top crown cap _ty <= 1 near center)
+  if (distToHeadSphere <= 0.165 || (p._ty <= 1 && Math.hypot(p.x.x - headWorldBindPos.x, p.x.z - headWorldBindPos.z) <= 0.16)) {
+    p.invM = 0; // Pinned!
+    p._headLocalPos = p.x.clone().applyMatrix4(headInvMatrix);
+    blobPinnedParticles.push(p);
+
+    // Visual pin marker parented directly to the sphere in the Head bone
+    const pinDot = new THREE.Mesh(pinMarkerGeom, pinMarkerMat);
+    pinDot.position.copy(p._headLocalPos);
+    headSphereMesh.add(pinDot);
+  }
+}
+
+// Build smooth indexed BufferGeometry for the Soft-Body Character Blob surface
+const blobGeom = new THREE.BufferGeometry();
+const numBlobVerts = blobTetMesh.particles.length;
+const blobPosArr = new Float32Array(numBlobVerts * 3);
+blobGeom.setAttribute('position', new THREE.BufferAttribute(blobPosArr, 3));
+blobGeom.setIndex(blobTetMesh.surfaceIndices);
+
+const blobMat = new THREE.MeshPhysicalMaterial({
+  color: 0x38d9a9,
+  roughness: 0.15,
+  metalness: 0.02,
+  transmission: 0.68,
+  transparent: true,
+  opacity: 0.86,
+  ior: 1.34,
+  reflectivity: 0.5,
+  clearcoat: 0.85,
+  clearcoatRoughness: 0.10,
+  side: THREE.DoubleSide,
+  depthWrite: false
+});
+
+const blobMesh = new THREE.Mesh(blobGeom, blobMat);
+blobMesh.castShadow = true;
+blobMesh.receiveShadow = true;
+scene.add(blobMesh);
+
+function syncBlobMesh() {
+  const posAttr = blobGeom.attributes.position;
+  const arr = posAttr.array;
+  const parts = blobTetMesh.particles;
+  for (let i = 0; i < parts.length; i++) {
+    const pt = parts[i].x;
+    arr[i * 3] = pt.x;
+    arr[i * 3 + 1] = pt.y;
+    arr[i * 3 + 2] = pt.z;
+  }
+  posAttr.needsUpdate = true;
+  blobGeom.computeVertexNormals();
+}
+syncBlobMesh();
+
+// Update pinned blob particles to follow the sphere in the Head bone,
+// and couple unpinned soft-body blob particles with moving skeleton spheres & cylinders inside each XPBD substep
+const segAB = new V(), segAP = new V(), closestPt = new V(), pushDir = new V();
+const cachedSegA = boneSegments.map(() => new V());
+const cachedSegB = boneSegments.map(() => new V());
+const prevSegMid = boneSegments.map(() => new V());
+const deltaSegSubstep = boneSegments.map(() => new V());
+let hasPrevSegs = false;
+
+function updateSkeletonBlobInteraction() {
+  characterRoot.updateMatrixWorld(true);
+
+  // 1. Move all head-pinned soft-body particles with the sphere in the Head bone
+  const headMatWorld = headSphereMesh.matrixWorld;
+  for (let i = 0; i < blobPinnedParticles.length; i++) {
+    const p = blobPinnedParticles[i];
+    p.x.copy(p._headLocalPos).applyMatrix4(headMatWorld);
+    p.px.copy(p.x);
+    p.v.set(0, 0, 0);
+  }
+
+  // 2. Compute world endpoints and per-substep motion delta of all skeleton bone cylinders/spheres
+  const invSub = 1 / world.substeps;
+  for (let s = 0; s < boneSegments.length; s++) {
+    boneSegments[s].boneA.getWorldPosition(cachedSegA[s]);
+    boneSegments[s].boneB.getWorldPosition(cachedSegB[s]);
+    closestPt.addVectors(cachedSegA[s], cachedSegB[s]).multiplyScalar(0.5);
+    if (hasPrevSegs) {
+      deltaSegSubstep[s].subVectors(closestPt, prevSegMid[s]).multiplyScalar(invSub);
+    } else {
+      deltaSegSubstep[s].set(0, 0, 0);
+    }
+    prevSegMid[s].copy(closestPt);
+  }
+  hasPrevSegs = true;
+}
+
+world.onParticleSubstep = function() {
+  const parts = blobTetMesh.particles;
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (p.invM === 0) continue;
+
+    for (let s = 0; s < boneSegments.length; s++) {
+      const a = cachedSegA[s];
+      const b = cachedSegB[s];
+      const rCap = boneSegments[s].radius;
+      const influenceR = rCap * 2.4;
+
+      segAB.subVectors(b, a);
+      segAP.subVectors(p.x, a);
+      const abLenSq = segAB.lengthSq();
+      let t = abLenSq > 1e-8 ? segAP.dot(segAB) / abLenSq : 0;
+      if (t < 0) t = 0;
+      else if (t > 1) t = 1;
+
+      closestPt.copy(a).addScaledVector(segAB, t);
+      pushDir.subVectors(p.x, closestPt);
+      const d2 = pushDir.lengthSq();
+
+      if (d2 < influenceR * influenceR) {
+        const d = Math.sqrt(d2);
+        const w = 1 - d / influenceR;
+        // Smoothly transfer moving bone momentum into nearby soft-body blob tissue
+        p.x.addScaledVector(deltaSegSubstep[s], 0.45 * w * w);
+
+        // Gently push outer surface particles away from swinging limbs
+        if (p._isSurface && d < rCap + p.radius && d > 1e-9) {
+          const push = Math.min(0.0035, ((rCap + p.radius) - d) * 0.30);
+          p.x.addScaledVector(pushDir, push / d);
+        }
+      }
+    }
+  }
+};
 
 /* ================= 3 Motion-Captured Walk Cycle Profiles ================= */
-// Biomechanical Fourier-reconstructed CMU mocap gait profiles:
-// - Mocap 1 (CMU 07_01): Natural everyday walk (1.05 Hz, balanced arm swing & upright posture)
-// - Mocap 2 (CMU 07_08): Brisk energetic power walk (1.35 Hz, forward lean, pumped bent elbows, long stride)
-// - Mocap 3 (CMU 35_01): Heavy crouched prowl / swagger (0.78 Hz, deep knee bend, wide stance, heavy lateral sway)
 const MOCAP_PROFILES = [
   {
     id: 'walk1',
@@ -244,7 +542,7 @@ const MOCAP_PROFILES = [
     spineLean: 0.045,
     spineTwist: 0.13,
     spineRoll: 0.065,
-    headNod: 0.035,
+    headNod: 0.045,
     armDownZ: 1.36,
     armSwingX: 0.42,
     elbowBase: 0.38,
@@ -272,7 +570,7 @@ const MOCAP_PROFILES = [
     spineLean: 0.13,
     spineTwist: 0.19,
     spineRoll: 0.08,
-    headNod: 0.06,
+    headNod: 0.075,
     armDownZ: 1.30,
     armSwingX: 0.68,
     elbowBase: 0.78,
@@ -300,7 +598,7 @@ const MOCAP_PROFILES = [
     spineLean: 0.22,
     spineTwist: 0.22,
     spineRoll: 0.14,
-    headNod: 0.08,
+    headNod: 0.09,
     armDownZ: 1.12,
     armSwingX: 0.52,
     elbowBase: 0.62,
@@ -316,29 +614,19 @@ const MOCAP_PROFILES = [
   }
 ];
 
-// Helper: evaluate biomechanical leg kinematics at phase phi in [0, 2*PI)
-// phi = 0: Left leg mid-stance, phi = PI: Left leg mid-swing
 function evalLegAngles(phi, p) {
-  // 1. Hip flexion/extension: negative rot.x swings thigh forward (+Z), positive sweeps backward (-Z)
   const rawHip = -Math.sin(phi - 0.15) - 0.18 * Math.sin(2 * phi + 0.4);
   const hipX = rawHip < 0
     ? rawHip * p.hipSwingFwd
     : rawHip * p.hipSwingBack;
 
-  // 2. Double-peak Knee flexion (positive rot.x bends shin backward -Z):
-  //    Peak 1: stance loading absorption around phi = -0.35
-  //    Peak 2: high swing clearance around phi = PI (3.14)
   const swingWave = Math.pow(0.5 - 0.5 * Math.cos(phi), 1.6);
   const stanceBump = Math.pow(Math.max(0, Math.cos(phi + 0.55)), 4.0);
   const kneeX = p.kneeMin + (p.kneeSwingPeak - p.kneeMin) * swingWave + p.kneeStancePeak * stanceBump;
 
-  // 3. Ankle dorsiflexion/plantarflexion:
-  //    Push-off plantarflexion (+rot.x) just before swing (phi ~ 1.3),
-  //    Dorsiflexion lift (-rot.x) during swing (phi ~ PI) and heel strike
   const ankleX = p.anklePush * Math.exp(-Math.pow(Math.sin((phi - 1.25) * 0.5), 2) / 0.12)
                - p.ankleLift * Math.sin(phi - 0.8);
 
-  // 4. Toe bend during push-off
   const toeX = -0.35 * Math.exp(-Math.pow(Math.sin((phi - 1.35) * 0.5), 2) / 0.10);
 
   return { hipX, kneeX, ankleX, toeX };
@@ -384,10 +672,9 @@ function buildMocapWalkClip(profile) {
 
   for (let k = 0; k <= numFrames; k++) {
     const u = (k % numFrames) / numFrames;
-    const phiL = u * Math.PI * 2;          // Left leg phase
-    const phiR = phiL + Math.PI;           // Right leg phase (180 deg out of phase)
+    const phiL = u * Math.PI * 2;
+    const phiR = phiL + Math.PI;
 
-    // Hips rotation: pelvic tilt, axial yaw, and coronal list/roll
     const pPitch = profile.pelvisTilt + 0.025 * Math.cos(2 * phiL);
     const pYaw = -profile.pelvisYaw * Math.sin(phiL - 0.15);
     const pRoll = -profile.pelvisRoll * Math.cos(phiL);
@@ -395,7 +682,6 @@ function buildMocapWalkClip(profile) {
     writeQuat('Hips', k, qTmp);
     bonesByName['Hips'].quaternion.copy(qTmp);
 
-    // Spine, Spine1, Spine2 counter-rotation and lateral balance
     const sPitch = profile.spineLean * 0.35 + 0.015 * Math.sin(2 * phiL);
     const sYaw = profile.spineTwist * 0.38 * Math.sin(phiL - 0.1);
     const sRoll = profile.spineRoll * 0.35 * Math.cos(phiL);
@@ -404,7 +690,6 @@ function buildMocapWalkClip(profile) {
     writeQuat('Spine1', k, qTmp);
     writeQuat('Spine2', k, qTmp);
 
-    // Neck & Head stabilization (counter-yaw so gaze stays forward)
     const nPitch = -profile.spineLean * 0.25 + profile.headNod * Math.sin(2 * phiL + 0.5);
     const nYaw = -profile.spineTwist * 0.42 * Math.sin(phiL - 0.1);
     const nRoll = -profile.spineRoll * 0.30 * Math.cos(phiL);
@@ -413,42 +698,35 @@ function buildMocapWalkClip(profile) {
     writeQuat('Head', k, qTmp);
     writeQuat('HeadTop_End', k, qTmp.identity());
 
-    // Shoulders subtle protraction/elevation
     qTmp.setFromEuler(eTmp.set(0, 0.05 * Math.sin(phiL), -0.04, 'YXZ'));
     writeQuat('LeftShoulder', k, qTmp);
     qTmp.setFromEuler(eTmp.set(0, -0.05 * Math.sin(phiL), 0.04, 'YXZ'));
     writeQuat('RightShoulder', k, qTmp);
 
-    // Left Arm (swings in phase with Right Leg = phiR)
-    // Lower from T-Pose via Z rotation (-armDownZ), then pitch forward/back around X
     const lArmPitch = -profile.armSwingX * Math.sin(phiR - 0.15);
     qA.setFromEuler(eTmp.set(lArmPitch, 0, 0, 'XYZ'));
     qB.setFromEuler(eTmp.set(0, 0, -profile.armDownZ, 'XYZ'));
     qTmp.multiplyQuaternions(qA, qB);
     writeQuat('LeftArm', k, qTmp);
 
-    // Left ForeArm (elbow flexion around local -Y bends forearm forward into +Z)
     const lElbow = profile.elbowBase + profile.elbowSwing * Math.max(-0.2, Math.sin(phiR - 0.35));
     qTmp.setFromEuler(eTmp.set(0, -lElbow, 0, 'XYZ'));
     writeQuat('LeftForeArm', k, qTmp);
     writeQuat('LeftHand', k, qTmp.setFromEuler(eTmp.set(0, -0.08, -0.06, 'XYZ')));
     writeQuat('LeftHand_End', k, qTmp.identity());
 
-    // Right Arm (swings in phase with Left Leg = phiL)
     const rArmPitch = -profile.armSwingX * Math.sin(phiL - 0.15);
     qA.setFromEuler(eTmp.set(rArmPitch, 0, 0, 'XYZ'));
     qB.setFromEuler(eTmp.set(0, 0, profile.armDownZ, 'XYZ'));
     qTmp.multiplyQuaternions(qA, qB);
     writeQuat('RightArm', k, qTmp);
 
-    // Right ForeArm (elbow flexion around local +Y bends forearm forward into +Z)
     const rElbow = profile.elbowBase + profile.elbowSwing * Math.max(-0.2, Math.sin(phiL - 0.35));
     qTmp.setFromEuler(eTmp.set(0, rElbow, 0, 'XYZ'));
     writeQuat('RightForeArm', k, qTmp);
     writeQuat('RightHand', k, qTmp.setFromEuler(eTmp.set(0, 0.08, 0.06, 'XYZ')));
     writeQuat('RightHand_End', k, qTmp.identity());
 
-    // Left Leg chain
     const legL = evalLegAngles(phiL, profile);
     qTmp.setFromEuler(eTmp.set(legL.hipX, 0, profile.legAbduct + 0.04 * Math.cos(phiL), 'YXZ'));
     writeQuat('LeftUpLeg', k, qTmp);
@@ -465,7 +743,6 @@ function buildMocapWalkClip(profile) {
     writeQuat('LeftToe_End', k, qTmp.identity());
     bonesByName['LeftToe_End'].quaternion.identity();
 
-    // Right Leg chain
     const legR = evalLegAngles(phiR, profile);
     qTmp.setFromEuler(eTmp.set(legR.hipX, 0, -profile.legAbduct - 0.04 * Math.cos(phiR), 'YXZ'));
     writeQuat('RightUpLeg', k, qTmp);
@@ -482,7 +759,6 @@ function buildMocapWalkClip(profile) {
     writeQuat('RightToe_End', k, qTmp.identity());
     bonesByName['RightToe_End'].quaternion.identity();
 
-    // Evaluate exact FK foot ground contact so stance foot soles rest right on floor (y = -1.50m)
     const hx = HIP_BIND_POS.x + profile.hipSwayX * Math.cos(phiL - 0.25);
     const hz = HIP_BIND_POS.z + profile.hipSurgeZ * Math.sin(2 * phiL);
     rootBone.position.set(hx, HIP_BIND_POS.y, hz);
@@ -502,7 +778,6 @@ function buildMocapWalkClip(profile) {
     hipPosTrack[k * 3 + 2] = hz;
   }
 
-  // Restore skeleton to Bind Pose after baking keyframe tracks
   rootBone.position.copy(HIP_BIND_POS);
   for (let i = 0; i < boneList.length; i++) {
     boneList[i].quaternion.identity();
@@ -519,8 +794,6 @@ function buildMocapWalkClip(profile) {
   return new THREE.AnimationClip(profile.id, dur, tracks);
 }
 
-// Also build a Bind Pose clip (all identity rotations, Hips at HIP_BIND_POS) so Three.js AnimationMixer
-// can cross-fade smoothly between Bind Pose and any of the 3 Mocap Walk Cycles!
 function buildBindPoseClip() {
   const times = new Float32Array([0, 1.0]);
   const hipPos = new Float32Array([
@@ -588,6 +861,16 @@ function startBindPoseSequence() {
   for (let i = 0; i < boneList.length; i++) {
     boneList[i].quaternion.identity();
   }
+  characterRoot.updateMatrixWorld(true);
+  hasPrevSegs = false;
+  for (let i = 0; i < blobTetMesh.particles.length; i++) {
+    const p = blobTetMesh.particles[i];
+    p.x.copy(p._bindPos);
+    p.px.copy(p._bindPos);
+    p.v.set(0, 0, 0);
+  }
+  syncBlobMesh();
+
   bindPoseAction.reset();
   bindPoseAction.setEffectiveWeight(1.0);
   bindPoseAction.play();
@@ -595,7 +878,7 @@ function startBindPoseSequence() {
 
   stateLabel.textContent = 'Bind Pose (T-Pose) — Blending in 1.0s...';
   updateButtonHighlights(true);
-  RoomEnv.showNote('Started in Bind Pose (T-Pose). Blending into walk cycle after 1.0 second...', 2400);
+  RoomEnv.showNote('Bind Pose (T-Pose). Soft-body blob pinned to head sphere — blending into walk in 1.0s...', 2400);
 
   bindPoseTimer = setTimeout(() => {
     bindPoseTimer = null;
@@ -607,7 +890,36 @@ function startBindPoseSequence() {
 // Start in Bind Pose, then after 1.0 second blend into Mocap Walk 1
 startBindPoseSequence();
 
+/* ================= Interactive Raycast Grab & Orbit Camera ================= */
+const dragger = RoomEnv.createParticleDragger({
+  camera,
+  world,
+  getTargetParticles: () => blobTetMesh.particles,
+  pickRadius: 0.18
+});
+
+orbitControls = RoomEnv.createOrbitControls(camera, orbitTarget, {
+  dist: 3.3,
+  pitch: 0.16,
+  yaw: 0.42,
+  minDist: 1.5,
+  maxDist: 7.0,
+  minPitch: -0.05,
+  maxPitch: 1.25,
+  onPointerDrag: dragger.handlePointer
+});
+resize();
+
 /* ================= HUD Controls & Keyboard Shortcuts ================= */
+let wireActive = false;
+document.getElementById('btn-wire').addEventListener('click', () => {
+  wireActive = !wireActive;
+  blobMat.wireframe = wireActive;
+  const btn = document.getElementById('btn-wire');
+  btn.classList.toggle('active', wireActive);
+  btn.textContent = wireActive ? 'Wireframe: On' : 'Wireframe';
+});
+
 document.getElementById('btn-bindpose').addEventListener('click', startBindPoseSequence);
 walkButtons.forEach((btn, idx) => {
   btn.addEventListener('click', () => {
@@ -620,19 +932,38 @@ window.addEventListener('keydown', e => {
   if (e.key === '1') transitionToWalk(0, 0.55);
   else if (e.key === '2') transitionToWalk(1, 0.55);
   else if (e.key === '3') transitionToWalk(2, 0.55);
+  else if (e.key === 'w' || e.key === 'W') document.getElementById('btn-wire').click();
   else if (e.key === 'r' || e.key === 'R' || e.key === '0') startBindPoseSequence();
 });
 
-/* ================= Animation Loop ================= */
+/* ================= Animation & Soft-Body Physics Loop ================= */
 const tickFps = RoomEnv.createFpsMeter();
-let last = performance.now();
+let acc = 0, last = performance.now();
 
 function frame(now) {
   tickFps(now);
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
 
+  // 1. Advance skeleton animation mixer
   mixer.update(dt);
+
+  // 2. Pin top soft-body blob particles to the Head bone's sphere & compute skeleton capsule motion
+  updateSkeletonBlobInteraction();
+
+  // 3. Step XPBD soft-body blob physics (with substep skeleton coupling & volume conservation)
+  acc += dt;
+  let n = 0;
+  while (acc >= world.dt && n < 2) {
+    world.step();
+    acc -= world.dt;
+    n++;
+  }
+  if (n === 2) acc = 0;
+
+  // 4. Sync soft-body blob surface vertices & normals
+  syncBlobMesh();
+
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }

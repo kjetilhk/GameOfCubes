@@ -1141,6 +1141,8 @@ class World {
         p.x.addScaledVector(p.v, h);
       }
 
+      if (this.onParticleSubstep) this.onParticleSubstep(this, h, s);
+
       // 3. solve particle constraints (XPBD compliance)
       for (const c of constraints) c.lambda = 0;
       for (const c of volumeConstraints) c.lambda = 0;
