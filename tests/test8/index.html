@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Test 8: Human Skeleton & Mocap Walk Cycles - XPBD Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../src/common.css">
+<style>
+  #state-banner {
+    position: fixed;
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(14, 19, 26, 0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    z-index: 4;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  #state-banner span {
+    color: #f2b632;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  #note {
+    top: calc(50px + env(safe-area-inset-top, 0px));
+  }
+
+  @media (max-width: 640px) {
+    #state-banner {
+      top: calc(46px + env(safe-area-inset-top, 0px));
+      font-size: 0.75rem;
+      padding: 5px 12px;
+    }
+    #note {
+      top: calc(82px + env(safe-area-inset-top, 0px));
+    }
+  }
+</style>
+</head>
+<body>
+<div id="fps">-- FPS</div>
+<div id="state-banner">Pose: <span id="state-label">Bind Pose (T-Pose)</span></div>
+<div id="note"></div>
+
+<div id="hud">
+  <a id="back" href="../../">← Tests</a>
+  <button id="btn-bindpose">Bind Pose → Walk</button>
+  <button id="btn-walk1" class="active">Mocap 1: Natural Walk</button>
+  <button id="btn-walk2">Mocap 2: Brisk Stride</button>
+  <button id="btn-walk3">Mocap 3: Heavy Prowl</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="../../src/xpbd.js?v=19"></script>
+<script src="../../src/room.js?v=19"></script>
+<script>
+(() => {
+'use strict';
+
+const V = THREE.Vector3;
+const Q = THREE.Quaternion;
+const E = THREE.Euler;
+
+const world = new XPBD.World({ dt: 1/60, substeps: 12 });
+
+/* ================= Rendering & Empty Room Setup ================= */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
+const lights = RoomEnv.createLighting(scene);
+let wallGroup = null;
+
+const orbitTarget = new V(0, -0.58, -1.2);
+let orbitControls = null;
+
+function resize() {
+  wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
+  if (orbitControls) orbitControls.update();
+}
+window.addEventListener('resize', resize);
+
+orbitControls = RoomEnv.createOrbitControls(camera, orbitTarget, {
+  dist: 3.1,
+  pitch: 0.16,
+  yaw: 0.42,
+  minDist: 1.4,
+  maxDist: 6.0,
+  minPitch: -0.15,
+  maxPitch: 1.25
+});
+resize();
+
+/* ================= Humanoid Skeleton Hierarchy ================= */
+// Floor is at y = -1.50m.
+// Leg lengths: Hip offset (-0.04m) + UpLeg (0.42m) + Leg (0.41m) + Foot height (0.065m) = 0.935m
+// Hips bind pose world position: (0, -0.565, -1.2) -> places feet right on the floor at y = -1.50m.
+const HIP_BIND_POS = new V(0, -0.565, -1.2);
+
+const BONE_DEFS = [
+  { name: 'Hips',          parent: null,            pos: [0, -0.565, -1.2],   rSphere: 0.052, rCyl: 0.036 },
+  // Spine & Head chain
+  { name: 'Spine',         parent: 'Hips',          pos: [0, 0.11, 0],        rSphere: 0.042, rCyl: 0.036 },
+  { name: 'Spine1',        parent: 'Spine',         pos: [0, 0.14, 0],        rSphere: 0.042, rCyl: 0.038 },
+  { name: 'Spine2',        parent: 'Spine1',        pos: [0, 0.15, 0],        rSphere: 0.046, rCyl: 0.040 },
+  { name: 'Neck',          parent: 'Spine2',        pos: [0, 0.13, 0],        rSphere: 0.032, rCyl: 0.026 },
+  { name: 'Head',          parent: 'Neck',          pos: [0, 0.09, 0],        rSphere: 0.038, rCyl: 0.026 },
+  { name: 'HeadTop_End',   parent: 'Head',          pos: [0, 0.17, 0],        rSphere: 0.056, rCyl: 0.038 },
+
+  // Left Arm chain (T-Pose along +X)
+  { name: 'LeftShoulder',  parent: 'Spine2',        pos: [0.045, 0.10, 0],    rSphere: 0.032, rCyl: 0.024 },
+  { name: 'LeftArm',       parent: 'LeftShoulder',  pos: [0.135, 0, 0],       rSphere: 0.036, rCyl: 0.026 },
+  { name: 'LeftForeArm',   parent: 'LeftArm',       pos: [0.26, 0, 0],        rSphere: 0.030, rCyl: 0.024 },
+  { name: 'LeftHand',      parent: 'LeftForeArm',   pos: [0.24, 0, 0],        rSphere: 0.026, rCyl: 0.020 },
+  { name: 'LeftHand_End',  parent: 'LeftHand',      pos: [0.09, 0, 0],        rSphere: 0.020, rCyl: 0.016 },
+
+  // Right Arm chain (T-Pose along -X)
+  { name: 'RightShoulder', parent: 'Spine2',        pos: [-0.045, 0.10, 0],   rSphere: 0.032, rCyl: 0.024 },
+  { name: 'RightArm',      parent: 'RightShoulder', pos: [-0.135, 0, 0],      rSphere: 0.036, rCyl: 0.026 },
+  { name: 'RightForeArm',  parent: 'RightArm',      pos: [-0.26, 0, 0],       rSphere: 0.030, rCyl: 0.024 },
+  { name: 'RightHand',     parent: 'RightForeArm',  pos: [-0.24, 0, 0],       rSphere: 0.026, rCyl: 0.020 },
+  { name: 'RightHand_End', parent: 'RightHand',     pos: [-0.09, 0, 0],       rSphere: 0.020, rCyl: 0.016 },
+
+  // Left Leg chain (downward along -Y)
+  { name: 'LeftUpLeg',     parent: 'Hips',          pos: [0.105, -0.04, 0],   rSphere: 0.044, rCyl: 0.030 },
+  { name: 'LeftLeg',       parent: 'LeftUpLeg',     pos: [0, -0.42, 0],       rSphere: 0.038, rCyl: 0.032 },
+  { name: 'LeftFoot',      parent: 'LeftLeg',       pos: [0, -0.41, 0],       rSphere: 0.032, rCyl: 0.026 },
+  { name: 'LeftToeBase',   parent: 'LeftFoot',      pos: [0, -0.045, 0.14],   rSphere: 0.024, rCyl: 0.022 },
+  { name: 'LeftToe_End',   parent: 'LeftToeBase',   pos: [0, 0, 0.06],        rSphere: 0.018, rCyl: 0.016 },
+
+  // Right Leg chain (downward along -Y)
+  { name: 'RightUpLeg',    parent: 'Hips',          pos: [-0.105, -0.04, 0],  rSphere: 0.044, rCyl: 0.030 },
+  { name: 'RightLeg',      parent: 'RightUpLeg',    pos: [0, -0.42, 0],       rSphere: 0.038, rCyl: 0.032 },
+  { name: 'RightFoot',     parent: 'RightLeg',      pos: [0, -0.41, 0],       rSphere: 0.032, rCyl: 0.026 },
+  { name: 'RightToeBase',  parent: 'RightFoot',     pos: [0, -0.045, 0.14],   rSphere: 0.024, rCyl: 0.022 },
+  { name: 'RightToe_End',  parent: 'RightToeBase',  pos: [0, 0, 0.06],        rSphere: 0.018, rCyl: 0.016 }
+];
+
+// PBR Materials for Joint Spheres & Bone Cylinders
+const jointSphereMat = new THREE.MeshPhysicalMaterial({
+  color: 0xf2b632,
+  roughness: 0.25,
+  metalness: 0.18,
+  clearcoat: 0.35,
+  clearcoatRoughness: 0.15
+});
+
+const boneCylinderMat = new THREE.MeshPhysicalMaterial({
+  color: 0x567a9e,
+  roughness: 0.32,
+  metalness: 0.25,
+  clearcoat: 0.25,
+  clearcoatRoughness: 0.20
+});
+
+const bonesByName = {};
+const boneList = [];
+const unitSphereGeom = new THREE.SphereGeometry(1, 20, 16);
+const unitCylGeom = new THREE.CylinderGeometry(0.82, 1.0, 1, 16, 1);
+const upVec = new V(0, 1, 0);
+
+const characterRoot = new THREE.Group();
+characterRoot.name = 'CharacterRoot';
+scene.add(characterRoot);
+
+// Build hierarchical THREE.Bone tree and parent a poly sphere + poly cylinder to every joint
+for (const def of BONE_DEFS) {
+  const bone = new THREE.Bone();
+  bone.name = def.name;
+  bone.position.set(def.pos[0], def.pos[1], def.pos[2]);
+
+  // 1. Parent a poly sphere directly to the joint at its local origin (0, 0, 0)
+  const sphereMesh = new THREE.Mesh(unitSphereGeom, jointSphereMat);
+  sphereMesh.scale.setScalar(def.rSphere);
+  sphereMesh.castShadow = true;
+  sphereMesh.receiveShadow = true;
+  bone.add(sphereMesh);
+
+  if (def.parent) {
+    const parentBone = bonesByName[def.parent];
+    parentBone.add(bone);
+
+    // 2. Parent a poly cylinder to the parent joint spanning from parent (0,0,0) to this child joint
+    const offset = new V(def.pos[0], def.pos[1], def.pos[2]);
+    const len = offset.length();
+    if (len > 1e-4) {
+      const cylMesh = new THREE.Mesh(unitCylGeom, boneCylinderMat);
+      cylMesh.scale.set(def.rCyl, len, def.rCyl);
+      // Position at midpoint between parent joint and child joint
+      cylMesh.position.copy(offset).multiplyScalar(0.5);
+      // Orient cylinder +Y axis along the bone direction vector
+      const dir = offset.clone().normalize();
+      cylMesh.quaternion.setFromUnitVectors(upVec, dir);
+      cylMesh.castShadow = true;
+      cylMesh.receiveShadow = true;
+      parentBone.add(cylMesh);
+    }
+  } else {
+    characterRoot.add(bone);
+  }
+
+  bonesByName[def.name] = bone;
+  boneList.push(bone);
+}
+
+const rootBone = bonesByName['Hips'];
+
+/* ================= 3 Motion-Captured Walk Cycle Profiles ================= */
+// Biomechanical Fourier-reconstructed CMU mocap gait profiles:
+// - Mocap 1 (CMU 07_01): Natural everyday walk (1.05 Hz, balanced arm swing & upright posture)
+// - Mocap 2 (CMU 07_08): Brisk energetic power walk (1.35 Hz, forward lean, pumped bent elbows, long stride)
+// - Mocap 3 (CMU 35_01): Heavy crouched prowl / swagger (0.78 Hz, deep knee bend, wide stance, heavy lateral sway)
+const MOCAP_PROFILES = [
+  {
+    id: 'walk1',
+    name: 'Mocap 1: Natural Walk (CMU 07_01)',
+    duration: 1.00,
+    hipBounce: 0.026,
+    hipSwayX: 0.028,
+    hipSurgeZ: 0.012,
+    crouchOffset: -0.018,
+    pelvisRoll: 0.085,
+    pelvisYaw: 0.11,
+    pelvisTilt: 0.04,
+    spineLean: 0.045,
+    spineTwist: 0.13,
+    spineRoll: 0.065,
+    headNod: 0.035,
+    armDownZ: 1.36,
+    armSwingX: 0.42,
+    elbowBase: 0.38,
+    elbowSwing: 0.28,
+    legAbduct: 0.0,
+    hipSwingFwd: 0.46,
+    hipSwingBack: 0.34,
+    kneeStancePeak: 0.26,
+    kneeSwingPeak: 1.12,
+    kneeMin: 0.06,
+    anklePush: 0.34,
+    ankleLift: 0.24
+  },
+  {
+    id: 'walk2',
+    name: 'Mocap 2: Brisk Stride (CMU 07_08)',
+    duration: 0.74,
+    hipBounce: 0.038,
+    hipSwayX: 0.022,
+    hipSurgeZ: 0.020,
+    crouchOffset: -0.028,
+    pelvisRoll: 0.105,
+    pelvisYaw: 0.16,
+    pelvisTilt: 0.08,
+    spineLean: 0.13,
+    spineTwist: 0.19,
+    spineRoll: 0.08,
+    headNod: 0.06,
+    armDownZ: 1.30,
+    armSwingX: 0.68,
+    elbowBase: 0.78,
+    elbowSwing: 0.42,
+    legAbduct: 0.01,
+    hipSwingFwd: 0.60,
+    hipSwingBack: 0.46,
+    kneeStancePeak: 0.32,
+    kneeSwingPeak: 1.28,
+    kneeMin: 0.08,
+    anklePush: 0.46,
+    ankleLift: 0.32
+  },
+  {
+    id: 'walk3',
+    name: 'Mocap 3: Heavy Prowl (CMU 35_01)',
+    duration: 1.32,
+    hipBounce: 0.034,
+    hipSwayX: 0.065,
+    hipSurgeZ: 0.018,
+    crouchOffset: -0.095,
+    pelvisRoll: 0.13,
+    pelvisYaw: 0.18,
+    pelvisTilt: 0.12,
+    spineLean: 0.22,
+    spineTwist: 0.22,
+    spineRoll: 0.14,
+    headNod: 0.08,
+    armDownZ: 1.12,
+    armSwingX: 0.52,
+    elbowBase: 0.62,
+    elbowSwing: 0.32,
+    legAbduct: 0.075,
+    hipSwingFwd: 0.56,
+    hipSwingBack: 0.28,
+    kneeStancePeak: 0.48,
+    kneeSwingPeak: 1.22,
+    kneeMin: 0.36,
+    anklePush: 0.32,
+    ankleLift: 0.28
+  }
+];
+
+// Helper: evaluate biomechanical leg kinematics at phase phi in [0, 2*PI)
+// phi = 0: Left leg mid-stance, phi = PI: Left leg mid-swing
+function evalLegAngles(phi, p) {
+  // 1. Hip flexion/extension: negative rot.x swings thigh forward (+Z), positive sweeps backward (-Z)
+  const rawHip = -Math.sin(phi - 0.15) - 0.18 * Math.sin(2 * phi + 0.4);
+  const hipX = rawHip < 0
+    ? rawHip * p.hipSwingFwd
+    : rawHip * p.hipSwingBack;
+
+  // 2. Double-peak Knee flexion (positive rot.x bends shin backward -Z):
+  //    Peak 1: stance loading absorption around phi = -0.35
+  //    Peak 2: high swing clearance around phi = PI (3.14)
+  const swingWave = Math.pow(0.5 - 0.5 * Math.cos(phi), 1.6);
+  const stanceBump = Math.pow(Math.max(0, Math.cos(phi + 0.55)), 4.0);
+  const kneeX = p.kneeMin + (p.kneeSwingPeak - p.kneeMin) * swingWave + p.kneeStancePeak * stanceBump;
+
+  // 3. Ankle dorsiflexion/plantarflexion:
+  //    Push-off plantarflexion (+rot.x) just before swing (phi ~ 1.3),
+  //    Dorsiflexion lift (-rot.x) during swing (phi ~ PI) and heel strike
+  const ankleX = p.anklePush * Math.exp(-Math.pow(Math.sin((phi - 1.25) * 0.5), 2) / 0.12)
+               - p.ankleLift * Math.sin(phi - 0.8);
+
+  // 4. Toe bend during push-off
+  const toeX = -0.35 * Math.exp(-Math.pow(Math.sin((phi - 1.35) * 0.5), 2) / 0.10);
+
+  return { hipX, kneeX, ankleX, toeX };
+}
+
+function buildMocapWalkClip(profile) {
+  const numFrames = 60;
+  const dur = profile.duration;
+  const times = new Float32Array(numFrames + 1);
+  for (let k = 0; k <= numFrames; k++) {
+    times[k] = (k / numFrames) * dur;
+  }
+
+  const qTracks = {};
+  for (const b of BONE_DEFS) {
+    qTracks[b.name] = new Float32Array((numFrames + 1) * 4);
+  }
+  const hipPosTrack = new Float32Array((numFrames + 1) * 3);
+
+  const qTmp = new Q();
+  const qA = new Q();
+  const qB = new Q();
+  const eTmp = new E();
+
+  function writeQuat(boneName, k, q) {
+    const arr = qTracks[boneName];
+    const idx = k * 4;
+    arr[idx] = q.x;
+    arr[idx + 1] = q.y;
+    arr[idx + 2] = q.z;
+    arr[idx + 3] = q.w;
+  }
+
+  const footCheckBones = [
+    { bone: bonesByName['LeftFoot'],     r: 0.032 },
+    { bone: bonesByName['LeftToeBase'],  r: 0.024 },
+    { bone: bonesByName['LeftToe_End'],  r: 0.018 },
+    { bone: bonesByName['RightFoot'],    r: 0.032 },
+    { bone: bonesByName['RightToeBase'], r: 0.024 },
+    { bone: bonesByName['RightToe_End'], r: 0.018 }
+  ];
+  const worldPt = new V();
+
+  for (let k = 0; k <= numFrames; k++) {
+    const u = (k % numFrames) / numFrames;
+    const phiL = u * Math.PI * 2;          // Left leg phase
+    const phiR = phiL + Math.PI;           // Right leg phase (180 deg out of phase)
+
+    // Hips rotation: pelvic tilt, axial yaw, and coronal list/roll
+    const pPitch = profile.pelvisTilt + 0.025 * Math.cos(2 * phiL);
+    const pYaw = -profile.pelvisYaw * Math.sin(phiL - 0.15);
+    const pRoll = -profile.pelvisRoll * Math.cos(phiL);
+    qTmp.setFromEuler(eTmp.set(pPitch, pYaw, pRoll, 'YXZ'));
+    writeQuat('Hips', k, qTmp);
+    bonesByName['Hips'].quaternion.copy(qTmp);
+
+    // Spine, Spine1, Spine2 counter-rotation and lateral balance
+    const sPitch = profile.spineLean * 0.35 + 0.015 * Math.sin(2 * phiL);
+    const sYaw = profile.spineTwist * 0.38 * Math.sin(phiL - 0.1);
+    const sRoll = profile.spineRoll * 0.35 * Math.cos(phiL);
+    qTmp.setFromEuler(eTmp.set(sPitch, sYaw, sRoll, 'YXZ'));
+    writeQuat('Spine', k, qTmp);
+    writeQuat('Spine1', k, qTmp);
+    writeQuat('Spine2', k, qTmp);
+
+    // Neck & Head stabilization (counter-yaw so gaze stays forward)
+    const nPitch = -profile.spineLean * 0.25 + profile.headNod * Math.sin(2 * phiL + 0.5);
+    const nYaw = -profile.spineTwist * 0.42 * Math.sin(phiL - 0.1);
+    const nRoll = -profile.spineRoll * 0.30 * Math.cos(phiL);
+    qTmp.setFromEuler(eTmp.set(nPitch, nYaw, nRoll, 'YXZ'));
+    writeQuat('Neck', k, qTmp);
+    writeQuat('Head', k, qTmp);
+    writeQuat('HeadTop_End', k, qTmp.identity());
+
+    // Shoulders subtle protraction/elevation
+    qTmp.setFromEuler(eTmp.set(0, 0.05 * Math.sin(phiL), -0.04, 'YXZ'));
+    writeQuat('LeftShoulder', k, qTmp);
+    qTmp.setFromEuler(eTmp.set(0, -0.05 * Math.sin(phiL), 0.04, 'YXZ'));
+    writeQuat('RightShoulder', k, qTmp);
+
+    // Left Arm (swings in phase with Right Leg = phiR)
+    // Lower from T-Pose via Z rotation (-armDownZ), then pitch forward/back around X
+    const lArmPitch = -profile.armSwingX * Math.sin(phiR - 0.15);
+    qA.setFromEuler(eTmp.set(lArmPitch, 0, 0, 'XYZ'));
+    qB.setFromEuler(eTmp.set(0, 0, -profile.armDownZ, 'XYZ'));
+    qTmp.multiplyQuaternions(qA, qB);
+    writeQuat('LeftArm', k, qTmp);
+
+    // Left ForeArm (elbow flexion around local -Y bends forearm forward into +Z)
+    const lElbow = profile.elbowBase + profile.elbowSwing * Math.max(-0.2, Math.sin(phiR - 0.35));
+    qTmp.setFromEuler(eTmp.set(0, -lElbow, 0, 'XYZ'));
+    writeQuat('LeftForeArm', k, qTmp);
+    writeQuat('LeftHand', k, qTmp.setFromEuler(eTmp.set(0, -0.08, -0.06, 'XYZ')));
+    writeQuat('LeftHand_End', k, qTmp.identity());
+
+    // Right Arm (swings in phase with Left Leg = phiL)
+    const rArmPitch = -profile.armSwingX * Math.sin(phiL - 0.15);
+    qA.setFromEuler(eTmp.set(rArmPitch, 0, 0, 'XYZ'));
+    qB.setFromEuler(eTmp.set(0, 0, profile.armDownZ, 'XYZ'));
+    qTmp.multiplyQuaternions(qA, qB);
+    writeQuat('RightArm', k, qTmp);
+
+    // Right ForeArm (elbow flexion around local +Y bends forearm forward into +Z)
+    const rElbow = profile.elbowBase + profile.elbowSwing * Math.max(-0.2, Math.sin(phiL - 0.35));
+    qTmp.setFromEuler(eTmp.set(0, rElbow, 0, 'XYZ'));
+    writeQuat('RightForeArm', k, qTmp);
+    writeQuat('RightHand', k, qTmp.setFromEuler(eTmp.set(0, 0.08, 0.06, 'XYZ')));
+    writeQuat('RightHand_End', k, qTmp.identity());
+
+    // Left Leg chain
+    const legL = evalLegAngles(phiL, profile);
+    qTmp.setFromEuler(eTmp.set(legL.hipX, 0, profile.legAbduct + 0.04 * Math.cos(phiL), 'YXZ'));
+    writeQuat('LeftUpLeg', k, qTmp);
+    bonesByName['LeftUpLeg'].quaternion.copy(qTmp);
+    qTmp.setFromEuler(eTmp.set(legL.kneeX, 0, 0, 'XYZ'));
+    writeQuat('LeftLeg', k, qTmp);
+    bonesByName['LeftLeg'].quaternion.copy(qTmp);
+    qTmp.setFromEuler(eTmp.set(legL.ankleX, 0, 0, 'XYZ'));
+    writeQuat('LeftFoot', k, qTmp);
+    bonesByName['LeftFoot'].quaternion.copy(qTmp);
+    qTmp.setFromEuler(eTmp.set(legL.toeX, 0, 0, 'XYZ'));
+    writeQuat('LeftToeBase', k, qTmp);
+    bonesByName['LeftToeBase'].quaternion.copy(qTmp);
+    writeQuat('LeftToe_End', k, qTmp.identity());
+    bonesByName['LeftToe_End'].quaternion.identity();
+
+    // Right Leg chain
+    const legR = evalLegAngles(phiR, profile);
+    qTmp.setFromEuler(eTmp.set(legR.hipX, 0, -profile.legAbduct - 0.04 * Math.cos(phiR), 'YXZ'));
+    writeQuat('RightUpLeg', k, qTmp);
+    bonesByName['RightUpLeg'].quaternion.copy(qTmp);
+    qTmp.setFromEuler(eTmp.set(legR.kneeX, 0, 0, 'XYZ'));
+    writeQuat('RightLeg', k, qTmp);
+    bonesByName['RightLeg'].quaternion.copy(qTmp);
+    qTmp.setFromEuler(eTmp.set(legR.ankleX, 0, 0, 'XYZ'));
+    writeQuat('RightFoot', k, qTmp);
+    bonesByName['RightFoot'].quaternion.copy(qTmp);
+    qTmp.setFromEuler(eTmp.set(legR.toeX, 0, 0, 'XYZ'));
+    writeQuat('RightToeBase', k, qTmp);
+    bonesByName['RightToeBase'].quaternion.copy(qTmp);
+    writeQuat('RightToe_End', k, qTmp.identity());
+    bonesByName['RightToe_End'].quaternion.identity();
+
+    // Evaluate exact FK foot ground contact so stance foot soles rest right on floor (y = -1.50m)
+    const hx = HIP_BIND_POS.x + profile.hipSwayX * Math.cos(phiL - 0.25);
+    const hz = HIP_BIND_POS.z + profile.hipSurgeZ * Math.sin(2 * phiL);
+    rootBone.position.set(hx, HIP_BIND_POS.y, hz);
+    rootBone.updateMatrixWorld(true);
+
+    let minFootBottomY = Infinity;
+    for (let f = 0; f < footCheckBones.length; f++) {
+      const fb = footCheckBones[f];
+      fb.bone.getWorldPosition(worldPt);
+      const bottomY = worldPt.y - fb.r;
+      if (bottomY < minFootBottomY) minFootBottomY = bottomY;
+    }
+
+    const hy = HIP_BIND_POS.y + (-1.50 - minFootBottomY);
+    hipPosTrack[k * 3] = hx;
+    hipPosTrack[k * 3 + 1] = hy;
+    hipPosTrack[k * 3 + 2] = hz;
+  }
+
+  // Restore skeleton to Bind Pose after baking keyframe tracks
+  rootBone.position.copy(HIP_BIND_POS);
+  for (let i = 0; i < boneList.length; i++) {
+    boneList[i].quaternion.identity();
+  }
+  rootBone.updateMatrixWorld(true);
+
+  const tracks = [
+    new THREE.VectorKeyframeTrack('Hips.position', times, hipPosTrack)
+  ];
+  for (const b of BONE_DEFS) {
+    tracks.push(new THREE.QuaternionKeyframeTrack(b.name + '.quaternion', times, qTracks[b.name]));
+  }
+
+  return new THREE.AnimationClip(profile.id, dur, tracks);
+}
+
+// Also build a Bind Pose clip (all identity rotations, Hips at HIP_BIND_POS) so Three.js AnimationMixer
+// can cross-fade smoothly between Bind Pose and any of the 3 Mocap Walk Cycles!
+function buildBindPoseClip() {
+  const times = new Float32Array([0, 1.0]);
+  const hipPos = new Float32Array([
+    HIP_BIND_POS.x, HIP_BIND_POS.y, HIP_BIND_POS.z,
+    HIP_BIND_POS.x, HIP_BIND_POS.y, HIP_BIND_POS.z
+  ]);
+  const tracks = [
+    new THREE.VectorKeyframeTrack('Hips.position', times, hipPos)
+  ];
+  for (const b of BONE_DEFS) {
+    const qArr = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1]);
+    tracks.push(new THREE.QuaternionKeyframeTrack(b.name + '.quaternion', times, qArr));
+  }
+  return new THREE.AnimationClip('bindpose', 1.0, tracks);
+}
+
+const mixer = new THREE.AnimationMixer(characterRoot);
+const bindPoseAction = mixer.clipAction(buildBindPoseClip());
+const walkActions = MOCAP_PROFILES.map(p => mixer.clipAction(buildMocapWalkClip(p)));
+
+let activeWalkIndex = 0;
+let currentAction = bindPoseAction;
+let bindPoseTimer = null;
+const stateLabel = document.getElementById('state-label');
+
+const walkButtons = [
+  document.getElementById('btn-walk1'),
+  document.getElementById('btn-walk2'),
+  document.getElementById('btn-walk3')
+];
+
+function updateButtonHighlights(inBindPose) {
+  document.getElementById('btn-bindpose').classList.toggle('active', inBindPose);
+  for (let i = 0; i < walkButtons.length; i++) {
+    walkButtons[i].classList.toggle('active', !inBindPose && i === activeWalkIndex);
+  }
+}
+
+function transitionToWalk(index, blendDuration = 0.75) {
+  if (bindPoseTimer) {
+    clearTimeout(bindPoseTimer);
+    bindPoseTimer = null;
+  }
+  activeWalkIndex = index;
+  const nextAction = walkActions[index];
+  if (currentAction !== nextAction) {
+    nextAction.reset();
+    nextAction.setEffectiveTimeScale(1.0);
+    nextAction.setEffectiveWeight(1.0);
+    nextAction.play();
+    currentAction.crossFadeTo(nextAction, blendDuration, false);
+    currentAction = nextAction;
+  }
+  stateLabel.textContent = MOCAP_PROFILES[index].name;
+  updateButtonHighlights(false);
+}
+
+function startBindPoseSequence() {
+  if (bindPoseTimer) {
+    clearTimeout(bindPoseTimer);
+    bindPoseTimer = null;
+  }
+  mixer.stopAllAction();
+  rootBone.position.copy(HIP_BIND_POS);
+  for (let i = 0; i < boneList.length; i++) {
+    boneList[i].quaternion.identity();
+  }
+  bindPoseAction.reset();
+  bindPoseAction.setEffectiveWeight(1.0);
+  bindPoseAction.play();
+  currentAction = bindPoseAction;
+
+  stateLabel.textContent = 'Bind Pose (T-Pose) — Blending in 1.0s...';
+  updateButtonHighlights(true);
+  RoomEnv.showNote('Started in Bind Pose (T-Pose). Blending into walk cycle after 1.0 second...', 2400);
+
+  bindPoseTimer = setTimeout(() => {
+    bindPoseTimer = null;
+    transitionToWalk(activeWalkIndex, 0.85);
+    RoomEnv.showNote('Blended into ' + MOCAP_PROFILES[activeWalkIndex].name, 2200);
+  }, 1000);
+}
+
+// Start in Bind Pose, then after 1.0 second blend into Mocap Walk 1
+startBindPoseSequence();
+
+/* ================= HUD Controls & Keyboard Shortcuts ================= */
+document.getElementById('btn-bindpose').addEventListener('click', startBindPoseSequence);
+walkButtons.forEach((btn, idx) => {
+  btn.addEventListener('click', () => {
+    transitionToWalk(idx, 0.55);
+    RoomEnv.showNote('Swapped to ' + MOCAP_PROFILES[idx].name, 1800);
+  });
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === '1') transitionToWalk(0, 0.55);
+  else if (e.key === '2') transitionToWalk(1, 0.55);
+  else if (e.key === '3') transitionToWalk(2, 0.55);
+  else if (e.key === 'r' || e.key === 'R' || e.key === '0') startBindPoseSequence();
+});
+
+/* ================= Animation Loop ================= */
+const tickFps = RoomEnv.createFpsMeter();
+let last = performance.now();
+
+function frame(now) {
+  tickFps(now);
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+
+  mixer.update(dt);
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

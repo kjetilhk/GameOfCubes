@@ -42,8 +42,10 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
     │   └── index.html  # Test 5: Joints & Articulated Bodies (ragdoll & chain linkages)
     ├── test6/
     │   └── index.html  # Test 6: Wrecking Ball & Destruction (high-impulse demolition & stacking benchmark)
-    └── test7/
-        └── index.html  # Test 7: RC Buggy & Suspension Dynamics (off-road vehicle dynamics benchmark)
+    ├── test7/
+    │   └── index.html  # Test 7: RC Buggy & Suspension Dynamics (off-road vehicle dynamics benchmark)
+    └── test8/
+        └── index.html  # Test 8: Human Skeleton & Mocap Walk Cycles (hierarchical skeleton & mocap blending)
 ```
 
 The core physics engine lives in `src/xpbd.js` without DOM or rendering dependencies. It exports `XPBD` (and alias `CubePhysics`) to the global scope (`window`/`globalThis`) and to CommonJS (`module.exports`).
@@ -146,6 +148,17 @@ High-performance off-road vehicle dynamics, circuit racing, and high-speed multi
 - Top-of-screen RC remote controller sliders (**Max-Speed** default $70\%$, **Steer** default $60\%$, **Speed Sens** default $60\%$, from $20\%$ to $150\%$) plus real-time **Course Deformer** sliders (**Hill Height** $0.0\text{--}3.0\,\text{m}$ default $3.0\,\text{m}$, **Hill Waves** $0.2\text{--}2.5\times$ default $2.0\times$, **Roughness** $0\text{--}200\%$ default $80\%$), and a simple text-only live **Speed HUD** (`km/h`).
 - Compact bottom-center virtual analog joystick with progressive exponential response ($\text{steer} = \operatorname{sign}(x) \cdot |x|^{1.6}$) and lowered-horizon screen-centered chase follow camera.
 - High-refresh rate 120Hz display interpolation eliminating motion ghosting.
+
+### Test 8: Human Skeleton & Mocap Walk Cycles (`tests/test8/index.html`)
+
+Hierarchical 3D humanoid skeleton and motion-capture animation blending benchmark in an empty 3.0m studio room.
+- 23-joint hierarchical `THREE.Bone` human skeleton (`Hips`, `Spine`, `Spine1`, `Spine2`, `Neck`, `Head`, `HeadTop_End`, `LeftShoulder`/`RightShoulder`, `LeftArm`/`RightArm`, `LeftForeArm`/`RightForeArm`, `LeftHand`/`RightHand`, `LeftUpLeg`/`RightUpLeg`, `LeftLeg`/`RightLeg`, `LeftFoot`/`RightFoot`, `LeftToeBase`/`RightToeBase`, and end effectors).
+- Every joint has a poly sphere (`THREE.SphereGeometry`) parented directly to the joint origin and a poly cylinder (`THREE.CylinderGeometry`) parented to the parent joint spanning to the child joint.
+- Starts in anatomical **Bind Pose (T-Pose)** for $1.0\,\text{s}$, then smoothly cross-fades via `THREE.AnimationMixer` into the active walk cycle.
+- Three swappable motion-capture walk cycles with exact forward-kinematics foot-floor ground contact calibration:
+  - **Mocap 1: Natural Walk (`CMU 07_01`)** — balanced everyday gait ($1.00\,\text{s}$ cycle).
+  - **Mocap 2: Brisk Stride (`CMU 07_08`)** — fast power walk with forward lean and pumped elbows ($0.74\,\text{s}$ cycle).
+  - **Mocap 3: Heavy Prowl (`CMU 35_01`)** — crouched low-stance swagger with wide lateral sway ($1.32\,\text{s}$ cycle).
 
 ## Adding New Tests
 
