@@ -989,7 +989,7 @@ const MOCAP_PROFILES = [
 ];
 
 function evalLegAngles(phi, p) {
-  const rawHip = -Math.sin(phi - 0.15) - 0.18 * Math.sin(2 * phi + 0.4);
+  const rawHip = Math.sin(phi - 0.15) - 0.18 * Math.sin(2 * phi - 0.4);
   const hipX = rawHip < 0
     ? rawHip * p.hipSwingFwd
     : rawHip * p.hipSwingBack;
@@ -999,7 +999,7 @@ function evalLegAngles(phi, p) {
   const kneeX = p.kneeMin + (p.kneeSwingPeak - p.kneeMin) * swingWave + p.kneeStancePeak * stanceBump;
 
   const ankleX = p.anklePush * Math.exp(-Math.pow(Math.sin((phi - 1.25) * 0.5), 2) / 0.12)
-               - p.ankleLift * Math.sin(phi - 0.8);
+               + p.ankleLift * Math.sin(phi - 0.8);
 
   const toeX = -0.35 * Math.exp(-Math.pow(Math.sin((phi - 1.35) * 0.5), 2) / 0.10);
 
@@ -1050,14 +1050,14 @@ function buildMocapWalkClip(profile) {
     const phiR = phiL + Math.PI;
 
     const pPitch = profile.pelvisTilt + 0.025 * Math.cos(2 * phiL);
-    const pYaw = -profile.pelvisYaw * Math.sin(phiL - 0.15);
+    const pYaw = profile.pelvisYaw * Math.sin(phiL - 0.15);
     const pRoll = -profile.pelvisRoll * Math.cos(phiL);
     qTmp.setFromEuler(eTmp.set(pPitch, pYaw, pRoll, 'YXZ'));
     writeQuat('Hips', k, qTmp);
     bonesByName['Hips'].quaternion.copy(qTmp);
 
     const sPitch = profile.spineLean * 0.35 + 0.015 * Math.sin(2 * phiL);
-    const sYaw = profile.spineTwist * 0.38 * Math.sin(phiL - 0.1);
+    const sYaw = -profile.spineTwist * 0.38 * Math.sin(phiL - 0.1);
     const sRoll = profile.spineRoll * 0.35 * Math.cos(phiL);
     qTmp.setFromEuler(eTmp.set(sPitch, sYaw, sRoll, 'YXZ'));
     writeQuat('Spine', k, qTmp);
@@ -1065,37 +1065,37 @@ function buildMocapWalkClip(profile) {
     writeQuat('Spine2', k, qTmp);
 
     const nPitch = -profile.spineLean * 0.25 + profile.headNod * Math.sin(2 * phiL + 0.5);
-    const nYaw = -profile.spineTwist * 0.42 * Math.sin(phiL - 0.1);
+    const nYaw = profile.spineTwist * 0.42 * Math.sin(phiL - 0.1);
     const nRoll = -profile.spineRoll * 0.30 * Math.cos(phiL);
     qTmp.setFromEuler(eTmp.set(nPitch, nYaw, nRoll, 'YXZ'));
     writeQuat('Neck', k, qTmp);
     writeQuat('Head', k, qTmp);
     writeQuat('HeadTop_End', k, qTmp.identity());
 
-    qTmp.setFromEuler(eTmp.set(0, 0.05 * Math.sin(phiL), -0.04, 'YXZ'));
+    qTmp.setFromEuler(eTmp.set(0, -0.05 * Math.sin(phiL), -0.04, 'YXZ'));
     writeQuat('LeftShoulder', k, qTmp);
-    qTmp.setFromEuler(eTmp.set(0, -0.05 * Math.sin(phiL), 0.04, 'YXZ'));
+    qTmp.setFromEuler(eTmp.set(0, 0.05 * Math.sin(phiL), 0.04, 'YXZ'));
     writeQuat('RightShoulder', k, qTmp);
 
-    const lArmPitch = -profile.armSwingX * Math.sin(phiR - 0.15);
+    const lArmPitch = profile.armSwingX * Math.sin(phiR - 0.15);
     qA.setFromEuler(eTmp.set(lArmPitch, 0, 0, 'XYZ'));
     qB.setFromEuler(eTmp.set(0, 0, -profile.armDownZ, 'XYZ'));
     qTmp.multiplyQuaternions(qA, qB);
     writeQuat('LeftArm', k, qTmp);
 
-    const lElbow = profile.elbowBase + profile.elbowSwing * Math.max(-0.2, Math.sin(phiR - 0.35));
+    const lElbow = profile.elbowBase + profile.elbowSwing * Math.max(-0.2, -Math.sin(phiR - 0.35));
     qTmp.setFromEuler(eTmp.set(0, -lElbow, 0, 'XYZ'));
     writeQuat('LeftForeArm', k, qTmp);
     writeQuat('LeftHand', k, qTmp.setFromEuler(eTmp.set(0, -0.08, -0.06, 'XYZ')));
     writeQuat('LeftHand_End', k, qTmp.identity());
 
-    const rArmPitch = -profile.armSwingX * Math.sin(phiL - 0.15);
+    const rArmPitch = profile.armSwingX * Math.sin(phiL - 0.15);
     qA.setFromEuler(eTmp.set(rArmPitch, 0, 0, 'XYZ'));
     qB.setFromEuler(eTmp.set(0, 0, profile.armDownZ, 'XYZ'));
     qTmp.multiplyQuaternions(qA, qB);
     writeQuat('RightArm', k, qTmp);
 
-    const rElbow = profile.elbowBase + profile.elbowSwing * Math.max(-0.2, Math.sin(phiL - 0.35));
+    const rElbow = profile.elbowBase + profile.elbowSwing * Math.max(-0.2, -Math.sin(phiL - 0.35));
     qTmp.setFromEuler(eTmp.set(0, rElbow, 0, 'XYZ'));
     writeQuat('RightForeArm', k, qTmp);
     writeQuat('RightHand', k, qTmp.setFromEuler(eTmp.set(0, 0.08, 0.06, 'XYZ')));
