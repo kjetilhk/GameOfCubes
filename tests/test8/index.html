@@ -8,23 +8,32 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../src/common.css">
 <style>
-  #state-banner {
+  #soft-controls {
     position: fixed;
-    top: calc(12px + env(safe-area-inset-top, 0px));
+    top: calc(10px + env(safe-area-inset-top, 0px));
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(14, 19, 26, 0.82);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    background: rgba(14, 19, 26, 0.80);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 999px;
-    padding: 6px 16px;
-    font-size: 0.82rem;
+    border-radius: 14px;
+    padding: 7px 14px;
+    z-index: 4;
+    pointer-events: auto;
+  }
+
+  #state-banner {
+    text-align: center;
+    font-size: 0.74rem;
     font-weight: 700;
     letter-spacing: 0.02em;
     color: var(--ink);
-    z-index: 4;
-    pointer-events: none;
+    padding-bottom: 3px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     white-space: nowrap;
   }
 
@@ -33,26 +42,149 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
-  #note {
-    top: calc(50px + env(safe-area-inset-top, 0px));
+  .soft-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
   }
 
-  @media (max-width: 640px) {
-    #state-banner {
-      top: calc(46px + env(safe-area-inset-top, 0px));
-      font-size: 0.75rem;
-      padding: 5px 12px;
+  .soft-dial {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 96px;
+  }
+
+  .soft-dial-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+
+  .soft-dial-val {
+    color: #f2b632;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.70rem;
+  }
+
+  .soft-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    outline: none;
+    cursor: pointer;
+    margin: 2px 0;
+  }
+
+  .soft-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #f2b632;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 6px rgba(242, 182, 50, 0.7);
+    cursor: pointer;
+  }
+
+  .soft-slider::-moz-range-thumb {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #f2b632;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 6px rgba(242, 182, 50, 0.7);
+    cursor: pointer;
+  }
+
+  #note {
+    top: calc(114px + env(safe-area-inset-top, 0px));
+  }
+
+  @media (max-width: 720px) {
+    #soft-controls {
+      top: calc(44px + env(safe-area-inset-top, 0px));
+      width: calc(100% - 20px);
+      max-width: 420px;
+      padding: 6px 10px;
+      gap: 4px;
+    }
+    .soft-row {
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .soft-dial {
+      flex: 1;
+      min-width: 0;
     }
     #note {
-      top: calc(82px + env(safe-area-inset-top, 0px));
+      top: calc(146px + env(safe-area-inset-top, 0px));
     }
   }
 </style>
 </head>
 <body>
 <div id="fps">-- FPS</div>
-<div id="state-banner">Pose: <span id="state-label">Bind Pose (T-Pose)</span></div>
 <div id="note"></div>
+
+<div id="soft-controls" class="ui-panel">
+  <div id="state-banner">Pose: <span id="state-label">Bind Pose (T-Pose)</span></div>
+  <div class="soft-row">
+    <div class="soft-dial">
+      <div class="soft-dial-header">
+        <span>Softness</span>
+        <span id="val-softness" class="soft-dial-val">40%</span>
+      </div>
+      <input id="slider-softness" class="soft-slider" type="range" min="0" max="100" step="1" value="40">
+    </div>
+    <div class="soft-dial">
+      <div class="soft-dial-header">
+        <span>Bending</span>
+        <span id="val-bending" class="soft-dial-val">55%</span>
+      </div>
+      <input id="slider-bending" class="soft-slider" type="range" min="0" max="100" step="1" value="55">
+    </div>
+    <div class="soft-dial">
+      <div class="soft-dial-header">
+        <span>Volume</span>
+        <span id="val-volume" class="soft-dial-val">100%</span>
+      </div>
+      <input id="slider-volume" class="soft-slider" type="range" min="0" max="100" step="1" value="100">
+    </div>
+  </div>
+  <div class="soft-row">
+    <div class="soft-dial">
+      <div class="soft-dial-header">
+        <span>Damping</span>
+        <span id="val-damping" class="soft-dial-val">1.25</span>
+      </div>
+      <input id="slider-damping" class="soft-slider" type="range" min="0" max="4.0" step="0.05" value="1.25">
+    </div>
+    <div class="soft-dial">
+      <div class="soft-dial-header">
+        <span>Gravity</span>
+        <span id="val-gravity" class="soft-dial-val">6.2</span>
+      </div>
+      <input id="slider-gravity" class="soft-slider" type="range" min="0" max="15.0" step="0.2" value="6.2">
+    </div>
+    <div class="soft-dial">
+      <div class="soft-dial-header">
+        <span>Mass</span>
+        <span id="val-mass" class="soft-dial-val">1.0x</span>
+      </div>
+      <input id="slider-mass" class="soft-slider" type="range" min="0.2" max="4.0" step="0.1" value="1.0">
+    </div>
+  </div>
+</div>
 
 <div id="hud">
   <a id="back" href="../../">← Tests</a>
@@ -251,7 +383,13 @@ characterRoot.name = 'CharacterRoot';
 scene.add(characterRoot);
 
 let headSphereMesh = null;
-const PIN_BONE_NAMES = new Set(['Head', 'LeftHand', 'RightHand', 'LeftFoot', 'RightFoot']);
+const PIN_BONE_NAMES = new Set([
+  'Head',
+  'LeftForeArm', 'RightForeArm',
+  'LeftHand', 'RightHand',
+  'LeftLeg', 'RightLeg',
+  'LeftFoot', 'RightFoot'
+]);
 
 // Build hierarchical THREE.Bone tree and parent a poly sphere + poly cylinder to every joint
 for (const def of BONE_DEFS) {
@@ -572,17 +710,20 @@ for (let i = 0; i < blobParticles.length; i++) {
 
 // Create XPBD Soft-Body Constraints (1-hop tet edges + 2-hop axial bending + TetVolumeConstraints)
 const edgeSet = new Set();
-function addMetaEdge(u, v, compliance) {
+const tetEdgeConstraints = [];
+const bendEdgeConstraints = [];
+function addMetaEdge(u, v, compliance, targetList) {
   const key = u < v ? u + ',' + v : v + ',' + u;
   if (!edgeSet.has(key)) {
     edgeSet.add(key);
-    world.addDistanceConstraint(blobParticles[u], blobParticles[v], compliance);
+    const c = world.addDistanceConstraint(blobParticles[u], blobParticles[v], compliance);
+    if (targetList) targetList.push(c);
   }
 }
 for (let ti = 0; ti < metaTets.length; ti++) {
   const [a, b, c, d] = metaTets[ti];
   for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) {
-    addMetaEdge(u, v, 0.0040);
+    addMetaEdge(u, v, 0.0040, tetEdgeConstraints);
   }
   world.volumeConstraints.push(new XPBD.TetVolumeConstraint(
     blobParticles[a], blobParticles[b], blobParticles[c], blobParticles[d], 0.0
@@ -597,23 +738,27 @@ for (let u = 0; u < blobParticles.length; u++) {
         const dj = Math.abs(blobParticles[u]._ty - blobParticles[v]._ty);
         const dk = Math.abs(blobParticles[u]._tz - blobParticles[v]._tz);
         if (di + dj + dk === 2 && Math.max(di, dj, dk) === 2) {
-          addMetaEdge(u, v, 0.0090);
+          addMetaEdge(u, v, 0.0090, bendEdgeConstraints);
         }
       }
     }
   }
 }
 
-// Pin Head, LeftHand, RightHand, LeftFoot, and RightFoot particles of the Marshmallow Man Meta-Mesh
-// directly to the poly spheres in the Head, LeftHand, RightHand, LeftFoot, and RightFoot bones!
+// Pin Head, Elbows (LeftForeArm/RightForeArm), Hands (LeftHand/RightHand),
+// Knees (LeftLeg/RightLeg), and Feet (LeftFoot/RightFoot) particles directly to their bone spheres!
 characterRoot.updateMatrixWorld(true);
 
 const pinAnchors = {
-  head:  bonesByName['Head']._sphereMesh,
-  lHand: bonesByName['LeftHand']._sphereMesh,
-  rHand: bonesByName['RightHand']._sphereMesh,
-  lFoot: bonesByName['LeftFoot']._sphereMesh,
-  rFoot: bonesByName['RightFoot']._sphereMesh
+  head:   bonesByName['Head']._sphereMesh,
+  lElbow: bonesByName['LeftForeArm']._sphereMesh,
+  rElbow: bonesByName['RightForeArm']._sphereMesh,
+  lHand:  bonesByName['LeftHand']._sphereMesh,
+  rHand:  bonesByName['RightHand']._sphereMesh,
+  lKnee:  bonesByName['LeftLeg']._sphereMesh,
+  rKnee:  bonesByName['RightLeg']._sphereMesh,
+  lFoot:  bonesByName['LeftFoot']._sphereMesh,
+  rFoot:  bonesByName['RightFoot']._sphereMesh
 };
 
 const pinBindPos = {};
@@ -632,6 +777,7 @@ const pinMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
 function attachParticleToAnchor(p, anchorKey) {
   const sphereMesh = pinAnchors[anchorKey];
   p.invM = 0;
+  p._isPinned = true;
   p._pinSphereMesh = sphereMesh;
   p._pinLocalPos = p.x.clone().applyMatrix4(pinInvMat[anchorKey]);
   p._prevPinWorldPos = p.x.clone();
@@ -646,6 +792,7 @@ function attachParticleToAnchor(p, anchorKey) {
 
 for (let i = 0; i < blobParticles.length; i++) {
   const p = blobParticles[i];
+  p._isPinned = false;
   const px = p.x.x, py = p.x.y, pz = p.x.z;
 
   // 1. Head sphere pin (crown/head region around Head bone sphere)
@@ -660,13 +807,29 @@ for (let i = 0; i < blobParticles.length; i++) {
   else if (px <= -0.60 && Math.hypot(px - pinBindPos.rHand.x, py - pinBindPos.rHand.y, pz - pinBindPos.rHand.z) <= 0.135) {
     attachParticleToAnchor(p, 'rHand');
   }
-  // 4. Left Foot sphere pin (left marshmallow boot around LeftFoot bone sphere)
+  // 4. Left Elbow sphere pin (around LeftForeArm elbow bone sphere)
+  else if (px >= 0.36 && px <= 0.52 && Math.hypot(px - pinBindPos.lElbow.x, py - pinBindPos.lElbow.y, pz - pinBindPos.lElbow.z) <= 0.125) {
+    attachParticleToAnchor(p, 'lElbow');
+  }
+  // 5. Right Elbow sphere pin (around RightForeArm elbow bone sphere)
+  else if (px <= -0.36 && px >= -0.52 && Math.hypot(px - pinBindPos.rElbow.x, py - pinBindPos.rElbow.y, pz - pinBindPos.rElbow.z) <= 0.125) {
+    attachParticleToAnchor(p, 'rElbow');
+  }
+  // 6. Left Foot sphere pin (left marshmallow boot around LeftFoot bone sphere)
   else if (px > 0.02 && py <= -1.30) {
     attachParticleToAnchor(p, 'lFoot');
   }
-  // 5. Right Foot sphere pin (right marshmallow boot around RightFoot bone sphere)
+  // 7. Right Foot sphere pin (right marshmallow boot around RightFoot bone sphere)
   else if (px < -0.02 && py <= -1.30) {
     attachParticleToAnchor(p, 'rFoot');
+  }
+  // 8. Left Knee sphere pin (around LeftLeg knee bone sphere)
+  else if (px > 0.02 && py >= -1.11 && py <= -0.94 && Math.hypot(px - pinBindPos.lKnee.x, py - pinBindPos.lKnee.y, pz - pinBindPos.lKnee.z) <= 0.135) {
+    attachParticleToAnchor(p, 'lKnee');
+  }
+  // 9. Right Knee sphere pin (around RightLeg knee bone sphere)
+  else if (px < -0.02 && py >= -1.11 && py <= -0.94 && Math.hypot(px - pinBindPos.rKnee.x, py - pinBindPos.rKnee.y, pz - pinBindPos.rKnee.z) <= 0.135) {
+    attachParticleToAnchor(p, 'rKnee');
   }
 }
 
@@ -1256,7 +1419,7 @@ function startBindPoseSequence() {
 
   stateLabel.textContent = 'Bind Pose (T-Pose) — Blending in 1.0s...';
   updateButtonHighlights(true);
-  RoomEnv.showNote('Bind Pose (T-Pose). Marshmallow Man pinned to Head, Hands & Feet spheres — blending into walk in 1.0s...', 2400);
+  RoomEnv.showNote('Bind Pose (T-Pose). Marshmallow Man pinned to Head, Elbows, Hands, Knees & Feet — blending in 1.0s...', 2400);
 
   bindPoseTimer = setTimeout(() => {
     bindPoseTimer = null;
@@ -1277,16 +1440,85 @@ const dragger = RoomEnv.createParticleDragger({
 });
 
 orbitControls = RoomEnv.createOrbitControls(camera, orbitTarget, {
-  dist: 3.3,
+  dist: 4.3,
   pitch: 0.16,
   yaw: 0.42,
   minDist: 1.5,
-  maxDist: 7.0,
+  maxDist: 8.5,
   minPitch: -0.05,
   maxPitch: 1.25,
   onPointerDrag: dragger.handlePointer
 });
 resize();
+
+/* ================= Real-Time Soft-Body Dynamics Sliders ================= */
+const sliderSoftness = document.getElementById('slider-softness');
+const sliderBending  = document.getElementById('slider-bending');
+const sliderVolume   = document.getElementById('slider-volume');
+const sliderDamping  = document.getElementById('slider-damping');
+const sliderGravity  = document.getElementById('slider-gravity');
+const sliderMass     = document.getElementById('slider-mass');
+
+const valSoftness = document.getElementById('val-softness');
+const valBending  = document.getElementById('val-bending');
+const valVolume   = document.getElementById('val-volume');
+const valDamping  = document.getElementById('val-damping');
+const valGravity  = document.getElementById('val-gravity');
+const valMass     = document.getElementById('val-mass');
+
+function applySoftBodySliders() {
+  const softnessPct = parseFloat(sliderSoftness.value);
+  const bendingPct  = parseFloat(sliderBending.value);
+  const volumePct   = parseFloat(sliderVolume.value);
+  const dampingVal  = parseFloat(sliderDamping.value);
+  const gravityVal  = parseFloat(sliderGravity.value);
+  const massScale   = parseFloat(sliderMass.value);
+
+  valSoftness.textContent = Math.round(softnessPct) + '%';
+  valBending.textContent  = Math.round(bendingPct) + '%';
+  valVolume.textContent   = Math.round(volumePct) + '%';
+  valDamping.textContent  = dampingVal.toFixed(2);
+  valGravity.textContent  = gravityVal.toFixed(1);
+  valMass.textContent     = massScale.toFixed(1) + 'x';
+
+  // 1. 1-hop tetrahedral edge compliance (40% -> 0.0040)
+  const edgeCompliance = softnessPct <= 0
+    ? 0.00005
+    : 0.025 * Math.pow(softnessPct / 100, 2.0);
+  for (let i = 0; i < tetEdgeConstraints.length; i++) {
+    tetEdgeConstraints[i].compliance = edgeCompliance;
+  }
+
+  // 2. 2-hop axial structural bending compliance (55% -> ~0.0090; higher % = firmer shape)
+  const bendCompliance = 0.0002 + 0.0398 * Math.pow(1 - bendingPct / 100, 1.89);
+  for (let i = 0; i < bendEdgeConstraints.length; i++) {
+    bendEdgeConstraints[i].compliance = bendCompliance;
+  }
+
+  // 3. Tetrahedral volume preservation compliance (100% -> 0.0 incompressible)
+  const volCompliance = 0.030 * Math.pow(1 - volumePct / 100, 2.0);
+  for (let i = 0; i < world.volumeConstraints.length; i++) {
+    world.volumeConstraints[i].compliance = volCompliance;
+  }
+
+  // 4. Linear damping & gravity
+  world.linearDamping = dampingVal;
+  world.accel.set(0, -gravityVal, 0);
+
+  // 5. Unpinned particle mass scaling
+  const invParticleMass = 1 / (0.048 * massScale);
+  for (let i = 0; i < blobParticles.length; i++) {
+    const p = blobParticles[i];
+    if (!p._isPinned) {
+      p.invM = invParticleMass;
+    }
+  }
+}
+
+[sliderSoftness, sliderBending, sliderVolume, sliderDamping, sliderGravity, sliderMass].forEach(el => {
+  el.addEventListener('input', applySoftBodySliders);
+});
+applySoftBodySliders();
 
 /* ================= HUD Controls & Keyboard Shortcuts ================= */
 let wireActive = false;
