@@ -257,46 +257,46 @@
     <div class="rc-dial">
       <div class="rc-dial-header">
         <span>Max-Speed</span>
-        <span id="val-max-speed" class="rc-dial-val">100%</span>
+        <span id="val-max-speed" class="rc-dial-val">70%</span>
       </div>
-      <input id="slider-max-speed" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+      <input id="slider-max-speed" class="rc-slider" type="range" min="20" max="150" step="5" value="70">
     </div>
     <div class="rc-dial">
       <div class="rc-dial-header">
         <span>Steer</span>
-        <span id="val-steer" class="rc-dial-val">100%</span>
+        <span id="val-steer" class="rc-dial-val">60%</span>
       </div>
-      <input id="slider-steer" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+      <input id="slider-steer" class="rc-slider" type="range" min="20" max="150" step="5" value="60">
     </div>
     <div class="rc-dial">
       <div class="rc-dial-header">
         <span>Speed Sens</span>
-        <span id="val-speed-sens" class="rc-dial-val">100%</span>
+        <span id="val-speed-sens" class="rc-dial-val">60%</span>
       </div>
-      <input id="slider-speed-sens" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+      <input id="slider-speed-sens" class="rc-slider" type="range" min="20" max="150" step="5" value="60">
     </div>
   </div>
   <div class="rc-row">
     <div class="rc-dial">
       <div class="rc-dial-header">
         <span>Hill Height</span>
-        <span id="val-deform-height" class="rc-dial-val">1.0m</span>
+        <span id="val-deform-height" class="rc-dial-val">3.0m</span>
       </div>
-      <input id="slider-deform-height" class="rc-slider" type="range" min="0" max="3.0" step="0.1" value="1.0">
+      <input id="slider-deform-height" class="rc-slider" type="range" min="0" max="3.0" step="0.1" value="3.0">
     </div>
     <div class="rc-dial">
       <div class="rc-dial-header">
         <span>Hill Waves</span>
-        <span id="val-deform-freq" class="rc-dial-val">1.0x</span>
+        <span id="val-deform-freq" class="rc-dial-val">2.0x</span>
       </div>
-      <input id="slider-deform-freq" class="rc-slider" type="range" min="0.2" max="2.5" step="0.1" value="1.0">
+      <input id="slider-deform-freq" class="rc-slider" type="range" min="0.2" max="2.5" step="0.1" value="2.0">
     </div>
     <div class="rc-dial">
       <div class="rc-dial-header">
         <span>Roughness</span>
-        <span id="val-deform-rough" class="rc-dial-val">100%</span>
+        <span id="val-deform-rough" class="rc-dial-val">80%</span>
       </div>
-      <input id="slider-deform-rough" class="rc-slider" type="range" min="0" max="200" step="10" value="100">
+      <input id="slider-deform-rough" class="rc-slider" type="range" min="0" max="200" step="10" value="80">
     </div>
   </div>
 </div>
@@ -309,9 +309,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=18"></script>
-<script src="../../src/room.js?v=18"></script>
-<script src="../../src/car.js?v=18"></script>
+<script src="../../src/xpbd.js?v=19"></script>
+<script src="../../src/room.js?v=19"></script>
+<script src="../../src/car.js?v=19"></script>
 <script>
 (() => {
 'use strict';
@@ -394,12 +394,12 @@ scene.add(ambLight);
 
 /* ================= Procedural Course Deformer & Uneven Off-Road Surface ================= */
 // Macro course deformer parameters (adjustable in real time via top sliders):
-// - deformHeight: highest point of the course hills in meters (default 1.0m)
-// - deformFreq:   spatial wave frequency of the hills across the course (default 1.0x)
-// - deformRough:  intensity multiplier for small-scale off-road ruts & whoops (default 1.0)
-let deformHeight = 1.0;
-let deformFreq = 1.0;
-let deformRough = 1.0;
+// - deformHeight: highest point of the course hills in meters (default 3.0m)
+// - deformFreq:   spatial wave frequency of the hills across the course (default 2.0x)
+// - deformRough:  intensity multiplier for small-scale off-road ruts & whoops (default 0.80)
+let deformHeight = 3.0;
+let deformFreq = 2.0;
+let deformRough = 0.80;
 let waveMin = -1.0, waveSpan = 2.0;
 
 function rawHillWave(x, z, f) {
@@ -1187,6 +1187,11 @@ sliderSpeedSens.addEventListener('input', () => {
   valSpeedSens.textContent = pct + '%';
   buggy.setSpeedSensitivity(pct / 100);
 });
+
+// Apply initial default slider settings (Max-Speed: 70%, Steer: 60%, Speed Sens: 60%)
+buggy.setMaxSpeed(26.0 * (Number(sliderMaxSpeed.value) / 100));
+buggy.setSteerSensitivity(Number(sliderSteer.value) / 100);
+buggy.setSpeedSensitivity(Number(sliderSpeedSens.value) / 100);
 
 function updateCourseDeformation() {
   // Record current ground heights beneath car and cubes before updating terrain
