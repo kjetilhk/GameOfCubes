@@ -50,6 +50,128 @@
     border-color: rgba(0, 229, 255, 0.90);
   }
 
+  /* Top RC Remote Trim & Sensitivity Sliders */
+  #rc-remote {
+    position: fixed;
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(14, 18, 26, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    padding: 6px 14px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 30;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .rc-dial {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 92px;
+  }
+
+  .rc-dial-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .rc-dial-val {
+    color: #00e5ff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rc-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    outline: none;
+    margin: 3px 0;
+    cursor: pointer;
+    touch-action: pan-x;
+  }
+  .rc-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #00e5ff;
+    border: 2px solid #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+  }
+  .rc-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #00e5ff;
+    border: 2px solid #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+  }
+
+  /* Simple text-only Speed HUD */
+  #speed-hud {
+    position: fixed;
+    top: calc(58px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 1.05rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #ffffff;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+    z-index: 25;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #note {
+    top: calc(86px + env(safe-area-inset-top, 0px));
+  }
+
+  @media (max-width: 720px) {
+    #rc-remote {
+      top: calc(48px + env(safe-area-inset-top, 0px));
+      gap: 10px;
+      padding: 5px 10px;
+      width: calc(100vw - 28px);
+      max-width: 360px;
+      justify-content: space-between;
+    }
+    .rc-dial {
+      min-width: 0;
+      flex: 1;
+    }
+    #speed-hud {
+      top: calc(15px + env(safe-area-inset-top, 0px));
+      font-size: 0.95rem;
+    }
+    #note {
+      top: calc(96px + env(safe-area-inset-top, 0px));
+    }
+  }
+
   /* Compact low-profile analog joystick at bottom center */
   #joystick-container {
     position: fixed;
@@ -113,11 +235,36 @@
 </head>
 <body>
 <div id="fps">-- FPS</div>
+<div id="speed-hud">0 km/h</div>
 <div id="note"></div>
 
 <div id="hud">
   <a id="back" href="../../">← Tests</a>
   <button id="btn-reset" class="hud-btn">↺ Reset</button>
+</div>
+
+<div id="rc-remote">
+  <div class="rc-dial">
+    <div class="rc-dial-header">
+      <span>Max-Speed</span>
+      <span id="val-max-speed" class="rc-dial-val">100%</span>
+    </div>
+    <input id="slider-max-speed" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+  </div>
+  <div class="rc-dial">
+    <div class="rc-dial-header">
+      <span>Steer</span>
+      <span id="val-steer" class="rc-dial-val">100%</span>
+    </div>
+    <input id="slider-steer" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+  </div>
+  <div class="rc-dial">
+    <div class="rc-dial-header">
+      <span>Speed Sens</span>
+      <span id="val-speed-sens" class="rc-dial-val">100%</span>
+    </div>
+    <input id="slider-speed-sens" class="rc-slider" type="range" min="20" max="150" step="5" value="100">
+  </div>
 </div>
 
 <div id="joystick-container">
@@ -128,9 +275,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=15"></script>
-<script src="../../src/room.js?v=15"></script>
-<script src="../../src/car.js?v=15"></script>
+<script src="../../src/xpbd.js?v=16"></script>
+<script src="../../src/room.js?v=16"></script>
+<script src="../../src/car.js?v=16"></script>
 <script>
 (() => {
 'use strict';
@@ -149,7 +296,8 @@ const world = new XPBD.World({
   restitution: 0.45, // Bouncy contact restitution
   density: 35,       // Lightweight: mass ~0.5 - 1.0 kg (vs 4.2 kg car)
   linearDamping: 0.05, // Low air resistance so buggy rolls freely
-  angularDamping: 0.25
+  angularDamping: 0.25,
+  maxSpeed: 80       // High ceiling so Max-Speed slider up to 150% is never clamped
 });
 
 /* ================= Open World Boundary Setup ================= */
@@ -898,6 +1046,33 @@ function resetScene() {
 window.resetScene = resetScene;
 document.getElementById('btn-reset').addEventListener('click', resetScene);
 
+/* ================= RC Remote Trim & Sensitivity Sliders ================= */
+const sliderMaxSpeed = document.getElementById('slider-max-speed');
+const valMaxSpeed = document.getElementById('val-max-speed');
+const sliderSteer = document.getElementById('slider-steer');
+const valSteer = document.getElementById('val-steer');
+const sliderSpeedSens = document.getElementById('slider-speed-sens');
+const valSpeedSens = document.getElementById('val-speed-sens');
+const speedHudEl = document.getElementById('speed-hud');
+
+sliderMaxSpeed.addEventListener('input', () => {
+  const pct = Number(sliderMaxSpeed.value);
+  valMaxSpeed.textContent = pct + '%';
+  buggy.setMaxSpeed(26.0 * (pct / 100));
+});
+
+sliderSteer.addEventListener('input', () => {
+  const pct = Number(sliderSteer.value);
+  valSteer.textContent = pct + '%';
+  buggy.setSteerSensitivity(pct / 100);
+});
+
+sliderSpeedSens.addEventListener('input', () => {
+  const pct = Number(sliderSpeedSens.value);
+  valSpeedSens.textContent = pct + '%';
+  buggy.setSpeedSensitivity(pct / 100);
+});
+
 /* ================= Virtual Joystick Controls ================= */
 const baseEl = document.getElementById('joystick-base');
 const thumbEl = document.getElementById('joystick-thumb');
@@ -1049,6 +1224,10 @@ function frame(now) {
 
   // Sync visuals with interpolated transform
   buggy.updateVisuals(interpPos, interpQuat);
+
+  // Update simple text Speed HUD
+  const speedKmh = Math.round(Math.hypot(buggy.body.v.x, buggy.body.v.z) * 3.6);
+  speedHudEl.textContent = speedKmh + ' km/h';
 
   // Sync all 44 dynamic crash cube visual meshes with XPBD rigid bodies
   for (let i = 0; i < cubeBodies.length; i++) {

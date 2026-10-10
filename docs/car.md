@@ -166,9 +166,12 @@ const car = new RCCar(world, scene, {
 ```
 
 ### Methods
-- `car.setThrottle(value)`: Sets throttle input $[-1.0, 1.0]$ (negative = reverse).
+- `car.setThrottle(value)`: Sets throttle input $[-1.0, 1.0]$ (negative = reverse), shaped by the active `speedSensitivity` exponent.
 - `car.setSteering(value)`: Sets steering input $[-1.0, 1.0]$ (negative = left, positive = right).
 - `car.setBrake(active)`: Activates or releases the brakes (`true` / `false`).
+- `car.setMaxSpeed(val)`: Dynamically sets the maximum top speed limit in $\text{m/s}$ (RC remote Throttle EPA / Max-Speed controller).
+- `car.setSteerSensitivity(factor)`: Scales steering dual-rate throw (`maxSteerAngle`) and servo speed (`steerSpeed`) by `factor` (e.g. $0.20$ to $1.50$).
+- `car.setSpeedSensitivity(factor)`: Scales motor acceleration punch (`engineForce`) and throttle response curve exponent by `factor` (e.g. $0.20$ to $1.50$).
 - `car.setSuspensionPreset('soft' | 'medium' | 'stiff')`: Adjusts spring stiffness ($85\,\text{N/m}$ Soft, $130\,\text{N/m}$ Medium, $240\,\text{N/m}$ Stiff) and damping in real time.
 - `car.step(dt)`: Advances suspension, drivetrain, and tire physics (called every simulation frame).
 - `car.updateVisuals(interpPos, interpQuat)`: Synchronizes visual meshes, coils, wishbones, and wheels with optional interpolated transform vectors for 120Hz retinal smoothness.

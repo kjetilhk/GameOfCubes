@@ -121,11 +121,17 @@ class RCCar {
     this.suspensionPreset = 'medium';
 
     // Drivetrain & Handling (High-speed brushless RC buggy dynamics)
-    this.engineForce = options.engineForce || 130.0;     // 4WD motor thrust (rapid acceleration to 26 m/s)
-    this.maxSpeed = options.maxSpeed || 26.0;           // Doubled top speed cap ~94 km/h (~26 m/s)
+    this.baseEngineForce = options.engineForce || 130.0;
+    this.engineForce = this.baseEngineForce;             // 4WD motor thrust (rapid acceleration to 26 m/s)
+    this.baseMaxSpeed = options.maxSpeed || 26.0;
+    this.maxSpeed = this.baseMaxSpeed;                   // Doubled top speed cap ~94 km/h (~26 m/s)
     this.brakeForce = options.brakeForce || 95.0;       // Progressive braking force
-    this.maxSteerAngle = options.maxSteerAngle || 0.40; // ~23 degrees (reduced from 0.54 to eliminate twitchiness)
-    this.steerSpeed = options.steerSpeed || 4.5;        // Smooth steering rate
+    this.baseMaxSteerAngle = options.maxSteerAngle || 0.40;
+    this.maxSteerAngle = this.baseMaxSteerAngle;         // ~23 degrees (reduced from 0.54 to eliminate twitchiness)
+    this.baseSteerSpeed = options.steerSpeed || 4.5;
+    this.steerSpeed = this.baseSteerSpeed;               // Smooth steering rate
+    this.steerSensitivity = options.steerSensitivity || 1.0;
+    this.speedSensitivity = options.speedSensitivity || 1.0;
     this.tireFrictionForward = options.tireFrictionForward || 1.5;
     this.tireFrictionSide = options.tireFrictionSide || 1.8;
 
@@ -506,7 +512,13 @@ class RCCar {
 
   /* ================= Public Controls & API ================= */
   setThrottle(val) {
-    this.throttle = THREE.MathUtils.clamp(val, -1.0, 1.0);
+    const raw = THREE.MathUtils.clamp(val, -1.0, 1.0);
+    if (Math.abs(raw) < 0.001) {
+      this.throttle = 0;
+    } else {
+      const exp = 1.0 / Math.max(0.2, this.speedSensitivity);
+      this.throttle = Math.sign(raw) * Math.pow(Math.abs(raw), exp);
+    }
   }
 
   setSteering(val) {
@@ -515,6 +527,21 @@ class RCCar {
 
   setBrake(active) {
     this.isBraking = !!active;
+  }
+
+  setMaxSpeed(val) {
+    this.maxSpeed = Math.max(2.0, val);
+  }
+
+  setSteerSensitivity(factor) {
+    this.steerSensitivity = THREE.MathUtils.clamp(factor, 0.15, 2.0);
+    this.maxSteerAngle = this.baseMaxSteerAngle * this.steerSensitivity;
+    this.steerSpeed = this.baseSteerSpeed * (0.4 + 0.6 * this.steerSensitivity);
+  }
+
+  setSpeedSensitivity(factor) {
+    this.speedSensitivity = THREE.MathUtils.clamp(factor, 0.15, 2.0);
+    this.engineForce = this.baseEngineForce * this.speedSensitivity;
   }
 
   setSuspensionPreset(preset) {
@@ -587,9 +614,9 @@ class RCCar {
     const rightDir = _rightDir.set(1, 0, 0).applyQuaternion(body.q);
     const upDir = _upDir.set(0, 1, 0).applyQuaternion(body.q);
 
-    // Speed-sensitive steering (tapers smoothly at 26 m/s to prevent high-speed twitchy spinouts)
+    // Speed-sensitive steering (tapers smoothly at speed to prevent high-speed twitchy spinouts)
     const fwdSpeed = Math.abs(body.v.dot(forwardDir));
-    const speedDamping = Math.max(0.35, 1.0 - (fwdSpeed / this.maxSpeed) * 0.55);
+    const speedDamping = Math.max(0.35, 1.0 - (fwdSpeed / this.baseMaxSpeed) * 0.55);
     const targetSteerAngle = -this.steering * (this.maxSteerAngle * speedDamping);
     this.currentSteerAngle = THREE.MathUtils.lerp(
       this.currentSteerAngle,

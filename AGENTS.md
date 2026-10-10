@@ -142,6 +142,7 @@ High-performance off-road vehicle dynamics, circuit racing, and high-speed multi
 - Massive $96\,\text{m} \times 112\,\text{m}$ figure-8 racing circuit with double-wide $15.2\,\text{m}$ roadway lanes, continuous procedural off-road terrain elevation function `world.getTerrainHeight(x, z)` (undulating swells, washboard whoops, and packed-dirt chatter with 8-ribbon cross-lane mesh subdivision), 3D raised beveled border curbs ($0.60\,\text{m}$ wide) with automatic intersection clearance, checkered start/finish line, turf infield beds, corner apex cones, and wide tabletop ($10\,\text{m}$) & mega kicker ($8\,\text{m}$) jumps.
 - 44 ultra-lightweight ($45\,\text{g}$) hollow plastic shell crash cubes with momentum transfer collision physics (car plows through barriers with $<2\%$ speed loss while cubes scatter into the air).
 - Suspension debris filtering: wheels ignore lightweight debris ($w > 2.0$), preventing artificial vertical shock jolts when rolling over scattered plastic boxes.
+- Top-of-screen RC remote controller sliders (**Max-Speed**, **Steer**, **Speed Sens** from $20\%$ to $150\%$) and a simple text-only live **Speed HUD** (`km/h`).
 - Compact bottom-center virtual analog joystick with progressive exponential response ($\text{steer} = \operatorname{sign}(x) \cdot |x|^{1.6}$) and lowered-horizon screen-centered chase follow camera.
 - High-refresh rate 120Hz display interpolation eliminating motion ghosting.
 
