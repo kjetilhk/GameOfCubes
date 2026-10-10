@@ -141,6 +141,13 @@
   <div class="soft-row">
     <div class="soft-dial">
       <div class="soft-dial-header">
+        <span>Walk Speed</span>
+        <span id="val-walkspeed" class="soft-dial-val">1.00x</span>
+      </div>
+      <input id="slider-walkspeed" class="soft-slider" type="range" min="0" max="2.5" step="0.05" value="1.0">
+    </div>
+    <div class="soft-dial">
+      <div class="soft-dial-header">
         <span>Softness</span>
         <span id="val-softness" class="soft-dial-val">40%</span>
       </div>
@@ -1002,8 +1009,8 @@ const shirtMat = new THREE.MeshStandardMaterial({
 });
 
 const sNx = 31, sNy = 22;
-const shirtHalfW = 0.385;
-const shirtTopY = 0.048, shirtBotY = -0.485;
+const shirtHalfW = 0.455;
+const shirtTopY = 0.068, shirtBotY = -0.572;
 const sDx = (2 * shirtHalfW) / (sNx - 1);
 const sDy = (shirtTopY - shirtBotY) / (sNy - 1);
 const sleeveBotJ = 9;
@@ -1012,8 +1019,8 @@ function isCellInShirt(ci, cj) {
   const xMid = -shirtHalfW + (ci + 0.5) * sDx;
   const yMid = shirtTopY - (cj + 0.5) * sDy;
   // Scoop collar cutout at top center
-  if (cj < 3 && Math.abs(xMid) < 0.125) {
-    const nr = Math.hypot(xMid / 0.13, (yMid - shirtTopY) / 0.075);
+  if (cj < 3 && Math.abs(xMid) < 0.145) {
+    const nr = Math.hypot(xMid / 0.155, (yMid - shirtTopY) / 0.088);
     if (nr < 1.0) return false;
   }
   // Under-sleeve cutout below armpits
@@ -1072,13 +1079,13 @@ for (let j = 0; j < sNy; j++) {
     if (!isShirtNodeUsed(i, j)) continue;
     const x0 = -shirtHalfW + i * sDx;
     const y0 = shirtTopY - j * sDy;
-    let zOff = 0.175;
+    let zOff = 0.215;
     if (j <= sleeveBotJ && (i < 5 || i > sNx - 1 - 5)) {
-      const uArm = Math.max(-1, Math.min(1, (y0 - (-0.065)) / 0.115));
-      zOff = 0.118 * Math.sqrt(Math.max(0.05, 1 - uArm * uArm));
+      const uArm = Math.max(-1, Math.min(1, (y0 - (-0.065)) / 0.145));
+      zOff = 0.145 * Math.sqrt(Math.max(0.08, 1 - uArm * uArm));
     } else {
-      const uTorso = Math.max(-1, Math.min(1, x0 / 0.26));
-      zOff = 0.185 * Math.sqrt(Math.max(0.05, 1 - uTorso * uTorso));
+      const uTorso = Math.max(-1, Math.min(1, x0 / 0.315));
+      zOff = 0.225 * Math.sqrt(Math.max(0.08, 1 - uTorso * uTorso));
     }
     if (isSharedSeamNode(i, j)) {
       const id = createShirtParticle(x0, y0, -1.2, 0, i, j);
@@ -1117,9 +1124,9 @@ for (let j = 0; j < sNy - 1; j++) {
   }
 }
 
-// Mold the 3D T-Shirt in Bind Pose onto marshmallowSDF = +0.018m (1.8cm outside Marshmallow Man skin)
-const shirtTargetOffset = 0.018;
-for (let iter = 0; iter < 16; iter++) {
+// Mold the 20% bigger 3D T-Shirt in Bind Pose so every vertex starts at least +0.042m (4.2cm) outside Marshmallow Man skin
+const shirtTargetOffset = 0.042;
+for (let iter = 0; iter < 14; iter++) {
   for (let v = 0; v < shirtParticles.length; v++) {
     const p = shirtParticles[v];
     let sx = 0, sy = 0, sz = 0;
@@ -1131,18 +1138,20 @@ for (let iter = 0; iter < 16; iter++) {
         sz += shirtParticles[nb].x.z;
       }
       const inv = 1 / nSet.size;
-      const w = 0.32;
+      const w = 0.25;
       p.x.x = p.x.x * (1 - w) + sx * inv * w;
       p.x.y = p.x.y * (1 - w) + sy * inv * w;
       p.x.z = p.x.z * (1 - w) + sz * inv * w;
     }
     if (p._side === 0) p.x.z = -1.2;
     const d = marshmallowSDF(p.x.x, p.x.y, p.x.z) - shirtTargetOffset;
-    const [gx, gy, gz] = sdfGrad(p.x.x, p.x.y, p.x.z);
-    const step = Math.max(-0.025, Math.min(0.025, d * 0.85));
-    p.x.x -= gx * step;
-    p.x.y -= gy * step;
-    if (p._side !== 0) p.x.z -= gz * step;
+    if (d < 0) {
+      const [gx, gy, gz] = sdfGrad(p.x.x, p.x.y, p.x.z);
+      const step = -d * 0.90;
+      p.x.x += gx * step;
+      p.x.y += gy * step;
+      if (p._side !== 0) p.x.z += gz * step;
+    }
     p.px.copy(p.x);
   }
 }
@@ -1180,24 +1189,6 @@ for (let j = 0; j < sNy - 1; j++) {
   }
 }
 
-// Cross-seam hoop constraints across Front & Back panels so cylindrical sleeves and torso stay rounded
-for (let j = 0; j < sNy; j++) {
-  for (let i = 0; i < sNx; i++) {
-    const f = shirtFrontIdx[j][i], b = shirtBackIdx[j][i];
-    if (f >= 0 && b >= 0 && f !== b) {
-      // Connect Front & Back particles immediately adjacent to a shared seam or open cuff/collar
-      const hasSharedNbr =
-        (i > 0 && shirtFrontIdx[j][i - 1] >= 0 && shirtFrontIdx[j][i - 1] === shirtBackIdx[j][i - 1]) ||
-        (i < sNx - 1 && shirtFrontIdx[j][i + 1] >= 0 && shirtFrontIdx[j][i + 1] === shirtBackIdx[j][i + 1]) ||
-        (j > 0 && shirtFrontIdx[j - 1][i] >= 0 && shirtFrontIdx[j - 1][i] === shirtBackIdx[j - 1][i]) ||
-        (j < sNy - 1 && shirtFrontIdx[j + 1][i] >= 0 && shirtFrontIdx[j + 1][i] === shirtBackIdx[j + 1][i]);
-      if (hasSharedNbr) {
-        addShirtEdge(f, b, 0.00005);
-      }
-    }
-  }
-}
-
 // Bind each shirt particle to its anatomical bone for smooth frame transport & pre-link local Marshmallow Man skin particles
 characterRoot.updateMatrixWorld(true);
 const shirtBoneNames = ['Spine', 'Spine1', 'Spine2', 'LeftArm', 'RightArm'];
@@ -1214,18 +1205,18 @@ for (let i = 0; i < shirtParticles.length; i++) {
   // 1. Assign primary anatomical bone & transport weight (carries sleeves with rotating arms while torso cloth drapes freely)
   let bName = 'Spine1';
   let transportW = 0.34;
-  if (p._bindPos.y > -0.21 && p._bindPos.x > 0.185) {
+  if (p._bindPos.y > -0.24 && p._bindPos.x > 0.215) {
     bName = 'LeftArm';
-    transportW = 0.85;
-  } else if (p._bindPos.y > -0.21 && p._bindPos.x < -0.185) {
+    transportW = 0.86;
+  } else if (p._bindPos.y > -0.24 && p._bindPos.x < -0.215) {
     bName = 'RightArm';
-    transportW = 0.85;
-  } else if (p._bindPos.y > -0.20) {
+    transportW = 0.86;
+  } else if (p._bindPos.y > -0.22) {
     bName = 'Spine2';
-    transportW = p._bindPos.y > -0.06 ? 0.84 : 0.54;
-  } else if (p._bindPos.y <= -0.36) {
+    transportW = p._bindPos.y > -0.05 ? 0.86 : 0.56;
+  } else if (p._bindPos.y <= -0.38) {
     bName = 'Spine';
-    transportW = 0.26;
+    transportW = 0.28;
   }
   p._boneRef = bonesByName[bName];
   p._boneLocalBind = p._bindPos.clone().applyMatrix4(shirtBoneInvBind[bName]);
@@ -1240,7 +1231,7 @@ for (let i = 0; i < shirtParticles.length; i++) {
     const bp = blobParticles[k];
     if (!bp._isBoundary) continue;
     const d0 = p._bindPos.distanceTo(bp._bindPos);
-    if (d0 < 0.175) {
+    if (d0 < 0.20) {
       p._skinNeighbors.push(bp);
     }
   }
@@ -1273,19 +1264,25 @@ function syncShirtMesh() {
 syncShirtMesh();
 
 // One-Way Body-to-Shirt Collision Solver:
+// Runs once per substep in world.onPostParticleSubstep (after XPBD distance constraints and before velocity derivation).
 // Shirt particles collide against the live deforming Marshmallow Man soft-body skin & core capsules,
 // while Marshmallow Man particles NEVER react to the shirt!
 const skinCenter = new V(), skinDiff = new V(), skinRelDisp = new V();
-const R_SKIN_SPHERE = 0.058;
-const SHIRT_SKIN_CLEARANCE = 0.0155;
-const R_SKIN_INSET = R_SKIN_SPHERE - SHIRT_SKIN_CLEARANCE;
+const R_SKIN_SPHERE = 0.048;
+const R_SKIN_INSET  = 0.030;
 
 function solveShirtBodyCollision() {
   for (let i = 0; i < shirtParticles.length; i++) {
     const p = shirtParticles[i];
-    const skinNbrs = p._skinNeighbors;
 
-    // 1. Collide one-way against live deforming Marshmallow Man boundary skin particles (Normal-Inset Spheres)
+    // 1. Softly seat the top shoulder/collar seam onto the moving shoulder frame so the shirt hangs naturally from the shoulders
+    if (p._sj === 0 && p._si >= 6 && p._si <= sNx - 1 - 6) {
+      p.x.lerp(p._targetBoneWorldPos, 0.45);
+      p.px.lerp(p._targetBoneWorldPos, 0.45);
+    }
+
+    // 2. Collide one-way against live deforming Marshmallow Man boundary skin particles (Normal-Inset Spheres)
+    const skinNbrs = p._skinNeighbors;
     for (let k = 0; k < skinNbrs.length; k++) {
       const bp = skinNbrs[k];
       const nrm = bp._skinNormal;
@@ -1297,34 +1294,16 @@ function solveShirtBodyCollision() {
         const pen = R_SKIN_SPHERE - d;
         skinDiff.divideScalar(d); // outward unit normal n
         p.x.addScaledVector(skinDiff, pen);
-
-        // Clamp previous substep position along n so depenetration doesn't inject pop velocity
-        const pxDist = (p.px.x - skinCenter.x) * skinDiff.x +
-                       (p.px.y - skinCenter.y) * skinDiff.y +
-                       (p.px.z - skinCenter.z) * skinDiff.z;
-        if (pxDist < R_SKIN_SPHERE) {
-          p.px.addScaledVector(skinDiff, R_SKIN_SPHERE - pxDist);
-        }
-
-        // Tangential cotton-on-body friction relative to moving Marshmallow Man skin particle (one-way!)
-        skinRelDisp.subVectors(p.x, p.px).sub(bp.x).add(bp.px);
-        const nComp = skinRelDisp.dot(skinDiff);
-        skinRelDisp.addScaledVector(skinDiff, -nComp);
-        const tLen = skinRelDisp.length();
-        if (tLen > 1e-6) {
-          const f = Math.min(0.45, 0.32 * (pen / (tLen + 1e-5)));
-          p.x.addScaledVector(skinRelDisp, -f);
-        }
       }
     }
 
-    // 2. Watertight fallback against upper-body skeleton capsules (prevents tunneling during fast arm swings or mouse grabs)
+    // 3. Watertight fallback against upper-body skeleton capsules (prevents tunneling during fast arm swings or mouse grabs)
     for (let s = 0; s < boneSegments.length; s++) {
       const seg = boneSegments[s];
       if (s > 12) continue; // upper body & arms only
       const a = cachedSegA[s];
       const b = cachedSegB[s];
-      const minR = seg.radius * 1.45 + p.radius;
+      const minR = seg.radius * 1.35 + p.radius;
       segAB.subVectors(b, a);
       segAP.subVectors(p.x, a);
       const abLenSq = segAB.lengthSq();
@@ -1339,13 +1318,18 @@ function solveShirtBodyCollision() {
         const pen = minR - d;
         pushDir.divideScalar(d);
         p.x.addScaledVector(pushDir, pen);
-        const pxDist = (p.px.x - closestPt.x) * pushDir.x +
-                       (p.px.y - closestPt.y) * pushDir.y +
-                       (p.px.z - closestPt.z) * pushDir.z;
-        if (pxDist < minR) {
-          p.px.addScaledVector(pushDir, minR - pxDist);
-        }
       }
+    }
+
+    // 4. Clamp per-substep relative displacement so one-way depenetration never injects explosive velocity
+    skinRelDisp.subVectors(p.x, p.px);
+    const maxStepDisp = 0.0032; // <= 1.9 m/s at 600Hz substep rate
+    const dispLenSq = skinRelDisp.lengthSq();
+    if (dispLenSq > maxStepDisp * maxStepDisp) {
+      const scale = maxStepDisp / Math.sqrt(dispLenSq);
+      p.px.x = p.x.x - skinRelDisp.x * scale;
+      p.px.y = p.x.y - skinRelDisp.y * scale;
+      p.px.z = p.x.z - skinRelDisp.z * scale;
     }
   }
 }
@@ -1455,17 +1439,16 @@ world.onParticleSubstep = function(wWorld, h, substepIdx) {
     }
   }
 
-  // 3. Transport Cotton Shirt sleeves/shoulders with rotating upper-arm/spine frames & run pre-constraint one-way collision
+  // 3. Transport Cotton Shirt sleeves/shoulders with rotating upper-arm/spine frames (zero velocity compounding)
   for (let i = 0; i < shirtParticles.length; i++) {
     const sp = shirtParticles[i];
     const wT = sp._transportW;
     sp.x.addScaledVector(sp._boneStepDelta, wT);
-    sp.px.addScaledVector(sp._boneStepDelta, wT * 0.88);
+    sp.px.addScaledVector(sp._boneStepDelta, wT);
   }
-  solveShirtBodyCollision();
 };
 
-// 4. Post-constraint one-way collision: project Cotton Shirt outside the solved Marshmallow Man surface before velocity derivation
+// 4. Single-pass post-constraint one-way collision: project Cotton Shirt outside the solved Marshmallow Man surface before velocity derivation
 world.onPostParticleSubstep = function() {
   solveShirtBodyCollision();
 };
@@ -1869,20 +1852,24 @@ orbitControls = RoomEnv.createOrbitControls(camera, orbitTarget, {
 });
 resize();
 
-/* ================= Real-Time Soft-Body Dynamics Sliders ================= */
-const sliderSoftness = document.getElementById('slider-softness');
-const sliderBending  = document.getElementById('slider-bending');
-const sliderVolume   = document.getElementById('slider-volume');
-const sliderDamping  = document.getElementById('slider-damping');
-const sliderGravity  = document.getElementById('slider-gravity');
-const sliderMass     = document.getElementById('slider-mass');
+/* ================= Real-Time Soft-Body Dynamics & Walk Speed Sliders ================= */
+const sliderSoftness  = document.getElementById('slider-softness');
+const sliderBending   = document.getElementById('slider-bending');
+const sliderVolume    = document.getElementById('slider-volume');
+const sliderDamping   = document.getElementById('slider-damping');
+const sliderGravity   = document.getElementById('slider-gravity');
+const sliderMass      = document.getElementById('slider-mass');
+const sliderWalkSpeed = document.getElementById('slider-walkspeed');
 
-const valSoftness = document.getElementById('val-softness');
-const valBending  = document.getElementById('val-bending');
-const valVolume   = document.getElementById('val-volume');
-const valDamping  = document.getElementById('val-damping');
-const valGravity  = document.getElementById('val-gravity');
-const valMass     = document.getElementById('val-mass');
+const valSoftness  = document.getElementById('val-softness');
+const valBending   = document.getElementById('val-bending');
+const valVolume    = document.getElementById('val-volume');
+const valDamping   = document.getElementById('val-damping');
+const valGravity   = document.getElementById('val-gravity');
+const valMass      = document.getElementById('val-mass');
+const valWalkSpeed = document.getElementById('val-walkspeed');
+
+let walkSpeedScale = 1.0;
 
 function applySoftBodySliders() {
   const softnessPct = parseFloat(sliderSoftness.value);
@@ -1891,13 +1878,15 @@ function applySoftBodySliders() {
   const dampingVal  = parseFloat(sliderDamping.value);
   const gravityVal  = parseFloat(sliderGravity.value);
   const massScale   = parseFloat(sliderMass.value);
+  walkSpeedScale    = parseFloat(sliderWalkSpeed.value);
 
-  valSoftness.textContent = Math.round(softnessPct) + '%';
-  valBending.textContent  = Math.round(bendingPct) + '%';
-  valVolume.textContent   = Math.round(volumePct) + '%';
-  valDamping.textContent  = dampingVal.toFixed(2);
-  valGravity.textContent  = gravityVal.toFixed(1);
-  valMass.textContent     = massScale.toFixed(1) + 'x';
+  valSoftness.textContent  = Math.round(softnessPct) + '%';
+  valBending.textContent   = Math.round(bendingPct) + '%';
+  valVolume.textContent    = Math.round(volumePct) + '%';
+  valDamping.textContent   = dampingVal.toFixed(2);
+  valGravity.textContent   = gravityVal.toFixed(1);
+  valMass.textContent      = massScale.toFixed(1) + 'x';
+  valWalkSpeed.textContent = walkSpeedScale.toFixed(1) + 'x';
 
   // 1. 1-hop tetrahedral edge compliance (40% -> 0.0040)
   const edgeCompliance = softnessPct <= 0
@@ -1933,7 +1922,7 @@ function applySoftBodySliders() {
   }
 }
 
-[sliderSoftness, sliderBending, sliderVolume, sliderDamping, sliderGravity, sliderMass].forEach(el => {
+[sliderSoftness, sliderBending, sliderVolume, sliderDamping, sliderGravity, sliderMass, sliderWalkSpeed].forEach(el => {
   el.addEventListener('input', applySoftBodySliders);
 });
 applySoftBodySliders();
@@ -1974,8 +1963,8 @@ function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
 
-  // 1. Advance skeleton animation mixer
-  mixer.update(dt);
+  // 1. Advance skeleton animation mixer (scaled by Walk Speed slider during walk cycles)
+  mixer.update(dt * (currentAction === bindPoseAction ? 1.0 : walkSpeedScale));
 
   // 2. Pin soft-body particles to bone spheres & compute skeleton/shirt frame motion
   updateSkeletonBlobInteraction();
