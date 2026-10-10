@@ -200,16 +200,16 @@ const BONE_DEFS = [
   { name: 'RightHand_End', parent: 'RightHand',     pos: [-0.09, 0, 0],       rSphere: 0.020, rCyl: 0.016 },
 
   // Left Leg chain (downward along -Y)
-  { name: 'LeftUpLeg',     parent: 'Hips',          pos: [0.105, -0.04, 0],   rSphere: 0.044, rCyl: 0.030 },
+  { name: 'LeftUpLeg',     parent: 'Hips',          pos: [0.155, -0.04, 0],   rSphere: 0.044, rCyl: 0.030 },
   { name: 'LeftLeg',       parent: 'LeftUpLeg',     pos: [0, -0.42, 0],       rSphere: 0.038, rCyl: 0.032 },
-  { name: 'LeftFoot',      parent: 'LeftLeg',       pos: [0, -0.41, 0],       rSphere: 0.032, rCyl: 0.026 },
+  { name: 'LeftFoot',      parent: 'LeftLeg',       pos: [0, -0.41, 0],       rSphere: 0.034, rCyl: 0.026 },
   { name: 'LeftToeBase',   parent: 'LeftFoot',      pos: [0, -0.045, 0.14],   rSphere: 0.024, rCyl: 0.022 },
   { name: 'LeftToe_End',   parent: 'LeftToeBase',   pos: [0, 0, 0.06],        rSphere: 0.018, rCyl: 0.016 },
 
   // Right Leg chain (downward along -Y)
-  { name: 'RightUpLeg',    parent: 'Hips',          pos: [-0.105, -0.04, 0],  rSphere: 0.044, rCyl: 0.030 },
+  { name: 'RightUpLeg',    parent: 'Hips',          pos: [-0.155, -0.04, 0],  rSphere: 0.044, rCyl: 0.030 },
   { name: 'RightLeg',      parent: 'RightUpLeg',    pos: [0, -0.42, 0],       rSphere: 0.038, rCyl: 0.032 },
-  { name: 'RightFoot',     parent: 'RightLeg',      pos: [0, -0.41, 0],       rSphere: 0.032, rCyl: 0.026 },
+  { name: 'RightFoot',     parent: 'RightLeg',      pos: [0, -0.41, 0],       rSphere: 0.034, rCyl: 0.026 },
   { name: 'RightToeBase',  parent: 'RightFoot',     pos: [0, -0.045, 0.14],   rSphere: 0.024, rCyl: 0.022 },
   { name: 'RightToe_End',  parent: 'RightToeBase',  pos: [0, 0, 0.06],        rSphere: 0.018, rCyl: 0.016 }
 ];
@@ -251,6 +251,7 @@ characterRoot.name = 'CharacterRoot';
 scene.add(characterRoot);
 
 let headSphereMesh = null;
+const PIN_BONE_NAMES = new Set(['Head', 'LeftHand', 'RightHand', 'LeftFoot', 'RightFoot']);
 
 // Build hierarchical THREE.Bone tree and parent a poly sphere + poly cylinder to every joint
 for (const def of BONE_DEFS) {
@@ -259,15 +260,15 @@ for (const def of BONE_DEFS) {
   bone.position.set(def.pos[0], def.pos[1], def.pos[2]);
 
   // 1. Parent a poly sphere directly to the joint at its local origin (0, 0, 0)
-  const isHeadBone = def.name === 'Head';
-  const sphereMesh = new THREE.Mesh(unitSphereGeom, isHeadBone ? headSphereMat : jointSphereMat);
+  const isPinBone = PIN_BONE_NAMES.has(def.name);
+  const sphereMesh = new THREE.Mesh(unitSphereGeom, isPinBone ? headSphereMat : jointSphereMat);
   sphereMesh.scale.setScalar(def.rSphere);
   sphereMesh.castShadow = true;
   sphereMesh.receiveShadow = true;
   bone.add(sphereMesh);
   bone._sphereMesh = sphereMesh;
   bone._rSphere = def.rSphere;
-  if (isHeadBone) {
+  if (def.name === 'Head') {
     headSphereMesh = sphereMesh;
   }
 
@@ -603,27 +604,69 @@ for (let u = 0; u < blobParticles.length; u++) {
   }
 }
 
-// Pin the head particles of the Marshmallow Man Meta-Mesh directly to the sphere in the Head bone!
-const headWorldBindPos = new V();
-headSphereMesh.updateMatrixWorld(true);
-headSphereMesh.getWorldPosition(headWorldBindPos);
-const headInvMatrix = new THREE.Matrix4().copy(headSphereMesh.matrixWorld).invert();
+// Pin Head, LeftHand, RightHand, LeftFoot, and RightFoot particles of the Marshmallow Man Meta-Mesh
+// directly to the poly spheres in the Head, LeftHand, RightHand, LeftFoot, and RightFoot bones!
+characterRoot.updateMatrixWorld(true);
+
+const pinAnchors = {
+  head:  bonesByName['Head']._sphereMesh,
+  lHand: bonesByName['LeftHand']._sphereMesh,
+  rHand: bonesByName['RightHand']._sphereMesh,
+  lFoot: bonesByName['LeftFoot']._sphereMesh,
+  rFoot: bonesByName['RightFoot']._sphereMesh
+};
+
+const pinBindPos = {};
+const pinInvMat = {};
+for (const [key, mesh] of Object.entries(pinAnchors)) {
+  mesh.updateMatrixWorld(true);
+  pinBindPos[key] = new V();
+  mesh.getWorldPosition(pinBindPos[key]);
+  pinInvMat[key] = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+}
 
 const blobPinnedParticles = [];
 const pinMarkerGeom = new THREE.SphereGeometry(0.012, 10, 8);
 const pinMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
 
+function attachParticleToAnchor(p, anchorKey) {
+  const sphereMesh = pinAnchors[anchorKey];
+  p.invM = 0;
+  p._pinSphereMesh = sphereMesh;
+  p._pinLocalPos = p.x.clone().applyMatrix4(pinInvMat[anchorKey]);
+  p._prevPinWorldPos = p.x.clone();
+  p._targetPinWorldPos = p.x.clone();
+  blobPinnedParticles.push(p);
+
+  // Visual pin marker parented directly to the joint's poly sphere
+  const pinDot = new THREE.Mesh(pinMarkerGeom, pinMarkerMat);
+  pinDot.position.copy(p._pinLocalPos);
+  sphereMesh.add(pinDot);
+}
+
 for (let i = 0; i < blobParticles.length; i++) {
   const p = blobParticles[i];
-  // Pin particles inside/around the Head bone's sphere (y > 0.02 around Head & HeadTop_End)
-  if (p.x.y >= 0.02 && Math.hypot(p.x.x - headWorldBindPos.x, p.x.y - 0.11, p.x.z - headWorldBindPos.z) <= 0.175) {
-    p.invM = 0; // Pinned to Head bone sphere!
-    p._headLocalPos = p.x.clone().applyMatrix4(headInvMatrix);
-    blobPinnedParticles.push(p);
+  const px = p.x.x, py = p.x.y, pz = p.x.z;
 
-    const pinDot = new THREE.Mesh(pinMarkerGeom, pinMarkerMat);
-    pinDot.position.copy(p._headLocalPos);
-    headSphereMesh.add(pinDot);
+  // 1. Head sphere pin (crown/head region around Head bone sphere)
+  if (py >= 0.02 && Math.hypot(px - pinBindPos.head.x, py - 0.11, pz - pinBindPos.head.z) <= 0.175) {
+    attachParticleToAnchor(p, 'head');
+  }
+  // 2. Left Hand sphere pin (left mitt hand around LeftHand bone sphere)
+  else if (px >= 0.60 && Math.hypot(px - pinBindPos.lHand.x, py - pinBindPos.lHand.y, pz - pinBindPos.lHand.z) <= 0.135) {
+    attachParticleToAnchor(p, 'lHand');
+  }
+  // 3. Right Hand sphere pin (right mitt hand around RightHand bone sphere)
+  else if (px <= -0.60 && Math.hypot(px - pinBindPos.rHand.x, py - pinBindPos.rHand.y, pz - pinBindPos.rHand.z) <= 0.135) {
+    attachParticleToAnchor(p, 'rHand');
+  }
+  // 4. Left Foot sphere pin (left marshmallow boot around LeftFoot bone sphere)
+  else if (px > 0.02 && py <= -1.30) {
+    attachParticleToAnchor(p, 'lFoot');
+  }
+  // 5. Right Foot sphere pin (right marshmallow boot around RightFoot bone sphere)
+  else if (px < -0.02 && py <= -1.30) {
+    attachParticleToAnchor(p, 'rFoot');
   }
 }
 
@@ -763,8 +806,8 @@ function syncBlobMesh() {
 }
 syncBlobMesh();
 
-// Update pinned Marshmallow Man head particles to follow the sphere in the Head bone,
-// and transfer moving skeleton momentum into the soft-body Marshmallow Man inside each substep
+// Update pinned Marshmallow Man particles (Head, Hands, Feet) to follow their bone spheres,
+// and transfer moving skeleton momentum into the unpinned soft-body tissue inside each substep
 const segAB = new V(), segAP = new V(), closestPt = new V(), pushDir = new V();
 const cachedSegA = boneSegments.map(() => new V());
 const cachedSegB = boneSegments.map(() => new V());
@@ -775,13 +818,18 @@ let hasPrevSegs = false;
 function updateSkeletonBlobInteraction() {
   characterRoot.updateMatrixWorld(true);
 
-  // 1. Move all head-pinned soft-body particles with the sphere in the Head bone
-  const headMatWorld = headSphereMesh.matrixWorld;
+  // 1. Compute target world positions for all pinned particles (Head, LeftHand, RightHand, LeftFoot, RightFoot)
   for (let i = 0; i < blobPinnedParticles.length; i++) {
     const p = blobPinnedParticles[i];
-    p.x.copy(p._headLocalPos).applyMatrix4(headMatWorld);
-    p.px.copy(p.x);
-    p.v.set(0, 0, 0);
+    if (hasPrevSegs) {
+      p._prevPinWorldPos.copy(p.x);
+    }
+    p._targetPinWorldPos.copy(p._pinLocalPos).applyMatrix4(p._pinSphereMesh.matrixWorld);
+    if (!hasPrevSegs) {
+      p._prevPinWorldPos.copy(p._targetPinWorldPos);
+      p.x.copy(p._targetPinWorldPos);
+      p.px.copy(p._targetPinWorldPos);
+    }
   }
 
   // 2. Compute world endpoints and per-substep motion delta of skeleton bone segments
@@ -800,7 +848,17 @@ function updateSkeletonBlobInteraction() {
   hasPrevSegs = true;
 }
 
-world.onParticleSubstep = function() {
+world.onParticleSubstep = function(wWorld, h, substepIdx) {
+  // 1. Smoothly advance pinned Head, Hand, and Foot particles across substeps
+  const alpha = (substepIdx + 1) / world.substeps;
+  for (let i = 0; i < blobPinnedParticles.length; i++) {
+    const p = blobPinnedParticles[i];
+    p.x.lerpVectors(p._prevPinWorldPos, p._targetPinWorldPos, alpha);
+    p.px.copy(p.x);
+    p.v.set(0, 0, 0);
+  }
+
+  // 2. Transfer moving skeleton limb/torso momentum into unpinned soft-body particles
   for (let i = 0; i < numBaseVerts; i++) {
     const p = blobParticles[i];
     if (p.invM === 0) continue;
@@ -814,7 +872,7 @@ world.onParticleSubstep = function() {
       const a = cachedSegA[s];
       const b = cachedSegB[s];
       const rCap = seg.radius;
-      const influenceR = rCap * 2.2;
+      const influenceR = rCap * 2.4;
 
       segAB.subVectors(b, a);
       segAP.subVectors(p.x, a);
@@ -831,7 +889,7 @@ world.onParticleSubstep = function() {
         const d = Math.sqrt(d2);
         const w = 1 - d / influenceR;
         if (isMoving) {
-          p.x.addScaledVector(delta, 0.38 * w * w);
+          p.x.addScaledVector(delta, 0.42 * w * w);
         }
         if (seg.isCore && p._isBoundary && d < rCap + p.radius && d > 1e-9) {
           const push = Math.min(0.0025, ((rCap + p.radius) - d) * 0.25);
@@ -1184,6 +1242,10 @@ function startBindPoseSequence() {
     p.x.copy(p._bindPos);
     p.px.copy(p._bindPos);
     p.v.set(0, 0, 0);
+    if (p._prevPinWorldPos) {
+      p._prevPinWorldPos.copy(p._bindPos);
+      p._targetPinWorldPos.copy(p._bindPos);
+    }
   }
   syncBlobMesh();
 
@@ -1194,7 +1256,7 @@ function startBindPoseSequence() {
 
   stateLabel.textContent = 'Bind Pose (T-Pose) — Blending in 1.0s...';
   updateButtonHighlights(true);
-  RoomEnv.showNote('Bind Pose (T-Pose). Marshmallow Man meta-mesh pinned to head sphere — blending into walk in 1.0s...', 2400);
+  RoomEnv.showNote('Bind Pose (T-Pose). Marshmallow Man pinned to Head, Hands & Feet spheres — blending into walk in 1.0s...', 2400);
 
   bindPoseTimer = setTimeout(() => {
     bindPoseTimer = null;
