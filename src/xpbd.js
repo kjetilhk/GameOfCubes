@@ -70,12 +70,13 @@ class Particle {
 }
 
 class DistanceConstraint {
-  constructor(p1, p2, compliance = 0, restLength = null){
+  constructor(p1, p2, compliance = 0, restLength = null, enabled = true){
     this.p1 = p1;
     this.p2 = p2;
     this.compliance = compliance; // m/N (0 = rigid)
     this.restLength = restLength !== null ? restLength : p1.x.distanceTo(p2.x);
     this.lambda = 0;
+    this.enabled = enabled;
   }
 }
 
@@ -96,6 +97,9 @@ class Cloth {
     this.nx = nx; this.ny = ny;
     this.particles = [];
     this.constraints = [];
+    this.structuralConstraints = [];
+    this.shearConstraints = [];
+    this.bendConstraints = [];
     this.pinned = new Set();
     const particleMass = mass / (nx * ny);
     const dx = width / (nx - 1);
@@ -134,39 +138,80 @@ class Cloth {
       }
     }
 
-    const addC = (i1, i2, comp) => {
-      this.constraints.push(new DistanceConstraint(this.particles[i1], this.particles[i2], comp));
+    const addC = (i1, i2, comp, group, enabled = true) => {
+      const c = new DistanceConstraint(this.particles[i1], this.particles[i2], comp, null, enabled);
+      this.constraints.push(c);
+      if (group) group.push(c);
     };
 
     // Structural (inextensible threads)
     for (let j = 0; j < ny; j++){
       for (let i = 0; i < nx; i++){
         const idx = j * nx + i;
-        if (i < nx - 1) addC(idx, idx + 1, compliance);
-        if (j < ny - 1) addC(idx, idx + nx, compliance);
+        if (i < nx - 1) addC(idx, idx + 1, compliance, this.structuralConstraints, true);
+        if (j < ny - 1) addC(idx, idx + nx, compliance, this.structuralConstraints, true);
       }
     }
 
     // Shear (diagonal drape)
-    if (shearCompliance !== null && shearCompliance !== undefined){
-      for (let j = 0; j < ny - 1; j++){
-        for (let i = 0; i < nx - 1; i++){
-          const idx = j * nx + i;
-          addC(idx, idx + nx + 1, shearCompliance);
-          addC(idx + 1, idx + nx, shearCompliance);
-        }
+    const shearEnabled = shearCompliance !== null && shearCompliance !== undefined;
+    const shearVal = shearEnabled ? shearCompliance : 0.01;
+    for (let j = 0; j < ny - 1; j++){
+      for (let i = 0; i < nx - 1; i++){
+        const idx = j * nx + i;
+        addC(idx, idx + nx + 1, shearVal, this.shearConstraints, shearEnabled);
+        addC(idx + 1, idx + nx, shearVal, this.shearConstraints, shearEnabled);
       }
     }
 
-    // Bending (2-hop distance constraints - only for stiff materials like paper, cardboard, sheet metal)
-    if (bendCompliance !== null && bendCompliance !== undefined && bendCompliance > 0){
-      for (let j = 0; j < ny; j++){
-        for (let i = 0; i < nx; i++){
-          const idx = j * nx + i;
-          if (i < nx - 2) addC(idx, idx + 2, bendCompliance);
-          if (j < ny - 2) addC(idx, idx + 2*nx, bendCompliance);
-        }
+    // Bending (2-hop distance constraints - disabled when bendCompliance is null/0)
+    const bendEnabled = bendCompliance !== null && bendCompliance !== undefined && bendCompliance > 0;
+    const bendVal = bendEnabled ? bendCompliance : 0.01;
+    for (let j = 0; j < ny; j++){
+      for (let i = 0; i < nx; i++){
+        const idx = j * nx + i;
+        if (i < nx - 2) addC(idx, idx + 2, bendVal, this.bendConstraints, bendEnabled);
+        if (j < ny - 2) addC(idx, idx + 2*nx, bendVal, this.bendConstraints, bendEnabled);
       }
+    }
+  }
+
+  setStretchCompliance(comp){
+    for (let i = 0; i < this.structuralConstraints.length; i++){
+      this.structuralConstraints[i].compliance = comp;
+    }
+  }
+
+  setShearCompliance(comp){
+    const en = comp !== null && comp !== undefined;
+    for (let i = 0; i < this.shearConstraints.length; i++){
+      this.shearConstraints[i].enabled = en;
+      if (en) this.shearConstraints[i].compliance = comp;
+    }
+  }
+
+  setBendCompliance(comp){
+    const en = comp !== null && comp !== undefined && comp > 0;
+    for (let i = 0; i < this.bendConstraints.length; i++){
+      this.bendConstraints[i].enabled = en;
+      if (en) this.bendConstraints[i].compliance = comp;
+    }
+  }
+
+  setMass(mass){
+    const pm = Math.max(0.0001, mass / (this.nx * this.ny));
+    this.particleMass = pm;
+    const invM = 1 / pm;
+    for (let i = 0; i < this.particles.length; i++){
+      if (!this.pinned.has(i)){
+        this.particles[i].invM = invM;
+      }
+    }
+  }
+
+  setFriction(mu){
+    for (let i = 0; i < this.particles.length; i++){
+      this.particles[i].friction = mu;
     }
   }
 
@@ -1101,6 +1146,7 @@ class World {
       for (const c of volumeConstraints) c.lambda = 0;
       for (let it = 0; it < this.positionIterations; it++){
         for (const c of constraints){
+          if (c.enabled === false) continue;
           const p1 = c.p1, p2 = c.p2;
           const w1 = p1.invM, w2 = p2.invM;
           const wSum = w1 + w2;
@@ -1169,7 +1215,8 @@ class World {
             const tLen = t2.length();
             if (tLen > 1e-6){
               const mu = s.friction !== undefined ? s.friction : 0.3;
-              const f = Math.min(0.2, mu * (pen / (tLen + 1e-5)));
+              const maxF = Math.min(0.85, Math.max(0.2, mu * 0.72));
+              const f = Math.min(maxF, mu * (pen / (tLen + 1e-5)));
               p.x.addScaledVector(t2, -f);
             }
           }
@@ -1201,6 +1248,7 @@ class World {
 
       // 5b. internal constraint damping (dissipates high-frequency tension flutter in cloth)
       for (const c of constraints){
+        if (c.enabled === false) continue;
         const p1 = c.p1, p2 = c.p2;
         const w1 = p1.invM, w2 = p2.invM;
         const wSum = w1 + w2;

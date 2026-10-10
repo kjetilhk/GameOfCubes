@@ -7,10 +7,168 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../src/common.css">
+<style>
+  #cloth-controls {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    background: rgba(14, 19, 26, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 7px 14px;
+    z-index: 4;
+    pointer-events: auto;
+  }
+
+  .cloth-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .cloth-dial {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 96px;
+  }
+
+  .cloth-dial-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+
+  .cloth-dial-val {
+    color: #f2b632;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.70rem;
+  }
+
+  .cloth-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    outline: none;
+    cursor: pointer;
+    margin: 2px 0;
+  }
+
+  .cloth-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #f2b632;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 6px rgba(242, 182, 50, 0.7);
+    cursor: pointer;
+  }
+
+  .cloth-slider::-moz-range-thumb {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #f2b632;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 6px rgba(242, 182, 50, 0.7);
+    cursor: pointer;
+  }
+
+  #note {
+    top: calc(92px + env(safe-area-inset-top, 0px));
+  }
+
+  @media (max-width: 720px) {
+    #cloth-controls {
+      top: calc(44px + env(safe-area-inset-top, 0px));
+      width: calc(100% - 20px);
+      max-width: 420px;
+      padding: 6px 10px;
+      gap: 4px;
+    }
+    .cloth-row {
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .cloth-dial {
+      flex: 1;
+      min-width: 0;
+    }
+    #note {
+      top: calc(124px + env(safe-area-inset-top, 0px));
+    }
+  }
+</style>
 </head>
 <body>
 <div id="fps">-- FPS</div>
 <div id="note"></div>
+
+<div id="cloth-controls">
+  <div class="cloth-row">
+    <div class="cloth-dial">
+      <div class="cloth-dial-header">
+        <span>Stretch</span>
+        <span id="val-stretch" class="cloth-dial-val">10%</span>
+      </div>
+      <input id="slider-stretch" class="cloth-slider" type="range" min="0" max="100" step="1" value="10">
+    </div>
+    <div class="cloth-dial">
+      <div class="cloth-dial-header">
+        <span>Shear</span>
+        <span id="val-shear" class="cloth-dial-val">20%</span>
+      </div>
+      <input id="slider-shear" class="cloth-slider" type="range" min="0" max="100" step="1" value="20">
+    </div>
+    <div class="cloth-dial">
+      <div class="cloth-dial-header">
+        <span>Bending</span>
+        <span id="val-bend" class="cloth-dial-val">0%</span>
+      </div>
+      <input id="slider-bend" class="cloth-slider" type="range" min="0" max="100" step="1" value="0">
+    </div>
+  </div>
+  <div class="cloth-row">
+    <div class="cloth-dial">
+      <div class="cloth-dial-header">
+        <span>Friction</span>
+        <span id="val-friction" class="cloth-dial-val">28%</span>
+      </div>
+      <input id="slider-friction" class="cloth-slider" type="range" min="0" max="100" step="1" value="28">
+    </div>
+    <div class="cloth-dial">
+      <div class="cloth-dial-header">
+        <span>Damping</span>
+        <span id="val-damping" class="cloth-dial-val">0.8</span>
+      </div>
+      <input id="slider-damping" class="cloth-slider" type="range" min="0" max="3.0" step="0.1" value="0.8">
+    </div>
+    <div class="cloth-dial">
+      <div class="cloth-dial-header">
+        <span>Mass</span>
+        <span id="val-mass" class="cloth-dial-val">1.5kg</span>
+      </div>
+      <input id="slider-mass" class="cloth-slider" type="range" min="0.2" max="5.0" step="0.1" value="1.5">
+    </div>
+  </div>
+</div>
+
 <div id="hud">
   <a id="back" href="../../">← Tests</a>
   <button id="reset">Reset</button>
@@ -20,8 +178,8 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js"></script>
-<script src="../../src/room.js"></script>
+<script src="../../src/xpbd.js?v=19"></script>
+<script src="../../src/room.js?v=19"></script>
 <script>
 (() => {
 'use strict';
@@ -171,6 +329,74 @@ const cubeSpawner = RoomEnv.createCubeSpawner({
   spawnPos: () => new V((Math.random() - 0.5) * 0.3, 1.25, -1.2 + (Math.random() - 0.5) * 0.3)
 });
 
+/* ================= Cloth Attribute Sliders & Mapping ================= */
+const sliderStretch = document.getElementById('slider-stretch');
+const valStretch = document.getElementById('val-stretch');
+const sliderShear = document.getElementById('slider-shear');
+const valShear = document.getElementById('val-shear');
+const sliderBend = document.getElementById('slider-bend');
+const valBend = document.getElementById('val-bend');
+const sliderFriction = document.getElementById('slider-friction');
+const valFriction = document.getElementById('val-friction');
+const sliderDamping = document.getElementById('slider-damping');
+const valDamping = document.getElementById('val-damping');
+const sliderMass = document.getElementById('slider-mass');
+const valMass = document.getElementById('val-mass');
+
+// Map slider percentages to physical XPBD compliance & material parameters
+function getStretchCompliance(pct) {
+  // 0% -> 0 (rigid threads), 10% -> 0.000004 (default cotton), 100% -> 0.004 (stretchy elastic)
+  return pct <= 0 ? 0 : 0.004 * Math.pow(pct / 100, 3);
+}
+
+function getShearCompliance(pct) {
+  // 0% -> 0 (locked diagonal), 20% -> 0.02 (default cotton drape), 100% -> 0.10 (fluid bias folds)
+  return (pct / 100) * 0.10;
+}
+
+function getBendCompliance(pct) {
+  // 0% -> 0 (disabled / soft cloth), 1%..100% -> 2-hop bending stiffness from soft felt to stiff leather
+  if (pct <= 0) return 0;
+  return 0.02 * Math.pow(1 - pct / 100, 3) + 0.000002;
+}
+
+function applyClothAttributes() {
+  const stretchPct = Number(sliderStretch.value);
+  const shearPct = Number(sliderShear.value);
+  const bendPct = Number(sliderBend.value);
+  const frictionPct = Number(sliderFriction.value);
+  const dampingVal = Number(sliderDamping.value);
+  const massVal = Number(sliderMass.value);
+
+  valStretch.textContent = stretchPct + '%';
+  valShear.textContent = shearPct + '%';
+  valBend.textContent = bendPct + '%';
+  valFriction.textContent = frictionPct + '%';
+  valDamping.textContent = dampingVal.toFixed(1);
+  valMass.textContent = massVal.toFixed(1) + 'kg';
+
+  const mu = frictionPct / 100;
+  world.linearDamping = dampingVal;
+  if (world.spheres.length > 0) {
+    world.spheres[0].friction = mu;
+  }
+
+  if (activeCloth) {
+    activeCloth.setStretchCompliance(getStretchCompliance(stretchPct));
+    activeCloth.setShearCompliance(getShearCompliance(shearPct));
+    activeCloth.setBendCompliance(getBendCompliance(bendPct));
+    activeCloth.setFriction(mu);
+    activeCloth.setMass(massVal);
+  }
+}
+
+sliderStretch.addEventListener('input', applyClothAttributes);
+sliderShear.addEventListener('input', applyClothAttributes);
+sliderBend.addEventListener('input', applyClothAttributes);
+sliderFriction.addEventListener('input', applyClothAttributes);
+sliderDamping.addEventListener('input', applyClothAttributes);
+sliderMass.addEventListener('input', applyClothAttributes);
+
 /* ================= Scene Initialization ================= */
 let selfColActive = true;
 let wireActive = false;
@@ -179,8 +405,16 @@ function initScene(){
   cubeSpawner.clear();
   world.clear();
 
-  // Re-add static sphere obstacle
-  world.addSphere(sphereRadius, sphereCenter, 0.28);
+  const stretchPct = Number(sliderStretch.value);
+  const shearPct = Number(sliderShear.value);
+  const bendPct = Number(sliderBend.value);
+  const mu = Number(sliderFriction.value) / 100;
+  const dampingVal = Number(sliderDamping.value);
+  const massVal = Number(sliderMass.value);
+
+  world.linearDamping = dampingVal;
+  // Re-add static sphere obstacle with current friction
+  world.addSphere(sphereRadius, sphereCenter, mu);
   world.selfCollision = selfColActive;
 
   // Cloth: 1.5m x 1.5m horizontal plane, starts 1m above sphere center (y = 1.0m)
@@ -190,10 +424,11 @@ function initScene(){
     width: 1.5, height: 1.5,
     center: new V(0, 1.0, -1.2),
     plane: 'xz',
-    mass: 1.5,
-    compliance: 0.000004,
-    shearCompliance: 0.02,
-    bendCompliance: 0,
+    mass: massVal,
+    compliance: getStretchCompliance(stretchPct),
+    shearCompliance: getShearCompliance(shearPct),
+    bendCompliance: getBendCompliance(bendPct),
+    friction: mu,
     pinnedCorners: []
   });
 

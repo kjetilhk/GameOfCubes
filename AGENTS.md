@@ -108,6 +108,7 @@ Cloth draping and 3D curved obstacle collision benchmark.
 - Horizontal $1.5\,\text{m} \times 1.5\,\text{m}$ fabric sheet falling under gravity onto a $0.7\,\text{m}$ diameter polished sphere perched on a studio pedestal stand ($1.5\,\text{m}$ above floor, sphere center $y = 0.0\,\text{m}$).
 - Cloth starts $1\,\text{m}$ above sphere center ($y = 1.0\,\text{m}$) and falls freely without pinned corners.
 - Active spatial-hash cloth self-collision preventing overlapping folds from penetrating as they flute around the sphere.
+- Top-of-screen real-time cloth attribute sliders (**Stretch** $0\text{--}100\%$, **Shear** $0\text{--}100\%$, **Bending** $0\text{--}100\%$, **Friction** $0\text{--}100\%$, **Damping** $0.0\text{--}3.0$, **Mass** $0.2\text{--}5.0\,\text{kg}$) updating XPBD constraint compliances, sphere/particle friction, air drag, and particle masses live and across resets.
 - Fixed downwards gravity with no gyro sensor permission modal; features a 3D orbit camera, wireframe mode toggle, raycast grab & pull, and dynamic rigid cube drop collisions.
 
 ### Test 5: Joints & Articulated Bodies (`tests/test5/index.html`)

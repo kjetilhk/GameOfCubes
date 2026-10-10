@@ -646,7 +646,7 @@ function createOrbitControls(camera, target = new V(0, 0, -1.2), {
   }
 
   window.addEventListener('pointerdown', e => {
-    if (e.target && e.target.closest && (e.target.closest('#hud') || e.target.closest('#intro'))) return;
+    if (e.target && e.target.closest && e.target.closest('#hud, #intro, #cloth-controls, .ui-panel, input')) return;
     if (onPointerDrag && onPointerDrag(e, 'down')) return;
     dragging = true;
     lx = e.clientX;
