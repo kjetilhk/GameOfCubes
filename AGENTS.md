@@ -149,14 +149,14 @@ High-performance off-road vehicle dynamics, circuit racing, and high-speed multi
 - Compact bottom-center virtual analog joystick with progressive exponential response ($\text{steer} = \operatorname{sign}(x) \cdot |x|^{1.6}$) and lowered-horizon screen-centered chase follow camera.
 - High-refresh rate 120Hz display interpolation eliminating motion ghosting.
 
-### Test 8: Human Skeleton, Soft-Body Blob & Mocap Walk Cycles (`tests/test8/index.html`)
+### Test 8: Human Skeleton, Soft-Body Meta-Mesh & Mocap Walk Cycles (`tests/test8/index.html`)
 
-Hierarchical 3D humanoid skeleton, XPBD soft-body character blob mesh, and motion-capture animation blending benchmark in open 3D space.
+Hierarchical 3D humanoid skeleton, XPBD soft-body Marshmallow Man meta-mesh, and motion-capture animation blending benchmark in open 3D space.
 - Open, infinite 3D space (no enclosed room box walls or ceiling) with studio 3-point lighting, shadow-catching ground plane, and 3D orbit camera.
 - 23-joint hierarchical `THREE.Bone` human skeleton (`Hips`, `Spine`, `Spine1`, `Spine2`, `Neck`, `Head`, `HeadTop_End`, `LeftShoulder`/`RightShoulder`, `LeftArm`/`RightArm`, `LeftForeArm`/`RightForeArm`, `LeftHand`/`RightHand`, `LeftUpLeg`/`RightUpLeg`, `LeftLeg`/`RightLeg`, `LeftFoot`/`RightFoot`, `LeftToeBase`/`RightToeBase`, and end effectors).
 - Every joint has a poly sphere (`THREE.SphereGeometry`) parented directly to the joint origin and a poly cylinder (`THREE.CylinderGeometry`) parented to the parent joint spanning to the child joint.
-- **XPBD Soft-Body Character Blob Mesh**: Sculpted 1,800-tetrahedron ($7 \times 11 \times 7$, 539 particles) volumetric soft-body character blob mesh with hydrostatic volume preservation (`TetVolumeConstraint`) and compliant edge elasticity (`DistanceConstraint`).
-- **Pinned to Head Bone Sphere**: Crown/head particles of the soft-body blob mesh are pinned directly to the poly sphere in the `Head` bone (`headSphereMesh`) with visual pin markers, while the rest of the soft-body blob hangs and deforms dynamically around the moving skeleton via `world.onParticleSubstep`.
+- **XPBD Soft-Body Marshmallow Man Meta-Mesh**: Volumetric tetrahedral meta-mesh (1,130 particles, 2,945 tetrahedra, and 7,024 Loop-subdivided surface triangles) generated via Constrained Elastic Surface-Net projection onto a smooth polynomial metaball union (`smin`) of puffy marshmallow head, neck, stacked torso rolls, 4-puff T-pose arms/hands, and 4-puff legs/boots, shaded with a **light gray PBR shader** (`color: 0xd8dde4`).
+- **Pinned to Head Bone Sphere**: Head particles of the Marshmallow Man meta-mesh are pinned directly to the poly sphere in the `Head` bone (`headSphereMesh`) with visual pin markers, while the rest of the soft-body meta-mesh droops, sways, and jiggles dynamically around the moving skeleton via `world.onParticleSubstep`.
 - Starts in anatomical **Bind Pose (T-Pose)** for $1.0\,\text{s}$, then smoothly cross-fades via `THREE.AnimationMixer` into the active walk cycle.
 - Three swappable motion-capture walk cycles with exact forward-kinematics foot-floor ground contact calibration:
   - **Mocap 1: Natural Walk (`CMU 07_01`)** — balanced everyday gait ($1.00\,\text{s}$ cycle).

@@ -77,24 +77,20 @@ const E = THREE.Euler;
 /* ================= XPBD Physics World in Open Empty Space ================= */
 const world = new XPBD.World({
   dt: 1/60,
-  substeps: 18,
-  positionIterations: 3,
-  linearDamping: 1.4
+  substeps: 10,
+  positionIterations: 2,
+  linearDamping: 1.25,
+  selfCollision: false
 });
-// Gentle gravity so the head-pinned soft-body blob drapes and jiggles naturally around the skeleton
-world.accel.set(0, -3.2, 0);
+// Gravity pulls the head-pinned Marshmallow Man soft body so its arms droop and body bounces naturally
+world.accel.set(0, -6.2, 0);
 
-// Wide open empty-space bounds (no 3m box walls; open floor at y = -1.50m)
+// Wide open empty-space bounds (no 3m box walls; only open floor at y = -1.50m)
 world.box.hx = 50;
 world.box.hy = 1.5;
 world.box.d = 100;
 world.walls = [
-  { n: new V( 1, 0, 0), o: -50 },
-  { n: new V(-1, 0, 0), o: -50 },
-  { n: new V( 0, 1, 0), o: -1.5 }, // Open floor at y = -1.50m
-  { n: new V( 0,-1, 0), o: -50 },
-  { n: new V( 0, 0, 1), o: -50 },
-  { n: new V( 0, 0,-1), o: -50 }
+  { n: new V(0, 1, 0), o: -1.5 } // Open floor at y = -1.50m
 ];
 world.center.set(0, 0, -1.2);
 
@@ -245,7 +241,7 @@ const boneCylinderMat = new THREE.MeshPhysicalMaterial({
 
 const bonesByName = {};
 const boneList = [];
-const boneSegments = []; // Capsule segments { boneA, boneB, radius } for skeleton -> softbody collision
+const boneSegments = []; // Capsule segments { boneA, boneB, radius, isCore } for skeleton -> softbody coupling
 const unitSphereGeom = new THREE.SphereGeometry(1, 20, 16);
 const unitCylGeom = new THREE.CylinderGeometry(0.82, 1.0, 1, 16, 1);
 const upVec = new V(0, 1, 0);
@@ -292,10 +288,12 @@ for (const def of BONE_DEFS) {
       cylMesh.receiveShadow = true;
       parentBone.add(cylMesh);
 
+      const isCore = def.name.startsWith('Spine') || def.name.includes('Leg') || def.name.includes('Foot');
       boneSegments.push({
         boneA: parentBone,
         boneB: bone,
-        radius: Math.max(def.rCyl, Math.min(parentBone._rSphere, def.rSphere)) * 1.15
+        radius: Math.max(def.rCyl, Math.min(parentBone._rSphere, def.rSphere)) * 1.15,
+        isCore
       });
     }
   } else {
@@ -307,127 +305,407 @@ for (const def of BONE_DEFS) {
 }
 
 const rootBone = bonesByName['Hips'];
-const headBone = bonesByName['Head'];
 characterRoot.updateMatrixWorld(true);
 
-/* ================= Soft-Body Character Blob Mesh (Pinned to Head Bone Sphere) ================= */
-// Build a volumetric 3D tetrahedral soft-body blob mesh around the character using XPBD.
-// Top particles in/around the Head bone's sphere are pinned directly to headSphereMesh!
-const blobTetMesh = world.addTetMesh({
-  nx: 7,
-  ny: 11,
-  nz: 7,
-  sizeX: 0.72,
-  sizeY: 1.32,
-  sizeZ: 0.56,
-  center: new V(0, -0.34, -1.2),
-  mass: 3.6,
-  edgeCompliance: 0.00004,
-  volCompliance: 0.0,
-  friction: 0.25
-});
+/* ================= Marshmallow Man Soft-Body Meta-Mesh (Pinned to Head Bone Sphere) ================= */
+// Smooth polynomial metaball union (smin) and primitive signed distance helpers
+function smin(a, b, k) {
+  const h = Math.max(k - Math.abs(a - b), 0.0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+}
+function sdSphere(px, py, pz, cx, cy, cz, r) {
+  return Math.hypot(px - cx, py - cy, pz - cz) - r;
+}
+function sdCapsule(px, py, pz, ax, ay, az, bx, by, bz, r) {
+  const vx = px - ax, vy = py - ay, vz = pz - az;
+  const ux = bx - ax, uy = by - ay, uz = bz - az;
+  const lenSq = ux * ux + uy * uy + uz * uz;
+  let t = lenSq > 1e-8 ? (vx * ux + vy * uy + vz * uz) / lenSq : 0;
+  if (t < 0) t = 0;
+  else if (t > 1) t = 1;
+  return Math.hypot(vx - ux * t, vy - uy * t, vz - uz * t) - r;
+}
 
-// Sculpt the 7x11x7 grid into a smooth, organic rounded Character Blob Mesh
-// using analytical elliptical grid-to-blob mapping so all 1,800 tetrahedra remain strictly positive-volume.
+// Analytical Marshmallow Man Metaball SDF around the character's Bind Pose (T-Pose)
+function marshmallowSDF(x, y, z) {
+  const ax = Math.abs(x);
+  const zc = z + 1.2;
+
+  // 1. Puffy Marshmallow Head + Neck + 3 Stacked Torso Rolls (Chest, Belly, Pelvis)
+  let dTorso = sdCapsule(ax, y, zc, 0.0, 0.08, 0.0, 0.0, 0.16, 0.0, 0.150);
+  dTorso = smin(dTorso, sdSphere(ax, y, zc, 0.0, -0.02, 0.0, 0.098), 0.032);
+  dTorso = smin(dTorso, sdCapsule(ax, y, zc, 0.0, -0.14, 0.0, 0.10, -0.13, 0.0, 0.156), 0.024);
+  dTorso = smin(dTorso, sdCapsule(ax, y, zc, 0.0, -0.32, 0.015, 0.085, -0.32, 0.01, 0.178), 0.024);
+  dTorso = smin(dTorso, sdCapsule(ax, y, zc, 0.0, -0.50, 0.0, 0.095, -0.52, 0.0, 0.154), 0.024);
+
+  // 2. T-Pose Arms: 4 plump marshmallow spheres per arm (Shoulder, Bicep, Forearm, Round Mitt Hand)
+  let dArm = sdSphere(ax, y, zc, 0.23, -0.065, 0.0, 0.106);
+  dArm = smin(dArm, sdSphere(ax, y, zc, 0.38, -0.065, 0.0, 0.100), 0.020);
+  dArm = smin(dArm, sdSphere(ax, y, zc, 0.53, -0.065, 0.0, 0.095), 0.020);
+  dArm = smin(dArm, sdSphere(ax, y, zc, 0.68, -0.065, 0.0, 0.092), 0.020);
+
+  // 3. Legs: 3 plump marshmallow spheres per leg (Thigh, Knee, Calf) + Rounded Marshmallow Boot Foot
+  let dLeg = sdSphere(ax, y, zc, 0.160, -0.73, 0.0, 0.112);
+  dLeg = smin(dLeg, sdSphere(ax, y, zc, 0.165, -0.95, 0.0, 0.106), 0.020);
+  dLeg = smin(dLeg, sdSphere(ax, y, zc, 0.165, -1.17, 0.0, 0.100), 0.020);
+  dLeg = smin(dLeg, sdCapsule(ax, y, zc, 0.165, -1.37, 0.0, 0.165, -1.39, 0.095, 0.095), 0.020);
+
+  let d = smin(dTorso, dArm, 0.032);
+  d = smin(d, dLeg, 0.032);
+  return d;
+}
+
+function sdfGrad(x, y, z) {
+  const e = 0.002;
+  const gx = marshmallowSDF(x + e, y, z) - marshmallowSDF(x - e, y, z);
+  const gy = marshmallowSDF(x, y + e, z) - marshmallowSDF(x, y - e, z);
+  const gz = marshmallowSDF(x, y, z + e) - marshmallowSDF(x, y, z - e);
+  const l = Math.hypot(gx, gy, gz) || 1;
+  return [gx / l, gy / l, gz / l];
+}
+
+function calcSignedTetVol(a, b, c, d) {
+  const ux = b.x.x - a.x.x, uy = b.x.y - a.x.y, uz = b.x.z - a.x.z;
+  const vx = c.x.x - a.x.x, vy = c.x.y - a.x.y, vz = c.x.z - a.x.z;
+  const wx = d.x.x - a.x.x, wy = d.x.y - a.x.y, wz = d.x.z - a.x.z;
+  return ((uy * vz - uz * vy) * wx + (uz * vx - ux * vz) * wy + (ux * vy - uy * vx) * wz) / 6;
+}
+
+// Build volumetric tetrahedral Meta-Mesh + Surface-Net projected & Loop-subdivided Marshmallow Man surface
+const dx = 0.072;
+const cxN = 23, cyN = 26, czN = 7;
+const nx = cxN + 1, ny = cyN + 1, nz = czN + 1;
+const minX = -cxN * 0.5 * dx;
+const maxY = 0.34;
+const minZ = -1.2 - czN * 0.5 * dx;
+const cIdx = (i, j, k) => (k * cyN + j) * cxN + i;
+const cellActive = new Uint8Array(cxN * cyN * czN);
+const midXCol = Math.floor(cxN / 2);
+
+for (let k = 0; k < czN; k++) {
+  for (let j = 0; j < cyN; j++) {
+    for (let i = 0; i < cxN; i++) {
+      const cx = minX + (i + 0.5) * dx;
+      const cy = maxY - (j + 0.5) * dx;
+      const cz = minZ + (k + 0.5) * dx;
+      // Keep center column between legs clear below hips so left & right marshmallow legs are separate
+      if (i === midXCol && cy < -0.66) continue;
+      if (marshmallowSDF(cx, cy, cz) <= 0.016) {
+        cellActive[cIdx(i, j, k)] = 1;
+      }
+    }
+  }
+}
+
+// Prune any dangling 1-neighbor hex cell
+for (let pass = 0; pass < 2; pass++) {
+  for (let k = 0; k < czN; k++) {
+    for (let j = 0; j < cyN; j++) {
+      for (let i = 0; i < cxN; i++) {
+        if (!cellActive[cIdx(i, j, k)]) continue;
+        let n = 0;
+        if (i > 0 && cellActive[cIdx(i - 1, j, k)]) n++;
+        if (i < cxN - 1 && cellActive[cIdx(i + 1, j, k)]) n++;
+        if (j > 0 && cellActive[cIdx(i, j - 1, k)]) n++;
+        if (j < cyN - 1 && cellActive[cIdx(i, j + 1, k)]) n++;
+        if (k > 0 && cellActive[cIdx(i, j, k - 1)]) n++;
+        if (k < czN - 1 && cellActive[cIdx(i, j, k + 1)]) n++;
+        if (n <= 1) cellActive[cIdx(i, j, k)] = 0;
+      }
+    }
+  }
+}
+
+const gIdx = (i, j, k) => (k * ny + j) * nx + i;
+const vertMap = new Map();
+const blobParticles = [];
+const metaMeshRef = {};
+
+function getMetaVert(i, j, k) {
+  const g = gIdx(i, j, k);
+  if (!vertMap.has(g)) {
+    vertMap.set(g, blobParticles.length);
+    const p = world.addParticle(minX + i * dx, maxY - j * dx, minZ + k * dx, 0.048, dx * 0.25, 0.30);
+    p._tetMesh = metaMeshRef;
+    p._tx = i; p._ty = j; p._tz = k;
+    p._isBoundary = false;
+    blobParticles.push(p);
+  }
+  return vertMap.get(g);
+}
+
+const metaTets = [];
+for (let k = 0; k < czN; k++) {
+  for (let j = 0; j < cyN; j++) {
+    for (let i = 0; i < cxN; i++) {
+      if (!cellActive[cIdx(i, j, k)]) continue;
+      const v0 = getMetaVert(i, j, k),         v1 = getMetaVert(i + 1, j, k),
+            v2 = getMetaVert(i + 1, j + 1, k), v3 = getMetaVert(i, j + 1, k),
+            v4 = getMetaVert(i, j, k + 1),     v5 = getMetaVert(i + 1, j, k + 1),
+            v6 = getMetaVert(i + 1, j + 1, k + 1), v7 = getMetaVert(i, j + 1, k + 1);
+      if ((i + j + k) % 2 === 0) {
+        metaTets.push([v0, v1, v3, v4], [v1, v2, v3, v6], [v1, v4, v5, v6], [v3, v4, v6, v7], [v1, v3, v4, v6]);
+      } else {
+        metaTets.push([v0, v1, v2, v5], [v0, v2, v3, v7], [v0, v4, v5, v7], [v2, v5, v6, v7], [v0, v2, v5, v7]);
+      }
+    }
+  }
+}
+
+for (let ti = 0; ti < metaTets.length; ti++) {
+  const tet = metaTets[ti];
+  if (calcSignedTetVol(blobParticles[tet[0]], blobParticles[tet[1]], blobParticles[tet[2]], blobParticles[tet[3]]) < 0) {
+    const tmp = tet[1]; tet[1] = tet[2]; tet[2] = tmp;
+  }
+}
+
+// Extract closed manifold outer surface triangles of the Marshmallow Man Meta-Mesh
+const faceMap = new Map();
+for (let ti = 0; ti < metaTets.length; ti++) {
+  const tet = metaTets[ti];
+  const fList = [
+    [tet[0], tet[1], tet[2], tet[3]],
+    [tet[0], tet[1], tet[3], tet[2]],
+    [tet[0], tet[2], tet[3], tet[1]],
+    [tet[1], tet[2], tet[3], tet[0]]
+  ];
+  for (let f = 0; f < 4; f++) {
+    const [a, b, c, opp] = fList[f];
+    const key = [a, b, c].sort((x, y) => x - y).join(',');
+    if (!faceMap.has(key)) faceMap.set(key, { count: 0, a, b, c, opp });
+    faceMap.get(key).count++;
+  }
+}
+
+const boundaryNeighbors = blobParticles.map(() => new Set());
+const allNeighbors = blobParticles.map(() => new Set());
+const incidentTets = blobParticles.map(() => []);
+for (let ti = 0; ti < metaTets.length; ti++) {
+  const [a, b, c, d] = metaTets[ti];
+  incidentTets[a].push(ti); incidentTets[b].push(ti);
+  incidentTets[c].push(ti); incidentTets[d].push(ti);
+  for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) {
+    allNeighbors[u].add(v);
+    allNeighbors[v].add(u);
+  }
+}
+
+const baseTris = [];
+for (const [, val] of faceMap) {
+  if (val.count === 1) {
+    const { a, b, c, opp } = val;
+    blobParticles[a]._isBoundary = true;
+    blobParticles[b]._isBoundary = true;
+    blobParticles[c]._isBoundary = true;
+    boundaryNeighbors[a].add(b); boundaryNeighbors[a].add(c);
+    boundaryNeighbors[b].add(a); boundaryNeighbors[b].add(c);
+    boundaryNeighbors[c].add(a); boundaryNeighbors[c].add(b);
+
+    const pa = blobParticles[a].x, pb = blobParticles[b].x, pc = blobParticles[c].x, po = blobParticles[opp].x;
+    const ux = pb.x - pa.x, uy = pb.y - pa.y, uz = pb.z - pa.z;
+    const vx = pc.x - pa.x, vy = pc.y - pa.y, vz = pc.z - pa.z;
+    const fnx = uy * vz - uz * vy, fny = uz * vx - ux * vz, fnz = ux * vy - uy * vx;
+    const ox = pa.x - po.x, oy = pa.y - po.y, oz = pa.z - po.z;
+    if (fnx * ox + fny * oy + fnz * oz > 0) baseTris.push([a, b, c]);
+    else baseTris.push([a, c, b]);
+  }
+}
+
+// Constrained Elastic Surface-Net smoothing + exact Newton projection onto marshmallowSDF = 0
+const minAllowedVol = (dx * dx * dx / 6) * 0.08;
+for (let iter = 0; iter < 14; iter++) {
+  for (let i = 0; i < blobParticles.length; i++) {
+    const p = blobParticles[i];
+    const oldX = p.x.x, oldY = p.x.y, oldZ = p.x.z;
+    const nbrs = p._isBoundary ? boundaryNeighbors[i] : allNeighbors[i];
+    let nxPos = oldX, nyPos = oldY, nzPos = oldZ;
+    if (nbrs.size > 0) {
+      let sx = 0, sy = 0, sz = 0;
+      for (const j of nbrs) {
+        sx += blobParticles[j].x.x;
+        sy += blobParticles[j].x.y;
+        sz += blobParticles[j].x.z;
+      }
+      const inv = 1 / nbrs.size;
+      const w = p._isBoundary ? 0.42 : 0.35;
+      nxPos = oldX * (1 - w) + sx * inv * w;
+      nyPos = oldY * (1 - w) + sy * inv * w;
+      nzPos = oldZ * (1 - w) + sz * inv * w;
+    }
+    if (p._isBoundary) {
+      const d = marshmallowSDF(nxPos, nyPos, nzPos);
+      const [gx, gy, gz] = sdfGrad(nxPos, nyPos, nzPos);
+      const step = Math.max(-0.022, Math.min(0.022, d * 0.78));
+      nxPos -= gx * step;
+      nyPos -= gy * step;
+      nzPos -= gz * step;
+    }
+    p.x.set(nxPos, nyPos, nzPos);
+    let ok = true;
+    for (const ti of incidentTets[i]) {
+      const tet = metaTets[ti];
+      if (calcSignedTetVol(blobParticles[tet[0]], blobParticles[tet[1]], blobParticles[tet[2]], blobParticles[tet[3]]) < minAllowedVol) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok) {
+      p.x.set(0.5 * (oldX + nxPos), 0.5 * (oldY + nyPos), 0.5 * (oldZ + nzPos));
+      let ok2 = true;
+      for (const ti of incidentTets[i]) {
+        const tet = metaTets[ti];
+        if (calcSignedTetVol(blobParticles[tet[0]], blobParticles[tet[1]], blobParticles[tet[2]], blobParticles[tet[3]]) < minAllowedVol) {
+          ok2 = false;
+          break;
+        }
+      }
+      if (!ok2) p.x.set(oldX, oldY, oldZ);
+    }
+    p.px.copy(p.x);
+  }
+}
+
+for (let i = 0; i < blobParticles.length; i++) {
+  blobParticles[i]._bindPos = blobParticles[i].x.clone();
+}
+
+// Create XPBD Soft-Body Constraints (1-hop tet edges + 2-hop axial bending + TetVolumeConstraints)
+const edgeSet = new Set();
+function addMetaEdge(u, v, compliance) {
+  const key = u < v ? u + ',' + v : v + ',' + u;
+  if (!edgeSet.has(key)) {
+    edgeSet.add(key);
+    world.addDistanceConstraint(blobParticles[u], blobParticles[v], compliance);
+  }
+}
+for (let ti = 0; ti < metaTets.length; ti++) {
+  const [a, b, c, d] = metaTets[ti];
+  for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) {
+    addMetaEdge(u, v, 0.0040);
+  }
+  world.volumeConstraints.push(new XPBD.TetVolumeConstraint(
+    blobParticles[a], blobParticles[b], blobParticles[c], blobParticles[d], 0.0
+  ));
+}
+// 2-hop axial structural bending constraints so marshmallow arms/torso/legs stay plump and bouncy
+for (let u = 0; u < blobParticles.length; u++) {
+  for (const m of allNeighbors[u]) {
+    for (const v of allNeighbors[m]) {
+      if (v > u) {
+        const di = Math.abs(blobParticles[u]._tx - blobParticles[v]._tx);
+        const dj = Math.abs(blobParticles[u]._ty - blobParticles[v]._ty);
+        const dk = Math.abs(blobParticles[u]._tz - blobParticles[v]._tz);
+        if (di + dj + dk === 2 && Math.max(di, dj, dk) === 2) {
+          addMetaEdge(u, v, 0.0090);
+        }
+      }
+    }
+  }
+}
+
+// Pin the head particles of the Marshmallow Man Meta-Mesh directly to the sphere in the Head bone!
 const headWorldBindPos = new V();
+headSphereMesh.updateMatrixWorld(true);
 headSphereMesh.getWorldPosition(headWorldBindPos);
+const headInvMatrix = new THREE.Matrix4().copy(headSphereMesh.matrixWorld).invert();
 
 const blobPinnedParticles = [];
 const pinMarkerGeom = new THREE.SphereGeometry(0.012, 10, 8);
 const pinMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
 
-for (let i = 0; i < blobTetMesh.particles.length; i++) {
-  const p = blobTetMesh.particles[i];
-  // Normalized grid coordinates u, v, w in [-1, +1]
-  // Note: in TetMesh, _ty = 0 is the TOP (+Y) and _ty = ny - 1 is the BOTTOM (-Y)
-  const u = (p._tx / (blobTetMesh.nx - 1)) * 2 - 1;
-  const v = 1 - (p._ty / (blobTetMesh.ny - 1)) * 2; // +1 at top (head), -1 at bottom
-  const w = (p._tz / (blobTetMesh.nz - 1)) * 2 - 1;
-
-  // Map square horizontal cross-section (u, w) to smooth circular/elliptical blob cross-section
-  const sx = u * Math.sqrt(Math.max(0.04, 1 - 0.5 * v * v - 0.5 * w * w + (v * v * w * w) / 3));
-  const sy = v * Math.sqrt(Math.max(0.04, 1 - 0.35 * (u * u + w * w) * 0.5));
-  const sz = w * Math.sqrt(Math.max(0.04, 1 - 0.5 * u * u - 0.5 * v * v + (u * u * v * v) / 3));
-
-  // Organic character blob silhouette profile:
-  // Narrower dome at the headsphere (v > 0.55), fuller rounded torso/hips in the middle, tapered lower blob
-  const headTaper = v > 0.45 ? 1.0 - 0.32 * Math.pow((v - 0.45) / 0.55, 1.4) : 1.0;
-  const waistBelly = 1.0 + 0.18 * Math.exp(-Math.pow((v + 0.10) / 0.50, 2));
-  const rx = 0.37 * headTaper * waistBelly;
-  const rz = 0.29 * headTaper * waistBelly;
-
-  // Center Y at -0.34, spanning from y = +0.30 (top of head sphere) down to y = -0.98 (upper shins)
-  const bx = sx * rx;
-  const by = -0.34 + sy * 0.64;
-  const bz = -1.2 + sz * rz;
-
-  p.x.set(bx, by, bz);
-  p.px.copy(p.x);
-  p._bindPos = p.x.clone();
-  p._isSurface = (
-    p._tx === 0 || p._tx === blobTetMesh.nx - 1 ||
-    p._ty === 0 || p._ty === blobTetMesh.ny - 1 ||
-    p._tz === 0 || p._tz === blobTetMesh.nz - 1
-  );
-}
-
-// Recompute exact rest lengths and rest volumes for the sculpted organic blob mesh
-for (let i = 0; i < blobTetMesh.edgeConstraints.length; i++) {
-  const c = blobTetMesh.edgeConstraints[i];
-  c.restLength = c.p1.x.distanceTo(c.p2.x);
-  c.lambda = 0;
-}
-for (let i = 0; i < blobTetMesh.volumeConstraints.length; i++) {
-  const vc = blobTetMesh.volumeConstraints[i];
-  let v0 = vc.calcV();
-  if (v0 < 0) {
-    const tmp = vc.p2; vc.p2 = vc.p3; vc.p3 = tmp;
-    v0 = -v0;
-  }
-  vc.restVolume = Math.max(v0, 1e-12);
-  vc.lambda = 0;
-}
-
-// Pin the top crown/head particles of the soft-body blob mesh directly to the sphere in the Head bone!
-headSphereMesh.updateMatrixWorld(true);
-const headInvMatrix = new THREE.Matrix4().copy(headSphereMesh.matrixWorld).invert();
-
-for (let i = 0; i < blobTetMesh.particles.length; i++) {
-  const p = blobTetMesh.particles[i];
-  const distToHeadSphere = p.x.distanceTo(headWorldBindPos);
-  // Pin particles inside/around the Head bone's sphere (or top crown cap _ty <= 1 near center)
-  if (distToHeadSphere <= 0.165 || (p._ty <= 1 && Math.hypot(p.x.x - headWorldBindPos.x, p.x.z - headWorldBindPos.z) <= 0.16)) {
-    p.invM = 0; // Pinned!
+for (let i = 0; i < blobParticles.length; i++) {
+  const p = blobParticles[i];
+  // Pin particles inside/around the Head bone's sphere (y > 0.02 around Head & HeadTop_End)
+  if (p.x.y >= 0.02 && Math.hypot(p.x.x - headWorldBindPos.x, p.x.y - 0.11, p.x.z - headWorldBindPos.z) <= 0.175) {
+    p.invM = 0; // Pinned to Head bone sphere!
     p._headLocalPos = p.x.clone().applyMatrix4(headInvMatrix);
     blobPinnedParticles.push(p);
 
-    // Visual pin marker parented directly to the sphere in the Head bone
     const pinDot = new THREE.Mesh(pinMarkerGeom, pinMarkerMat);
     pinDot.position.copy(p._headLocalPos);
     headSphereMesh.add(pinDot);
   }
 }
 
-// Build smooth indexed BufferGeometry for the Soft-Body Character Blob surface
-const blobGeom = new THREE.BufferGeometry();
-const numBlobVerts = blobTetMesh.particles.length;
-const blobPosArr = new Float32Array(numBlobVerts * 3);
-blobGeom.setAttribute('position', new THREE.BufferAttribute(blobPosArr, 3));
-blobGeom.setIndex(blobTetMesh.surfaceIndices);
+// Build 1-level Loop-subdivided Meta-Mesh surface projected onto marshmallowSDF = 0 (~7,024 triangles)
+const numBaseVerts = blobParticles.length;
+const edgeMidMap = new Map();
+const midEdges = []; // { u, v, oppA, oppB, offsetN }
 
+function getOrCreateMidEdge(u, v, opp) {
+  const key = u < v ? u + ',' + v : v + ',' + u;
+  let eIdx = edgeMidMap.get(key);
+  if (eIdx === undefined) {
+    eIdx = midEdges.length;
+    edgeMidMap.set(key, eIdx);
+    midEdges.push({
+      u: Math.min(u, v),
+      v: Math.max(u, v),
+      oppA: opp,
+      oppB: opp,
+      offsetN: 0
+    });
+  } else {
+    midEdges[eIdx].oppB = opp;
+  }
+  return numBaseVerts + eIdx;
+}
+
+const subIndices = [];
+for (let t = 0; t < baseTris.length; t++) {
+  const [a, b, c] = baseTris[t];
+  const mab = getOrCreateMidEdge(a, b, c);
+  const mbc = getOrCreateMidEdge(b, c, a);
+  const mca = getOrCreateMidEdge(c, a, b);
+  subIndices.push(
+    a, mab, mca,
+    b, mbc, mab,
+    c, mca, mbc,
+    mab, mbc, mca
+  );
+}
+
+// Compute bind-pose metaball curvature offset for each subdivided edge midpoint
+for (let e = 0; e < midEdges.length; e++) {
+  const me = midEdges[e];
+  const pu = blobParticles[me.u].x;
+  const pv = blobParticles[me.v].x;
+  const pa = blobParticles[me.oppA].x;
+  const pb = blobParticles[me.oppB].x;
+
+  // Smooth Loop diamond stencil midpoint
+  const mx0 = 0.375 * (pu.x + pv.x) + 0.125 * (pa.x + pb.x);
+  const my0 = 0.375 * (pu.y + pv.y) + 0.125 * (pa.y + pb.y);
+  const mz0 = 0.375 * (pu.z + pv.z) + 0.125 * (pa.z + pb.z);
+
+  // Project onto analytical marshmallowSDF = 0 surface
+  let sx = mx0, sy = my0, sz = mz0;
+  for (let s = 0; s < 3; s++) {
+    const d = marshmallowSDF(sx, sy, sz);
+    const [gx, gy, gz] = sdfGrad(sx, sy, sz);
+    sx -= gx * d * 0.85;
+    sy -= gy * d * 0.85;
+    sz -= gz * d * 0.85;
+  }
+  const [gnx, gny, gnz] = sdfGrad(mx0, my0, mz0);
+  const off = (sx - mx0) * gnx + (sy - my0) * gny + (sz - mz0) * gnz;
+  me.offsetN = Math.max(-0.012, Math.min(0.012, off));
+}
+
+const totalRenderVerts = numBaseVerts + midEdges.length;
+const blobGeom = new THREE.BufferGeometry();
+const blobPosArr = new Float32Array(totalRenderVerts * 3);
+blobGeom.setAttribute('position', new THREE.BufferAttribute(blobPosArr, 3));
+blobGeom.setIndex(subIndices);
+
+// Light Gray PBR Shader for the Marshmallow Man Meta-Mesh
 const blobMat = new THREE.MeshPhysicalMaterial({
-  color: 0x38d9a9,
-  roughness: 0.15,
-  metalness: 0.02,
-  transmission: 0.68,
-  transparent: true,
-  opacity: 0.86,
-  ior: 1.34,
-  reflectivity: 0.5,
-  clearcoat: 0.85,
-  clearcoatRoughness: 0.10,
-  side: THREE.DoubleSide,
-  depthWrite: false
+  color: 0xd8dde4,
+  roughness: 0.42,
+  metalness: 0.03,
+  clearcoat: 0.14,
+  clearcoatRoughness: 0.38,
+  reflectivity: 0.35
 });
 
 const blobMesh = new THREE.Mesh(blobGeom, blobMat);
@@ -438,20 +716,55 @@ scene.add(blobMesh);
 function syncBlobMesh() {
   const posAttr = blobGeom.attributes.position;
   const arr = posAttr.array;
-  const parts = blobTetMesh.particles;
-  for (let i = 0; i < parts.length; i++) {
-    const pt = parts[i].x;
-    arr[i * 3] = pt.x;
-    arr[i * 3 + 1] = pt.y;
-    arr[i * 3 + 2] = pt.z;
+
+  // 1. Copy base XPBD soft-body particle positions
+  for (let i = 0; i < numBaseVerts; i++) {
+    const pt = blobParticles[i].x;
+    const i3 = i * 3;
+    arr[i3] = pt.x;
+    arr[i3 + 1] = pt.y;
+    arr[i3 + 2] = pt.z;
   }
+
+  // 2. Interpolate Loop-subdivided edge midpoints with live diamond normal curvature offset
+  for (let e = 0; e < midEdges.length; e++) {
+    const me = midEdges[e];
+    const pu = blobParticles[me.u].x;
+    const pv = blobParticles[me.v].x;
+    const pa = blobParticles[me.oppA].x;
+    const pb = blobParticles[me.oppB].x;
+
+    const mx = 0.375 * (pu.x + pv.x) + 0.125 * (pa.x + pb.x);
+    const my = 0.375 * (pu.y + pv.y) + 0.125 * (pa.y + pb.y);
+    const mz = 0.375 * (pu.z + pv.z) + 0.125 * (pa.z + pb.z);
+
+    const idx3 = (numBaseVerts + e) * 3;
+    if (Math.abs(me.offsetN) > 1e-5) {
+      // Outward normal across the (oppA -> oppB) and (u -> v) diamond diagonals
+      const ex = pv.x - pu.x, ey = pv.y - pu.y, ez = pv.z - pu.z;
+      const dx1 = pa.x - pu.x, dy1 = pa.y - pu.y, dz1 = pa.z - pu.z;
+      const dx2 = pb.x - pv.x, dy2 = pb.y - pv.y, dz2 = pb.z - pv.z;
+      const nx1 = ey * dz1 - ez * dy1, ny1 = ez * dx1 - ex * dz1, nz1 = ex * dy1 - ey * dx1;
+      const nx2 = dz2 * ey - dy2 * ez, ny2 = dx2 * ez - dz2 * ex, nz2 = dy2 * ex - dx2 * ey;
+      let nx = nx1 + nx2, ny = ny1 + ny2, nz = nz1 + nz2;
+      const nl = Math.hypot(nx, ny, nz) || 1;
+      arr[idx3] = mx + (nx / nl) * me.offsetN;
+      arr[idx3 + 1] = my + (ny / nl) * me.offsetN;
+      arr[idx3 + 2] = mz + (nz / nl) * me.offsetN;
+    } else {
+      arr[idx3] = mx;
+      arr[idx3 + 1] = my;
+      arr[idx3 + 2] = mz;
+    }
+  }
+
   posAttr.needsUpdate = true;
   blobGeom.computeVertexNormals();
 }
 syncBlobMesh();
 
-// Update pinned blob particles to follow the sphere in the Head bone,
-// and couple unpinned soft-body blob particles with moving skeleton spheres & cylinders inside each XPBD substep
+// Update pinned Marshmallow Man head particles to follow the sphere in the Head bone,
+// and transfer moving skeleton momentum into the soft-body Marshmallow Man inside each substep
 const segAB = new V(), segAP = new V(), closestPt = new V(), pushDir = new V();
 const cachedSegA = boneSegments.map(() => new V());
 const cachedSegB = boneSegments.map(() => new V());
@@ -471,7 +784,7 @@ function updateSkeletonBlobInteraction() {
     p.v.set(0, 0, 0);
   }
 
-  // 2. Compute world endpoints and per-substep motion delta of all skeleton bone cylinders/spheres
+  // 2. Compute world endpoints and per-substep motion delta of skeleton bone segments
   const invSub = 1 / world.substeps;
   for (let s = 0; s < boneSegments.length; s++) {
     boneSegments[s].boneA.getWorldPosition(cachedSegA[s]);
@@ -488,16 +801,20 @@ function updateSkeletonBlobInteraction() {
 }
 
 world.onParticleSubstep = function() {
-  const parts = blobTetMesh.particles;
-  for (let i = 0; i < parts.length; i++) {
-    const p = parts[i];
+  for (let i = 0; i < numBaseVerts; i++) {
+    const p = blobParticles[i];
     if (p.invM === 0) continue;
 
     for (let s = 0; s < boneSegments.length; s++) {
+      const seg = boneSegments[s];
+      const delta = deltaSegSubstep[s];
+      const isMoving = delta.lengthSq() > 1e-10;
+      if (!isMoving && !seg.isCore) continue;
+
       const a = cachedSegA[s];
       const b = cachedSegB[s];
-      const rCap = boneSegments[s].radius;
-      const influenceR = rCap * 2.4;
+      const rCap = seg.radius;
+      const influenceR = rCap * 2.2;
 
       segAB.subVectors(b, a);
       segAP.subVectors(p.x, a);
@@ -513,12 +830,11 @@ world.onParticleSubstep = function() {
       if (d2 < influenceR * influenceR) {
         const d = Math.sqrt(d2);
         const w = 1 - d / influenceR;
-        // Smoothly transfer moving bone momentum into nearby soft-body blob tissue
-        p.x.addScaledVector(deltaSegSubstep[s], 0.45 * w * w);
-
-        // Gently push outer surface particles away from swinging limbs
-        if (p._isSurface && d < rCap + p.radius && d > 1e-9) {
-          const push = Math.min(0.0035, ((rCap + p.radius) - d) * 0.30);
+        if (isMoving) {
+          p.x.addScaledVector(delta, 0.38 * w * w);
+        }
+        if (seg.isCore && p._isBoundary && d < rCap + p.radius && d > 1e-9) {
+          const push = Math.min(0.0025, ((rCap + p.radius) - d) * 0.25);
           p.x.addScaledVector(pushDir, push / d);
         }
       }
@@ -863,8 +1179,8 @@ function startBindPoseSequence() {
   }
   characterRoot.updateMatrixWorld(true);
   hasPrevSegs = false;
-  for (let i = 0; i < blobTetMesh.particles.length; i++) {
-    const p = blobTetMesh.particles[i];
+  for (let i = 0; i < blobParticles.length; i++) {
+    const p = blobParticles[i];
     p.x.copy(p._bindPos);
     p.px.copy(p._bindPos);
     p.v.set(0, 0, 0);
@@ -878,7 +1194,7 @@ function startBindPoseSequence() {
 
   stateLabel.textContent = 'Bind Pose (T-Pose) — Blending in 1.0s...';
   updateButtonHighlights(true);
-  RoomEnv.showNote('Bind Pose (T-Pose). Soft-body blob pinned to head sphere — blending into walk in 1.0s...', 2400);
+  RoomEnv.showNote('Bind Pose (T-Pose). Marshmallow Man meta-mesh pinned to head sphere — blending into walk in 1.0s...', 2400);
 
   bindPoseTimer = setTimeout(() => {
     bindPoseTimer = null;
@@ -894,7 +1210,7 @@ startBindPoseSequence();
 const dragger = RoomEnv.createParticleDragger({
   camera,
   world,
-  getTargetParticles: () => blobTetMesh.particles,
+  getTargetParticles: () => blobParticles,
   pickRadius: 0.18
 });
 
