@@ -251,6 +251,13 @@
     <div class="soft-row">
       <div class="soft-dial">
         <div class="soft-dial-header">
+          <span>Arm Lift</span>
+          <span id="val-armlift" class="soft-dial-val">22°</span>
+        </div>
+        <input id="slider-armlift" class="soft-slider" type="range" min="0" max="65" step="1" value="22">
+      </div>
+      <div class="soft-dial">
+        <div class="soft-dial-header">
           <span>Damping</span>
           <span id="val-damping" class="soft-dial-val">1.25</span>
         </div>
@@ -276,6 +283,13 @@
   <!-- Cloth Dynamics Sliders (Cyan Checker Shirt) -->
   <div id="sliders-cloth" class="slider-group" style="display: none;">
     <div class="soft-row">
+      <div class="soft-dial">
+        <div class="soft-dial-header">
+          <span>Arm Lift</span>
+          <span id="val-cloth-armlift" class="soft-dial-val">22°</span>
+        </div>
+        <input id="slider-cloth-armlift" class="soft-slider" type="range" min="0" max="65" step="1" value="22">
+      </div>
       <div class="soft-dial">
         <div class="soft-dial-header">
           <span>Stretch</span>
@@ -2103,23 +2117,41 @@ orbitControls = RoomEnv.createOrbitControls(camera, orbitTarget, {
 resize();
 
 /* ================= Real-Time Soft-Body & Cloth Dynamics Sliders ================= */
-const sliderSoftness  = document.getElementById('slider-softness');
-const sliderBending   = document.getElementById('slider-bending');
-const sliderVolume    = document.getElementById('slider-volume');
-const sliderDamping   = document.getElementById('slider-damping');
-const sliderGravity   = document.getElementById('slider-gravity');
-const sliderMass      = document.getElementById('slider-mass');
-const sliderWalkSpeed = document.getElementById('slider-walkspeed');
+const sliderSoftness     = document.getElementById('slider-softness');
+const sliderBending      = document.getElementById('slider-bending');
+const sliderVolume       = document.getElementById('slider-volume');
+const sliderDamping      = document.getElementById('slider-damping');
+const sliderGravity      = document.getElementById('slider-gravity');
+const sliderMass         = document.getElementById('slider-mass');
+const sliderWalkSpeed    = document.getElementById('slider-walkspeed');
+const sliderArmLift      = document.getElementById('slider-armlift');
+const sliderClothArmLift = document.getElementById('slider-cloth-armlift');
 
-const valSoftness  = document.getElementById('val-softness');
-const valBending   = document.getElementById('val-bending');
-const valVolume    = document.getElementById('val-volume');
-const valDamping   = document.getElementById('val-damping');
-const valGravity   = document.getElementById('val-gravity');
-const valMass      = document.getElementById('val-mass');
-const valWalkSpeed = document.getElementById('val-walkspeed');
+const valSoftness     = document.getElementById('val-softness');
+const valBending      = document.getElementById('val-bending');
+const valVolume       = document.getElementById('val-volume');
+const valDamping      = document.getElementById('val-damping');
+const valGravity      = document.getElementById('val-gravity');
+const valMass         = document.getElementById('val-mass');
+const valWalkSpeed    = document.getElementById('val-walkspeed');
+const valArmLift      = document.getElementById('val-armlift');
+const valClothArmLift = document.getElementById('val-cloth-armlift');
 
 let walkSpeedScale = 1.0;
+let armLiftRad = THREE.MathUtils.degToRad(22);
+
+function syncArmLiftValue(deg) {
+  const rounded = Math.round(deg);
+  sliderArmLift.value = String(rounded);
+  sliderClothArmLift.value = String(rounded);
+  valArmLift.textContent = rounded + '°';
+  valClothArmLift.textContent = rounded + '°';
+  armLiftRad = THREE.MathUtils.degToRad(rounded);
+}
+
+sliderArmLift.addEventListener('input', () => syncArmLiftValue(parseFloat(sliderArmLift.value)));
+sliderClothArmLift.addEventListener('input', () => syncArmLiftValue(parseFloat(sliderClothArmLift.value)));
+syncArmLiftValue(parseFloat(sliderArmLift.value));
 
 function applySoftBodySliders() {
   const softnessPct = parseFloat(sliderSoftness.value);
@@ -2339,6 +2371,8 @@ window.addEventListener('keydown', e => {
 /* ================= Animation & Soft-Body Physics Loop ================= */
 const tickFps = RoomEnv.createFpsMeter();
 let acc = 0, last = performance.now();
+const Z_AXIS = new V(0, 0, 1);
+const qArmLiftL = new Q(), qArmLiftR = new Q();
 
 function frame(now) {
   tickFps(now);
@@ -2347,6 +2381,16 @@ function frame(now) {
 
   // 1. Advance skeleton animation mixer (scaled by Walk Speed slider during walk cycles)
   mixer.update(dt * (currentAction === bindPoseAction ? 1.0 : walkSpeedScale));
+
+  // 1b. Apply Arm Lift abduction angle so swinging arms stay lifted clear of the puffy torso
+  const walkWeight = 1.0 - (bindPoseAction ? bindPoseAction.getEffectiveWeight() : 0.0);
+  if (armLiftRad > 0 && walkWeight > 1e-4) {
+    const lift = armLiftRad * walkWeight;
+    qArmLiftL.setFromAxisAngle(Z_AXIS, lift);
+    qArmLiftR.setFromAxisAngle(Z_AXIS, -lift);
+    bonesByName['LeftArm'].quaternion.multiply(qArmLiftL);
+    bonesByName['RightArm'].quaternion.multiply(qArmLiftR);
+  }
 
   // 2. Pin soft-body particles to bone spheres & compute skeleton/shirt frame motion
   updateSkeletonBlobInteraction();
