@@ -1240,6 +1240,8 @@ class World {
         }
       }
 
+      if (this.onPostParticleSubstep) this.onPostParticleSubstep(this, h, s);
+
       // 5. update particle velocities
       for (const p of particles){
         if (p.invM === 0){ p.v.set(0, 0, 0); continue; }
