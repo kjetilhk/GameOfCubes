@@ -981,6 +981,12 @@ class World {
     this.omegaDot = new V();           // angular acceleration
     this.center = new V();
 
+    // Lifecycle hooks & terrain height query
+    this.onSubstep = null;
+    this.onParticleSubstep = null;
+    this.onPostParticleSubstep = null;
+    this.getTerrainHeight = null;
+
     // Instance-encapsulated solver state
     this.pool = [];
     this.nContacts = 0;
@@ -1112,9 +1118,17 @@ class World {
     const { bodies, particles, constraints, volumeConstraints, walls, omega, omegaDot, accel, center } = this;
 
     for (let s = 0; s < this.substeps; s++){
+      if (this.onSubstep) this.onSubstep(this, h, s);
       if (this.joints.length > 0) resetJointLambdas(this.joints);
       // 1. integrate rigid bodies
       for (const b of bodies){
+        if (b.invM === 0) {
+          b.px.copy(b.x);
+          b.pq.copy(b.q);
+          b.v.set(0, 0, 0);
+          b.w.set(0, 0, 0);
+          continue;
+        }
         b.px.copy(b.x); b.pq.copy(b.q);
         t1.subVectors(b.x, center);
         t2.crossVectors(omegaDot, t1);                            // Euler
@@ -1298,6 +1312,7 @@ class World {
 
       // 7. rigid body velocities from position change
       for (const b of bodies){
+        if (b.invM === 0) { b.v.set(0, 0, 0); b.w.set(0, 0, 0); continue; }
         b.v.subVectors(b.x, b.px).divideScalar(h);
         tq.copy(b.pq).conjugate().premultiply(b.q);
         b.w.set(tq.x, tq.y, tq.z).multiplyScalar(2/h);

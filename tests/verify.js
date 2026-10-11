@@ -32,6 +32,7 @@ class Vector3 {
     this.z = ax * by - ay * bx;
     return this;
   }
+  cross(v) { return this.crossVectors(this, v); }
   lengthSq() { return this.x * this.x + this.y * this.y + this.z * this.z; }
   length() { return Math.sqrt(this.lengthSq()); }
   normalize() { const l = this.length(); return l > 0 ? this.divideScalar(l) : this; }
@@ -277,6 +278,62 @@ console.log('\n=== XPBD Physics Engine Verification Suite ===\n');
 
   assert(anchorDrift < 0.001, `Ceiling joint anchor drift strictly bounded (${anchorDrift.toFixed(6)} m < 0.001 m)`);
   assert(maxJointDrift < 0.001, `Inter-link joint separation strictly bounded (${maxJointDrift.toFixed(6)} m < 0.001 m)`);
+})();
+
+// 7. Hinge Joint 1-DOF Rotational Alignment Test
+(() => {
+  console.log('\n7. Hinge Joint 1-DOF Alignment:');
+  const world = new XPBD.World({ dt: 1/60, substeps: 25 });
+  world.setBox(2.0, 2.0, 2.0);
+
+  const bA = world.addCube(0.3, new Vector3(0, 0, -1));
+  const bB = world.addCube(0.3, new Vector3(0, -0.4, -1));
+  bA.invM = 0; // Fix bA in space
+  bA.invI = 0;
+
+  // Hinge along Y-axis (0, 1, 0)
+  const hinge = world.addHingeJoint(
+    bA, new Vector3(0, -0.2, 0),
+    bB, new Vector3(0, 0.2, 0),
+    new Vector3(0, 1, 0), new Vector3(0, 1, 0),
+    0.0
+  );
+
+  // Apply heavy disturbing torque around X and Z axes
+  bB.w.set(5.0, 2.0, -4.0);
+
+  for (let f = 0; f < 60; f++) world.step();
+
+  const axisA = new Vector3(0, 1, 0).applyQuaternion(bA.q);
+  const axisB = new Vector3(0, 1, 0).applyQuaternion(bB.q);
+  const misalign = axisA.clone().cross(axisB).length();
+
+  assert(misalign < 0.005, `Hinge axes remain aligned under out-of-plane torque (misalign = ${misalign.toFixed(6)} < 0.005)`);
+})();
+
+// 8. Distance Joint Separation Constraint Test
+(() => {
+  console.log('\n8. Distance Joint Inelastic Tether:');
+  const world = new XPBD.World({ dt: 1/60, substeps: 20 });
+  world.setBox(2.0, 2.0, 2.0);
+
+  const restLen = 0.80;
+  const bA = world.addCube(0.3, new Vector3(0, 0.5, -1));
+  const bB = world.addCube(0.3, new Vector3(0, -0.3, -1));
+  bA.invM = 0; // Fixed ceiling anchor
+  bA.invI = 0;
+
+  world.addDistanceJoint(bA, new Vector3(0, 0, 0), bB, new Vector3(0, 0, 0), restLen, 0.0);
+
+  // Heavy downward gravity pulling on bB
+  world.accel.set(0, -25.0, 0);
+
+  for (let f = 0; f < 60; f++) world.step();
+
+  const d = bA.x.distanceTo(bB.x);
+  const err = Math.abs(d - restLen);
+
+  assert(err < 0.002, `Distance joint maintains tether length under high load (err = ${err.toFixed(6)} m < 0.002 m)`);
 })();
 
 console.log(`\nVerification Result: ${passedTests}/${totalTests} tests passed.\n`);

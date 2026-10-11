@@ -25,6 +25,8 @@ The root serves a landing page cataloguing tests, and individual tests are hoste
 ├── src/
 │   ├── xpbd.js         # Core XPBD physics engine (Müller et al.)
 │   ├── car.js          # Reusable off-road RC Buggy car asset
+│   ├── character.js    # Reusable humanoid skeleton, CMU mocap cycles, SDF meta-mesh & SSS shaders
+│   ├── joystick.js     # Lightweight virtual analog touch/pointer joystick controller
 │   ├── viewcube.js     # Standalone 3D isometric CAD ViewCube gravity controller
 │   ├── room.js         # Shared 3.0m room setup, 3-point lighting, spawner, dragger, and FPS meter
 │   └── common.css      # Shared responsive UI styling tokens, HUD, and badges

@@ -312,6 +312,7 @@
 <script src="../../src/xpbd.js?v=19"></script>
 <script src="../../src/room.js?v=19"></script>
 <script src="../../src/car.js?v=19"></script>
+<script src="../../src/joystick.js?v=19"></script>
 <script>
 (() => {
 'use strict';
@@ -1311,63 +1312,21 @@ sliderDeformFreq.addEventListener('input', updateCourseDeformation);
 sliderDeformRough.addEventListener('input', updateCourseDeformation);
 
 /* ================= Virtual Joystick Controls ================= */
-const baseEl = document.getElementById('joystick-base');
-const thumbEl = document.getElementById('joystick-thumb');
-
-let activePointerId = null;
-let baseCenterX = 0, baseCenterY = 0;
-const maxJoystickRadius = 28; // tight deflection radius for compact 82px base
-
-function updateJoystick(clientX, clientY) {
-  let dx = clientX - baseCenterX;
-  let dy = clientY - baseCenterY;
-  const dist = Math.hypot(dx, dy);
-  if (dist > maxJoystickRadius) {
-    dx = (dx / dist) * maxJoystickRadius;
-    dy = (dy / dist) * maxJoystickRadius;
-  }
-  thumbEl.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-
-  const rawSteer = dx / maxJoystickRadius;       // -1 (left) to +1 (right)
-  const throttle = -dy / maxJoystickRadius;      // -1 (reverse) to +1 (forward)
-
-  // Progressive exponential curve: gentle near center, full throw at edges
-  const steer = Math.sign(rawSteer) * Math.pow(Math.abs(rawSteer), 1.6);
-
-  buggy.setSteering(steer);
-  buggy.setThrottle(throttle);
-}
-
-function resetJoystick() {
-  thumbEl.style.transform = 'translate(-50%, -50%)';
-  buggy.setSteering(0);
-  buggy.setThrottle(0);
-}
-
-baseEl.addEventListener('pointerdown', e => {
-  e.preventDefault();
-  activePointerId = e.pointerId;
-  const rect = baseEl.getBoundingClientRect();
-  baseCenterX = rect.left + rect.width / 2;
-  baseCenterY = rect.top + rect.height / 2;
-  baseEl.setPointerCapture(e.pointerId);
-  updateJoystick(e.clientX, e.clientY);
-});
-
-baseEl.addEventListener('pointermove', e => {
-  if (e.pointerId === activePointerId) {
-    updateJoystick(e.clientX, e.clientY);
+const joystick = VirtualJoystick.create({
+  container: '#joystick-container',
+  base: '#joystick-base',
+  thumb: '#joystick-thumb',
+  maxRadius: 28,
+  exponent: 1.6,
+  onMove: state => {
+    buggy.setSteering(state.steer);
+    buggy.setThrottle(state.throttle);
+  },
+  onRelease: () => {
+    buggy.setSteering(0);
+    buggy.setThrottle(0);
   }
 });
-
-const endPointer = e => {
-  if (e.pointerId === activePointerId) {
-    activePointerId = null;
-    resetJoystick();
-  }
-};
-baseEl.addEventListener('pointerup', endPointer);
-baseEl.addEventListener('pointercancel', endPointer);
 
 /* ================= Keyboard Controls ================= */
 const keys = {

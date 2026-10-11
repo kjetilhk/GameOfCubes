@@ -91,6 +91,19 @@ The repository hosts standalone interactive test scenes located in `tests/`, acc
   - 120Hz Display Interpolation: state snapshot lerp/slerp prevents retinal double-image ghosting on high-refresh mobile displays.
   - Motion Sensors Disabled: device gyro/accelerometer events are blocked for pure analog joystick control.
 
+### Test 8: Human Skeleton, Soft-Body Meta-Mesh & Mocap Walk Cycles (`tests/test8/index.html`)
+- **Focus**: Hierarchical humanoid character animation, XPBD volumetric soft-body meta-mesh continuum mechanics, dynamic cotton clothing with one-way skin collision, and CMU mocap gaits.
+- **Scene**: Open, infinite 3D space with shadow ground plane, studio 3-point lighting, and 3D orbit camera.
+- **Modular Components**:
+  - `src/character.js`: Reusable 23-joint skeleton (`CharacterAsset.buildSkeleton`), analytical metaball SDFs (`marshmallowSDF`), PBR + Subsurface Scattering skin shader (`createHumanSkinMaterial`), procedural cotton textures (`createShirtMaterial`), and 3 CMU mocap walk cycles with forward-kinematics foot-floor ground contact calibration (`buildMocapWalkClip`).
+  - `src/playblast.js`: Real-time deterministic canvas recorder with QuickTime-compatible MP4 export, live countdown badge, and deterministic clock freezing.
+- **Interactions**:
+  - Top sliders: Softness, Bending, Volume, Damping, Gravity, and Mass scaling.
+  - Walk selector: CMU 07_01 Natural Walk, CMU 07_08 Brisk Stride, CMU 35_01 Heavy Prowl.
+  - Subdiv toggles: 2× Softbody Division (7,024 triangles) and 2× Cloth Division (7,440 triangles).
+  - Raycaster Grab & Pull: drag any softbody or cloth vertex interactively.
+  - QuickTime Playblast: record smooth 60fps MP4 video playback.
+
 ---
 
 ## Running Locally

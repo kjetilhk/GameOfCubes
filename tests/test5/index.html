@@ -45,29 +45,25 @@ const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
 const lights = RoomEnv.createLighting(scene);
 let wallGroup = null;
 
+let orbitControls = null;
 function resize(){
   wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
+  if (orbitControls) orbitControls.update();
 }
 window.addEventListener('resize', resize);
+resize();
 
 /* ================= 3D Orbit Camera ================= */
-const orbitTarget = new V(-0.15, 0.25, -1.2);
-let orbitDist = 3.6;
-let orbitPitch = 0.08;
-let orbitYaw = 0.0;
-
-function updateCameraTransform(){
-  const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
-  const cy = Math.cos(orbitYaw), sy = Math.sin(orbitYaw);
-  camera.position.set(
-    orbitTarget.x + orbitDist * sy * cp,
-    orbitTarget.y + orbitDist * sp,
-    orbitTarget.z + orbitDist * cy * cp
-  );
-  camera.lookAt(orbitTarget);
-}
-resize();
-updateCameraTransform();
+orbitControls = RoomEnv.createOrbitControls(camera, new V(-0.15, 0.25, -1.2), {
+  dist: 3.6,
+  pitch: 0.08,
+  yaw: 0.0,
+  minDist: 1.8,
+  maxDist: 6.5,
+  minPitch: -0.6,
+  maxPitch: 1.3,
+  onPointerDrag: (e, type) => handlePointerDrag(e, type)
+});
 
 /* ================= Visual Materials ================= */
 const woodTorsoMat = new THREE.MeshPhysicalMaterial({
@@ -379,39 +375,23 @@ function handlePointerDrag(e, type){
   return false;
 }
 
-/* ================= Orbit Controls ================= */
-let orbitDragging = false;
-let lastPointerX = 0, lastPointerY = 0;
-
-window.addEventListener('pointerdown', e => {
-  if (e.target && e.target.closest && (e.target.closest('#hud') || e.target.closest('#back'))) return;
-  if (handlePointerDrag(e, 'down')) return;
-  orbitDragging = true;
-  lastPointerX = e.clientX;
-  lastPointerY = e.clientY;
+/* ================= Keyboard Shortcuts ================= */
+window.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.code === 'Space') {
+    cubeSpawner.spawnCube();
+    RoomEnv.showNote('Spawned rigid cube');
+    e.preventDefault();
+  } else if (e.code === 'KeyR') {
+    initScene(false);
+    RoomEnv.showNote('Scene reset to default suspended pose');
+  } else if (e.code === 'KeyD') {
+    initScene(true);
+    RoomEnv.showNote('Ragdoll dropped from height with tumble spin');
+  } else if (e.code === 'KeyP') {
+    setSuspension(!isSuspended);
+  }
 });
-
-window.addEventListener('pointermove', e => {
-  if (handlePointerDrag(e, 'move')) return;
-  if (!orbitDragging) return;
-  const dx = e.clientX - lastPointerX;
-  const dy = e.clientY - lastPointerY;
-  lastPointerX = e.clientX;
-  lastPointerY = e.clientY;
-  orbitYaw -= dx * 0.007;
-  orbitPitch = THREE.MathUtils.clamp(orbitPitch + dy * 0.007, -0.6, 1.3);
-  updateCameraTransform();
-});
-
-window.addEventListener('pointerup', e => {
-  handlePointerDrag(e, 'up');
-  orbitDragging = false;
-});
-
-window.addEventListener('wheel', e => {
-  orbitDist = THREE.MathUtils.clamp(orbitDist + e.deltaY * 0.002, 1.8, 6.5);
-  updateCameraTransform();
-}, { passive: true });
 
 /* ================= UI Button Controls ================= */
 document.getElementById('reset').addEventListener('click', () => {

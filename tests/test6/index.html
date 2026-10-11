@@ -54,29 +54,25 @@ const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 50);
 const lights = RoomEnv.createLighting(scene);
 let wallGroup = null;
 
+let orbitControls = null;
 function resize(){
   wallGroup = RoomEnv.updateRoom(camera, renderer, world, lights, wallGroup, scene);
+  if (orbitControls) orbitControls.update();
 }
 window.addEventListener('resize', resize);
+resize();
 
 /* ================= 3D Orbit Camera ================= */
-const orbitTarget = new V(-0.05, -0.3, -1.2);
-let orbitDist = 4.2;
-let orbitPitch = 0.22;
-let orbitYaw = 0.05;
-
-function updateCameraTransform(){
-  const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
-  const cy = Math.cos(orbitYaw), sy = Math.sin(orbitYaw);
-  camera.position.set(
-    orbitTarget.x + orbitDist * sy * cp,
-    orbitTarget.y + orbitDist * sp,
-    orbitTarget.z + orbitDist * cy * cp
-  );
-  camera.lookAt(orbitTarget);
-}
-resize();
-updateCameraTransform();
+orbitControls = RoomEnv.createOrbitControls(camera, new V(-0.05, -0.3, -1.2), {
+  dist: 4.2,
+  pitch: 0.22,
+  yaw: 0.05,
+  minDist: 2.2,
+  maxDist: 7.5,
+  minPitch: -0.4,
+  maxPitch: 1.3,
+  onPointerDrag: (e, type) => handlePointerDrag(e, type)
+});
 
 /* ================= Visual Materials ================= */
 const ballMat = new THREE.MeshPhysicalMaterial({
@@ -412,39 +408,7 @@ function handlePointerDrag(e, type){
   return false;
 }
 
-/* ================= 3D Orbit Controls ================= */
-let orbitDragging = false;
-let lastPointerX = 0, lastPointerY = 0;
 
-window.addEventListener('pointerdown', e => {
-  if (e.target && e.target.closest && (e.target.closest('#hud') || e.target.closest('#back'))) return;
-  if (handlePointerDrag(e, 'down')) return;
-  orbitDragging = true;
-  lastPointerX = e.clientX;
-  lastPointerY = e.clientY;
-});
-
-window.addEventListener('pointermove', e => {
-  if (handlePointerDrag(e, 'move')) return;
-  if (!orbitDragging) return;
-  const dx = e.clientX - lastPointerX;
-  const dy = e.clientY - lastPointerY;
-  lastPointerX = e.clientX;
-  lastPointerY = e.clientY;
-  orbitYaw -= dx * 0.007;
-  orbitPitch = THREE.MathUtils.clamp(orbitPitch + dy * 0.007, -0.4, 1.3);
-  updateCameraTransform();
-});
-
-window.addEventListener('pointerup', e => {
-  handlePointerDrag(e, 'up');
-  orbitDragging = false;
-});
-
-window.addEventListener('wheel', e => {
-  orbitDist = THREE.MathUtils.clamp(orbitDist + e.deltaY * 0.002, 2.2, 7.5);
-  updateCameraTransform();
-}, { passive: true });
 
 /* ================= HUD Button Handlers ================= */
 document.getElementById('launch').addEventListener('click', () => {
