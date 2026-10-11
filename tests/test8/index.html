@@ -531,8 +531,8 @@
     <option value="2">Mocap 3: Heavy Prowl</option>
   </select>
   <button id="btn-shirt-toggle" class="cloth-active" title="Enable or disable the Cotton Shirt simulation & mesh">Shirt: On</button>
-  <button id="btn-subdiv-soft" class="active" title="Toggle Softbody Mesh Divisions (takes effect on clicking Bind Pose)">Softbody 2×: On</button>
-  <button id="btn-subdiv-cloth" class="cloth-active" title="Toggle Cloth Shirt Mesh Divisions (takes effect on clicking Bind Pose)">Cloth 2×: On</button>
+  <button id="btn-subdiv-soft" title="Toggle Softbody Mesh Divisions (takes effect on clicking Bind Pose)">Softbody 2× Div</button>
+  <button id="btn-subdiv-cloth" title="Toggle Cloth Shirt Mesh Divisions (takes effect on clicking Bind Pose)">Cloth 2× Div</button>
   <button id="btn-wire">Wireframe</button>
   <button id="btn-playblast" title="Capture Maya-style Playblast to QuickTime (.mov)">🎬 Playblast</button>
 </div>
@@ -1030,9 +1030,9 @@ shirtMesh.receiveShadow = true;
 scene.add(shirtMesh);
 
 let shirtEnabled = true;
-let currentSoftDiv = 2;
-let currentClothDiv = 2;
-let currentShirtNx = 61;
+let currentSoftDiv = 1;
+let currentClothDiv = 1;
+let currentShirtNx = 31;
 let boundaryList = [];
 let interiorList = [];
 let draggableParticles = [];
@@ -1835,7 +1835,7 @@ function buildCharacterMeshes(softDiv, clothDiv) {
   draggableParticles = shirtEnabled ? shirtParticles.concat(blobParticles) : blobParticles;
 }
 
-buildCharacterMeshes(2, 2);
+buildCharacterMeshes(1, 1);
 
 // One-Way Meta-Mesh-to-Shirt Collision Solver (100% Meta-Mesh Only — Zero Bone Collision, Zero Pins!):
 // Runs in both onParticleSubstep (pre-constraint) and onPostParticleSubstep (post-constraint).
@@ -2473,8 +2473,8 @@ const selectWalk    = document.getElementById('select-walk');
 const btnSubdivSoft  = document.getElementById('btn-subdiv-soft');
 const btnSubdivCloth = document.getElementById('btn-subdiv-cloth');
 
-let pendingSoftDiv = 2;
-let pendingClothDiv = 2;
+let pendingSoftDiv = 1;
+let pendingClothDiv = 1;
 
 function updateSubdivButtonsUI() {
   btnSubdivSoft.classList.toggle('active', pendingSoftDiv === 2);
