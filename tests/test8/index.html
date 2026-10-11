@@ -888,6 +888,7 @@ scene.add(shirtMesh);
 let currentSoftDiv = 2;
 let currentClothDiv = 2;
 let currentShirtNx = 61;
+let boundaryList = [];
 let draggableParticles = [];
 
 function syncBlobMesh() {
@@ -985,9 +986,9 @@ function buildCharacterMeshes(softDiv, clothDiv) {
   }
   pinDotMeshes.length = 0;
 
-  // Tune solver substep budget so 2x subdivided meshes maintain high frame rate
+  // Increase solver substeps to 12 for 2x subdivided cloth/softbody so fine 1.5cm cloth never tunnels or sags through the belly
   if (softDiv > 1 || clothDiv > 1) {
-    world.substeps = 8;
+    world.substeps = 12;
     world.positionIterations = 1;
   } else {
     world.substeps = 10;
@@ -995,10 +996,10 @@ function buildCharacterMeshes(softDiv, clothDiv) {
   }
 
   /* ---- 1. Build Volumetric Tetrahedral Marshmallow Man Meta-Mesh (1x or 2x Divisions) ---- */
-  const dx = 0.072 / softDiv;
-  const cxN = softDiv === 1 ? 23 : 47;
-  const cyN = 26 * softDiv;
-  const czN = softDiv === 1 ? 7 : 15;
+  const dx = softDiv === 1 ? 0.072 : 0.051;
+  const cxN = softDiv === 1 ? 23 : 33;
+  const cyN = softDiv === 1 ? 26 : 37;
+  const czN = softDiv === 1 ? 7 : 11;
   const nx = cxN + 1, ny = cyN + 1, nz = czN + 1;
   const minX = -cxN * 0.5 * dx;
   const maxY = 0.34;
@@ -1549,6 +1550,18 @@ function buildCharacterMeshes(softDiv, clothDiv) {
       for (let i = 0; i < sNx; i++) {
         const a = grid[j][i];
         if (a < 0) continue;
+        // When cloth is subdivided 2x, embed the 1x coarse structural grid on even nodes
+        // so 2x cloth has the exact same membrane tensile resistance as 1x cloth across the belly & shoulders
+        if (S > 1 && (i % 2 === 0) && (j % 2 === 0)) {
+          const isCollar = (j <= 2 * S && i >= 8 * S && i <= 22 * S);
+          const structComp = isCollar ? 0.0 : COTTON_STRUCT_COMPLIANCE;
+          if (i + 2 < sNx && grid[j][i + 1] >= 0 && grid[j][i + 2] >= 0) {
+            addShirtEdge(a, grid[j][i + 2], structComp, shirtStructConstraints, true, isCollar);
+          }
+          if (j + 2 < sNy && grid[j + 1][i] >= 0 && grid[j + 2][i] >= 0) {
+            addShirtEdge(a, grid[j + 2][i], structComp, shirtStructConstraints, true, isCollar);
+          }
+        }
         if (i + 2 < sNx && grid[j][i + 1] >= 0 && grid[j][i + 2] >= 0) {
           addShirtEdge(a, grid[j][i + 2], 0.01, shirtBendConstraints, false, false);
         }
@@ -1559,8 +1572,32 @@ function buildCharacterMeshes(softDiv, clothDiv) {
     }
   }
 
-  // Pre-link local Marshmallow Man boundary skin particles for one-way soft-body skin collision (no bone pins!)
-  const boundaryList = [];
+  // Collar rib-knit structural chords (strictly cloth-to-cloth, zero pinning to the body!)
+  // Prevents the unpinned collar scoop opening from stretching wider than the shoulders under 2x subdivision
+  const cLeft = shirtFrontIdx[0][10 * S];
+  const cRight = shirtFrontIdx[0][20 * S];
+  addShirtEdge(cLeft, cRight, 0.0, shirtStructConstraints, true, true);
+  for (const grid of [shirtFrontIdx, shirtBackIdx]) {
+    const cMid = grid[3 * S][15 * S];
+    addShirtEdge(cLeft, cMid, 0.0, shirtStructConstraints, true, true);
+    addShirtEdge(cRight, cMid, 0.0, shirtStructConstraints, true, true);
+    const span = 3 * S;
+    for (let j = 0; j <= 4 * S; j++) {
+      for (let i = 9 * S; i <= 21 * S; i++) {
+        const a = grid[j][i];
+        if (a < 0) continue;
+        if (i + span < sNx && grid[j][i + span] >= 0) {
+          addShirtEdge(a, grid[j][i + span], 0.0, shirtStructConstraints, true, true);
+        }
+        if (j + span < sNy && grid[j + span][i] >= 0) {
+          addShirtEdge(a, grid[j + span][i], 0.0, shirtStructConstraints, true, true);
+        }
+      }
+    }
+  }
+
+  // Collect boundary Marshmallow Man skin particles for live one-way spatial-grid collision (no bone pins!)
+  boundaryList.length = 0;
   for (let k = 0; k < numBaseVerts; k++) {
     if (blobParticles[k]._isBoundary) {
       blobParticles[k]._prevFrameX = blobParticles[k].x.clone();
@@ -1572,20 +1609,8 @@ function buildCharacterMeshes(softDiv, clothDiv) {
   for (let i = 0; i < shirtParticles.length; i++) {
     const p = shirtParticles[i];
     p._bindPos = p.x.clone();
-
-    const candidates = [];
-    for (let k = 0; k < boundaryList.length; k++) {
-      const bp = boundaryList[k];
-      const d0 = p._bindPos.distanceTo(bp._bindPos);
-      if (d0 < 0.28) {
-        candidates.push({ bp, d0 });
-      }
-    }
-    if (candidates.length > 36) {
-      candidates.sort((a, b) => a.d0 - b.d0);
-      candidates.length = 36;
-    }
-    p._skinNeighbors = candidates.map(c => c.bp);
+    p._liveSkinNbrs = [];
+    p._liveCapsules = [];
   }
 
   if (shirtGeom) shirtGeom.dispose();
@@ -1607,11 +1632,12 @@ const BODY_CAPSULE_DEFS = [
   { bone: 'Head',         ax:  0.00,  ay:  0.080, az: -1.200, bx:  0.00,  by:  0.160, bz: -1.200, r: 0.152 },
   { bone: 'Neck',         ax:  0.00,  ay: -0.040, az: -1.200, bx:  0.00,  by:  0.030, bz: -1.200, r: 0.104 },
   { bone: 'Spine2',       ax: -0.20,  ay: -0.068, az: -1.200, bx:  0.20,  by: -0.068, bz: -1.200, r: 0.118 },
-  { bone: 'Spine2',       ax: -0.10,  ay: -0.135, az: -1.200, bx:  0.10,  by: -0.135, bz: -1.200, r: 0.162 },
-  { bone: 'Spine1',       ax: -0.09,  ay: -0.220, az: -1.195, bx:  0.09,  by: -0.220, bz: -1.195, r: 0.172 },
-  { bone: 'Spine1',       ax: -0.085, ay: -0.320, az: -1.190, bx:  0.085, by: -0.320, bz: -1.190, r: 0.184 },
-  { bone: 'Spine',        ax: -0.09,  ay: -0.420, az: -1.195, bx:  0.09,  by: -0.420, bz: -1.195, r: 0.170 },
-  { bone: 'Hips',         ax: -0.095, ay: -0.510, az: -1.200, bx:  0.095, by: -0.510, bz: -1.200, r: 0.160 },
+  { bone: 'Spine2',       ax: -0.10,  ay: -0.140, az: -1.196, bx:  0.10,  by: -0.140, bz: -1.196, r: 0.166 },
+  { bone: 'Spine1',       ax: -0.095, ay: -0.210, az: -1.190, bx:  0.095, by: -0.210, bz: -1.190, r: 0.178 },
+  { bone: 'Spine1',       ax: -0.09,  ay: -0.270, az: -1.186, bx:  0.09,  by: -0.270, bz: -1.186, r: 0.186 },
+  { bone: 'Spine1',       ax: -0.085, ay: -0.330, az: -1.184, bx:  0.085, by: -0.330, bz: -1.184, r: 0.190 },
+  { bone: 'Spine',        ax: -0.09,  ay: -0.400, az: -1.190, bx:  0.09,  by: -0.400, bz: -1.190, r: 0.180 },
+  { bone: 'Hips',         ax: -0.095, ay: -0.490, az: -1.198, bx:  0.095, by: -0.490, bz: -1.198, r: 0.166 },
   { bone: 'LeftArm',      ax:  0.21,  ay: -0.065, az: -1.200, bx:  0.40,  by: -0.065, bz: -1.200, r: 0.110 },
   { bone: 'RightArm',     ax: -0.21,  ay: -0.065, az: -1.200, bx: -0.40,  by: -0.065, bz: -1.200, r: 0.110 },
   { bone: 'LeftForeArm',  ax:  0.40,  ay: -0.065, az: -1.200, bx:  0.68,  by: -0.065, bz: -1.200, r: 0.098 },
@@ -1649,11 +1675,77 @@ buildCharacterMeshes(2, 2);
 // while Marshmallow Man particles NEVER react to the shirt!
 const skinCenter = new V(), skinDiff = new V(), contactDelta = new V();
 const segAB = new V(), segAP = new V(), closestPt = new V(), pushDir = new V();
-// Large 9.6cm sphere radius inset by 7.8cm (+1.8cm skin offset) bridges the 7.2cm spacing between 1x softbody vertices with zero craters
+// Large 9.6cm sphere radius inset by 7.8cm (+1.8cm skin offset) bridges the softbody vertices with zero craters
 const R_SKIN_SPHERE = 0.096;
 const R_SKIN_INSET  = 0.078;
 let shirtBodyFriction = 0.32;
 let clothDampingVal   = 0.80;
+
+// Live 3D (X, Y, Z-side) Spatial Grid for Marshmallow Man boundary skin particles:
+// Rebuilt once per frame so even as the unpinned 2x shirt drapes and shifts downward over the belly,
+// every shirt vertex always collides against the actual live belly skin particles right beneath it!
+const SKIN_GX = 18, SKIN_GY = 20, SKIN_GZ = 2;
+const SKIN_CELL = 0.09;
+const SKIN_MIN_X = -0.81, SKIN_MIN_Y = -1.35;
+const skinGridBuckets = Array.from({ length: SKIN_GX * SKIN_GY * SKIN_GZ }, () => []);
+
+function rebuildSkinGrid() {
+  for (let i = 0; i < skinGridBuckets.length; i++) skinGridBuckets[i].length = 0;
+  for (let k = 0; k < boundaryList.length; k++) {
+    const bp = boundaryList[k];
+    if (bp.x.y < -0.95) continue;
+    const fx = (bp.x.x - SKIN_MIN_X) / SKIN_CELL - 0.5;
+    const fy = (bp.x.y - SKIN_MIN_Y) / SKIN_CELL - 0.5;
+    const ix0 = Math.floor(fx), iy0 = Math.floor(fy);
+    const zSide = bp.x.z >= -1.20 ? 1 : 0;
+    for (let dy = 0; dy <= 1; dy++) {
+      const jy = iy0 + dy;
+      if (jy < 0 || jy >= SKIN_GY) continue;
+      for (let dx = 0; dx <= 1; dx++) {
+        const jx = ix0 + dx;
+        if (jx < 0 || jx >= SKIN_GX) continue;
+        skinGridBuckets[(zSide * SKIN_GY + jy) * SKIN_GX + jx].push(bp);
+      }
+    }
+  }
+
+  for (let i = 0; i < shirtParticles.length; i++) {
+    const p = shirtParticles[i];
+    const liveCaps = p._liveCapsules;
+    liveCaps.length = 0;
+    for (let c = 0; c < bodyCapsules.length; c++) {
+      const cap = bodyCapsules[c];
+      const a = cap.targetA, b = cap.targetB;
+      const cullR = cap.r + 0.08;
+      segAB.subVectors(b, a);
+      segAP.subVectors(p.x, a);
+      const abLenSq = segAB.lengthSq();
+      let t = abLenSq > 1e-8 ? segAP.dot(segAB) / abLenSq : 0;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+      closestPt.copy(a).addScaledVector(segAB, t);
+      if (p.x.distanceToSquared(closestPt) < cullR * cullR) {
+        liveCaps.push(cap);
+      }
+    }
+
+    const liveNbrs = p._liveSkinNbrs;
+    liveNbrs.length = 0;
+    const ix = Math.floor((p.x.x - SKIN_MIN_X) / SKIN_CELL);
+    const iy = Math.floor((p.x.y - SKIN_MIN_Y) / SKIN_CELL);
+    if (ix >= 0 && ix < SKIN_GX && iy >= 0 && iy < SKIN_GY) {
+      const zSide = p.x.z >= -1.20 ? 1 : 0;
+      const cell = skinGridBuckets[(zSide * SKIN_GY + iy) * SKIN_GX + ix];
+      for (let k = 0; k < cell.length; k++) {
+        const bp = cell[k];
+        const dx = p.x.x - bp.x.x, dy = p.x.y - bp.x.y, dz = p.x.z - bp.x.z;
+        if (dx * dx + dy * dy + dz * dz < 0.010) {
+          liveNbrs.push(bp);
+          if (liveNbrs.length >= 8) break;
+        }
+      }
+    }
+  }
+}
 
 function solveShirtBodyCollision(h, applyFrictionCarry) {
   const dragK = Math.max(0, Math.min(1, clothDampingVal * h * 0.5));
@@ -1666,12 +1758,13 @@ function solveShirtBodyCollision(h, applyFrictionCarry) {
     contactDelta.set(0, 0, 0);
     let contactCount = 0;
 
-    // 1. Collide one-way against articulated Marshmallow Man volumetric capsules (gap-free smooth body volume)
-    for (let c = 0; c < bodyCapsules.length; c++) {
-      const cap = bodyCapsules[c];
+    // 1. Collide one-way against articulated Marshmallow Man volumetric capsules (gap-free smooth body & belly volume)
+    const liveCaps = p._liveCapsules;
+    for (let c = 0; c < liveCaps.length; c++) {
+      const cap = liveCaps[c];
       const a = cap.currA;
       const b = cap.currB;
-      const minR = cap.r + 0.014;
+      const minR = cap.r + 0.015;
       segAB.subVectors(b, a);
       segAP.subVectors(p.x, a);
       const abLenSq = segAB.lengthSq();
@@ -1695,12 +1788,13 @@ function solveShirtBodyCollision(h, applyFrictionCarry) {
     }
 
     // 2. Collide one-way against live deforming Marshmallow Man boundary skin particles (Normal-Inset Spheres)
-    const skinNbrs = p._skinNeighbors;
+    const skinNbrs = p._liveSkinNbrs;
     for (let k = 0; k < skinNbrs.length; k++) {
       const bp = skinNbrs[k];
       const nrm = bp._skinNormal;
       skinCenter.copy(bp.x).addScaledVector(nrm, -R_SKIN_INSET);
       skinDiff.subVectors(p.x, skinCenter);
+      if (skinDiff.dot(nrm) <= 0) continue;
       const d2 = skinDiff.lengthSq();
       if (d2 < R_SKIN_SPHERE * R_SKIN_SPHERE && d2 > 1e-12) {
         const d = Math.sqrt(d2);
@@ -1787,7 +1881,10 @@ function updateSkeletonBlobInteraction() {
     }
   }
 
-  // 4. Compute world endpoints and per-substep motion delta of skeleton bone segments
+  // 4. Rebuild live 3D spatial grid of boundary Marshmallow Man skin particles & overlapping capsules for each shirt vertex
+  rebuildSkinGrid();
+
+  // 5. Compute world endpoints and per-substep motion delta of skeleton bone segments
   for (let s = 0; s < boneSegments.length; s++) {
     boneSegments[s].boneA.getWorldPosition(cachedSegA[s]);
     boneSegments[s].boneB.getWorldPosition(cachedSegB[s]);
@@ -2598,19 +2695,14 @@ function frame(now) {
   }
 
   // 2. Pin soft-body particles to bone spheres & compute skeleton/shirt frame motion
-  updateSkeletonBlobInteraction();
-
-  // 3. Step XPBD soft-body & Cotton Shirt physics (with one-way body->shirt collision)
   acc += dt;
-  let n = 0;
-  while (acc >= world.dt && n < 2) {
+  if (acc >= world.dt) {
+    updateSkeletonBlobInteraction();
     world.step();
-    acc -= world.dt;
-    n++;
+    acc = Math.min(acc - world.dt, world.dt * 0.5);
   }
-  if (n === 2) acc = 0;
 
-  // 4. Sync soft-body Marshmallow Man & Cotton Shirt surface vertices & normals
+  // 3. Sync soft-body Marshmallow Man & Cotton Shirt surface vertices & normals
   syncBlobMesh();
   syncShirtMesh();
 
