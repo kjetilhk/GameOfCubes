@@ -272,6 +272,86 @@
     color: #f3efe6;
     font-weight: 600;
   }
+
+  #hud #btn-playblast.recording {
+    background: #e53935;
+    color: #ffffff;
+    border-color: #ff6f60;
+    box-shadow: 0 0 12px rgba(229, 57, 53, 0.65);
+  }
+
+  #playblast-popover {
+    position: fixed;
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    display: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 12px;
+    padding: 8px 14px;
+    border-radius: 14px;
+    background: rgba(14, 19, 26, 0.92);
+    border: 1px solid rgba(92, 230, 160, 0.35);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--ink);
+    pointer-events: auto;
+  }
+
+  #playblast-popover.open {
+    display: flex;
+  }
+
+  #playblast-popover label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  #playblast-popover select {
+    background: rgba(24, 32, 44, 0.95);
+    color: var(--ink);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font: inherit;
+    font-size: 0.66rem;
+    font-weight: 700;
+    cursor: pointer;
+    outline: none;
+  }
+
+  #playblast-popover input[type="checkbox"] {
+    accent-color: #5ce6a0;
+    cursor: pointer;
+  }
+
+  #btn-playblast-start {
+    background: #5ce6a0;
+    color: #091a12;
+    border: 1px solid #5ce6a0;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font: inherit;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+  }
+
+  #btn-playblast-start:hover {
+    filter: brightness(1.08);
+  }
 </style>
 </head>
 <body>
@@ -404,10 +484,42 @@
           <span>Mass</span>
           <span id="val-cloth-mass" class="soft-dial-val">1.4kg</span>
         </div>
-        <input id="slider-cloth-mass" class="soft-slider" type="range" min="0.2" max="5.0" step="0.1" value="1.4">
+        <input id="slider-cloth-mass" class="soft-slider" type="range" min="0" max="5.0" step="0.1" value="1.4">
       </div>
     </div>
   </div>
+</div>
+
+<!-- Maya-Style Playblast Options Popover -->
+<div id="playblast-popover">
+  <label>FPS
+    <select id="pb-fps">
+      <option value="24">24 fps</option>
+      <option value="30" selected>30 fps</option>
+      <option value="60">60 fps</option>
+    </select>
+  </label>
+  <label>Length
+    <select id="pb-duration">
+      <option value="5">5s</option>
+      <option value="8" selected>8s</option>
+      <option value="12">12s</option>
+    </select>
+  </label>
+  <label>Size
+    <select id="pb-res">
+      <option value="viewport">Viewport</option>
+      <option value="720p" selected>720p HD</option>
+      <option value="1080p">1080p FHD</option>
+    </select>
+  </label>
+  <label title="Start Playblast from Bind Pose (T-Pose -> Walk)">
+    <input id="pb-reset" type="checkbox" checked> From Bind Pose
+  </label>
+  <label title="Burn Maya-style Playblast HUD slate into QuickTime video">
+    <input id="pb-hud" type="checkbox" checked> Maya HUD
+  </label>
+  <button id="btn-playblast-start">▶ Record .mov</button>
 </div>
 
 <div id="hud">
@@ -421,11 +533,13 @@
   <button id="btn-subdiv-soft" class="active" title="Toggle Softbody Mesh Divisions (takes effect on clicking Bind Pose)">Softbody 2×: On</button>
   <button id="btn-subdiv-cloth" class="cloth-active" title="Toggle Cloth Shirt Mesh Divisions (takes effect on clicking Bind Pose)">Cloth 2×: On</button>
   <button id="btn-wire">Wireframe</button>
+  <button id="btn-playblast" title="Capture Maya-style Playblast to QuickTime (.mov)">🎬 Playblast</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="../../src/xpbd.js?v=25"></script>
 <script src="../../src/room.js?v=25"></script>
+<script src="../../src/playblast.js?v=1"></script>
 <script>
 (() => {
 'use strict';
@@ -2226,7 +2340,7 @@ const walkActions = MOCAP_PROFILES.map(p => mixer.clipAction(buildMocapWalkClip(
 
 let activeWalkIndex = 0;
 let currentAction = bindPoseAction;
-let bindPoseTimer = null;
+let bindPoseCountdown = 0;
 const stateLabel = document.getElementById('state-label');
 
 const selectWalk    = document.getElementById('select-walk');
@@ -2259,10 +2373,7 @@ function updateButtonHighlights(inBindPose) {
 }
 
 function transitionToWalk(index, blendDuration = 0.75) {
-  if (bindPoseTimer) {
-    clearTimeout(bindPoseTimer);
-    bindPoseTimer = null;
-  }
+  bindPoseCountdown = 0;
   activeWalkIndex = index;
   const nextAction = walkActions[index];
   if (currentAction !== nextAction) {
@@ -2278,10 +2389,7 @@ function transitionToWalk(index, blendDuration = 0.75) {
 }
 
 function startBindPoseSequence() {
-  if (bindPoseTimer) {
-    clearTimeout(bindPoseTimer);
-    bindPoseTimer = null;
-  }
+  bindPoseCountdown = 1.0;
   mixer.stopAllAction();
 
   // Apply queued 2x mesh redivision when user clicks Bind Pose button
@@ -2332,17 +2440,11 @@ function startBindPoseSequence() {
   if (redivided) {
     RoomEnv.showNote(`Applied mesh divisions (Softbody ${currentSoftDiv}×, Cloth ${currentClothDiv}×) in Bind Pose — blending in 1.0s...`, 2600);
   } else {
-    RoomEnv.showNote('Bind Pose (T-Pose). Cotton Shirt over Marshmallow Man (one-way body collision) — blending in 1.0s...', 2400);
+    RoomEnv.showNote('Bind Pose (T-Pose). Cotton Shirt over Marshmallow Man (one-way meta-mesh collision) — blending in 1.0s...', 2400);
   }
-
-  bindPoseTimer = setTimeout(() => {
-    bindPoseTimer = null;
-    transitionToWalk(activeWalkIndex, 0.85);
-    RoomEnv.showNote('Blended into ' + MOCAP_PROFILES[activeWalkIndex].name, 2200);
-  }, 1000);
 }
 
-// Start in Bind Pose, then after 1.0 second blend into Mocap Walk 1
+// Start in Bind Pose, then after 1.0 second of simulation time blend into Mocap Walk 1
 startBindPoseSequence();
 
 /* ================= Interactive Raycast Grab & Orbit Camera ================= */
@@ -2612,16 +2714,21 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'r' || e.key === 'R' || e.key === '0') startBindPoseSequence();
 });
 
-/* ================= Animation & Soft-Body Physics Loop ================= */
+/* ================= Animation, Deterministic Playblast & Soft-Body Physics Loop ================= */
 const tickFps = RoomEnv.createFpsMeter();
 let acc = 0, last = performance.now();
 const Z_AXIS = new V(0, 0, 1);
 const qArmLiftL = new Q(), qArmLiftR = new Q();
 
-function frame(now) {
-  tickFps(now);
-  const dt = Math.min((now - last) / 1000, 0.1);
-  last = now;
+function advanceAnimationAndArmLift(dt) {
+  if (bindPoseCountdown > 0) {
+    bindPoseCountdown -= dt;
+    if (bindPoseCountdown <= 0) {
+      bindPoseCountdown = 0;
+      transitionToWalk(activeWalkIndex, 0.85);
+      RoomEnv.showNote('Blended into ' + MOCAP_PROFILES[activeWalkIndex].name, 2200);
+    }
+  }
 
   // 1. Advance skeleton animation mixer (scaled by Walk Speed slider during walk cycles)
   mixer.update(dt * (currentAction === bindPoseAction ? 1.0 : walkSpeedScale));
@@ -2635,8 +2742,91 @@ function frame(now) {
     bonesByName['LeftArm'].quaternion.multiply(qArmLiftL);
     bonesByName['RightArm'].quaternion.multiply(qArmLiftR);
   }
+}
 
-  // 2. Pin soft-body particles to bone spheres & compute skeleton/shirt frame motion
+const btnPlayblast      = document.getElementById('btn-playblast');
+const playblastPopover  = document.getElementById('playblast-popover');
+const btnPlayblastStart = document.getElementById('btn-playblast-start');
+const pbFpsSelect       = document.getElementById('pb-fps');
+const pbDurationSelect  = document.getElementById('pb-duration');
+const pbResSelect       = document.getElementById('pb-res');
+const pbResetCheck      = document.getElementById('pb-reset');
+const pbHudCheck        = document.getElementById('pb-hud');
+
+const playblastCtrl = Playblast.createPlayblastController({
+  renderer,
+  scene,
+  camera,
+  stepSimulation(stepDt) {
+    world.dt = stepDt;
+    advanceAnimationAndArmLift(stepDt);
+    updateSkeletonBlobInteraction();
+    world.step();
+    syncBlobMesh();
+    syncShirtMesh();
+  },
+  onStartPlayblast({ resetFirst, fps, totalFrames, outW, outH, codec }) {
+    playblastPopover.classList.remove('open');
+    btnPlayblast.classList.add('recording');
+    btnPlayblast.textContent = `⏹ Stop (0/${totalFrames})`;
+    if (resetFirst) {
+      startBindPoseSequence();
+    }
+    const codecLabel = codec === 'avc1' ? 'H.264' : 'Motion-JPEG';
+    RoomEnv.showNote(`Playblasting ${totalFrames} frames @ ${fps}fps (${outW}×${outH} ${codecLabel} .mov)...`, 3000);
+  },
+  onFinishPlayblast() {
+    world.dt = 1 / 60;
+    acc = 0;
+    last = performance.now();
+    btnPlayblast.classList.remove('recording');
+    btnPlayblast.textContent = '🎬 Playblast';
+  },
+  getHudInfo() {
+    return {
+      title: 'Test 08 — Marshmallow Man & Cotton Shirt',
+      subtitle: `Softbody: ${currentSoftDiv}×  |  Cloth: ${currentClothDiv}×  |  Substeps: ${world.substeps}`,
+      bottomLeft: stateLabel.textContent
+    };
+  },
+  showNote: RoomEnv.showNote
+});
+
+btnPlayblast.addEventListener('click', () => {
+  if (playblastCtrl.isActive()) {
+    playblastCtrl.stop();
+  } else {
+    playblastPopover.classList.toggle('open');
+  }
+});
+
+btnPlayblastStart.addEventListener('click', () => {
+  playblastCtrl.runPlayblast({
+    fps: parseInt(pbFpsSelect.value, 10) || 30,
+    duration: parseInt(pbDurationSelect.value, 10) || 8,
+    resolution: pbResSelect.value || '720p',
+    resetFirst: pbResetCheck.checked,
+    hudBurnIn: pbHudCheck.checked,
+    onProgress(f, total) {
+      btnPlayblast.textContent = `⏹ Stop (${f}/${total})`;
+    }
+  });
+});
+
+function frame(now) {
+  tickFps(now);
+  if (playblastCtrl.isActive()) {
+    last = now;
+    requestAnimationFrame(frame);
+    return;
+  }
+
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+
+  advanceAnimationAndArmLift(dt);
+
+  // 2. Pin soft-body particles to bone spheres & step XPBD soft-body + Cotton Shirt physics
   acc += dt;
   if (acc >= world.dt) {
     updateSkeletonBlobInteraction();
