@@ -850,15 +850,49 @@ function calcSignedTetVol(a, b, c, d) {
   return ((uy * vz - uz * vy) * wx + (uz * vx - ux * vz) * wy + (ux * vy - uy * vx) * wz) / 6;
 }
 
-// Light Gray PBR Shader for the Marshmallow Man Meta-Mesh
+// PBR + Pre-Integrated Subsurface Scattering (SSS) Human Skin Shader for the Character Meta-Mesh
 const blobMat = new THREE.MeshPhysicalMaterial({
-  color: 0xd8dde4,
-  roughness: 0.42,
-  metalness: 0.03,
-  clearcoat: 0.14,
-  clearcoatRoughness: 0.38,
-  reflectivity: 0.35
+  color: 0xe6ad90,          // Warm natural human epidermal skin tone
+  roughness: 0.45,          // Epidermal micro-roughness
+  metalness: 0.0,           // Dielectric skin
+  reflectivity: 0.28,       // F0 ~= 0.028 (skin IOR ~ 1.38)
+  clearcoat: 0.22,          // Dual-lobe sebaceous lipid specular sheen
+  clearcoatRoughness: 0.34
 });
+
+blobMat.onBeforeCompile = function(shader) {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <lights_fragment_end>',
+    `#include <lights_fragment_end>
+    // Pre-Integrated Dermal Subsurface Scattering (SSS), Terminator Blood Bleed & Epidermal Peach Rim
+    vec3 skinN = normalize( geometry.normal );
+    vec3 skinV = normalize( geometry.viewDir );
+    vec3 dermisRed  = vec3( 0.92, 0.21, 0.11 );
+    vec3 subPeach   = vec3( 0.97, 0.56, 0.40 );
+    #if ( NUM_DIR_LIGHTS > 0 )
+      for ( int i = 0; i < NUM_DIR_LIGHTS; i ++ ) {
+        vec3 lDir = directionalLights[ i ].direction;
+        vec3 lCol = directionalLights[ i ].color;
+        float nDotL = dot( skinN, lDir );
+        // Soft dermal wrap lighting across the shadow terminator
+        float sssWrap = clamp( ( nDotL + 0.48 ) / 1.48, 0.0, 1.0 );
+        // Red-coral hemoglobin scattering band concentrated right along the shadow terminator
+        float termBand = smoothstep( -0.45, 0.04, nDotL ) * ( 1.0 - smoothstep( 0.02, 0.50, nDotL ) );
+        // Forward-scattered ear/limb/roll translucency
+        float backTrans = pow( clamp( dot( skinV, -lDir ) + 0.25 * ( 1.0 - max( 0.0, nDotL ) ), 0.0, 1.0 ), 2.6 ) * ( 1.0 - 0.65 * max( 0.0, nDotL ) );
+        reflectedLight.directDiffuse += diffuseColor.rgb * lCol * (
+          dermisRed * ( termBand * 0.44 + backTrans * 0.28 ) +
+          subPeach * ( sssWrap * 0.20 )
+        );
+      }
+    #endif
+    // Epidermal velvet peach-fuzz Fresnel rim & warm dermal crease bounce
+    float skinRim = 1.0 - max( 0.0, dot( skinN, skinV ) );
+    float peachFuzz = pow( skinRim, 3.2 );
+    reflectedLight.indirectDiffuse += vec3( 1.0, 0.74, 0.62 ) * ( peachFuzz * 0.14 ) + diffuseColor.rgb * vec3( 0.86, 0.34, 0.24 ) * 0.16;
+    `
+  );
+};
 
 /* ================= Cyan Checker Cotton Shirt Material ================= */
 function createCyanCheckerShirtTextures() {
