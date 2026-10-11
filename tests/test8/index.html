@@ -374,9 +374,9 @@
       <div class="soft-dial">
         <div class="soft-dial-header">
           <span>Walk Speed</span>
-          <span id="val-walkspeed" class="soft-dial-val">100%</span>
+          <span id="val-walkspeed" class="soft-dial-val">50%</span>
         </div>
-        <input id="slider-walkspeed" class="soft-slider" type="range" min="0" max="200" step="5" value="100">
+        <input id="slider-walkspeed" class="soft-slider" type="range" min="0" max="200" step="5" value="50">
       </div>
       <div class="soft-dial">
         <div class="soft-dial-header">
@@ -540,7 +540,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="../../src/xpbd.js?v=40"></script>
 <script src="../../src/room.js?v=25"></script>
-<script src="../../src/playblast.js?v=1"></script>
+<script src="../../src/playblast.js?v=42"></script>
 <script>
 (() => {
 'use strict';
@@ -2580,7 +2580,7 @@ const valWalkSpeed    = document.getElementById('val-walkspeed');
 const valArmLift      = document.getElementById('val-armlift');
 const valClothArmLift = document.getElementById('val-cloth-armlift');
 
-let walkSpeedScale = 1.00;
+let walkSpeedScale = 0.50;
 let armLiftRad = THREE.MathUtils.degToRad(22);
 
 function syncArmLiftValue(deg) {

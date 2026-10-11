@@ -130,13 +130,16 @@
       ...u16(0xffff)          // color_table_id = -1
     ];
 
+    // QuickTime 'colr' ('nclc') atom: ITU-R BT.709 (1 = BT.709 primaries, 1 = BT.709 transfer, 1 = BT.709 matrix)
+    const colrBox = box('colr', str4('nclc'), u16(1), u16(1), u16(1));
+    const fielBox = box('fiel', [1, 0]);
     const paspBox = box('pasp', u32(1), u32(1));
     let sampleEntryBox;
     if (codec === 'avc1' && avcCBytes && avcCBytes.byteLength > 0) {
       const avcCBox = box('avcC', avcCBytes);
-      sampleEntryBox = box('avc1', visualEntryHeader, avcCBox, paspBox);
+      sampleEntryBox = box('avc1', visualEntryHeader, avcCBox, colrBox, fielBox, paspBox);
     } else {
-      sampleEntryBox = box('jpeg', visualEntryHeader, paspBox);
+      sampleEntryBox = box('jpeg', visualEntryHeader, colrBox, fielBox, paspBox);
     }
 
     const stsdBox = box('stsd', u32(0), u32(1), sampleEntryBox);
@@ -374,7 +377,48 @@
       const compCanvas = document.createElement('canvas');
       compCanvas.width = outW;
       compCanvas.height = outH;
-      const compCtx = compCanvas.getContext('2d', { alpha: false });
+      const compCtx = compCanvas.getContext('2d', {
+        alpha: false,
+        colorSpace: 'srgb',
+        willReadFrequently: true
+      });
+      const i420Buffer = new Uint8Array((outW * outH * 3) >> 1);
+
+      // Exact ITU-R BT.709 studio-range (16..235 Y, 16..240 CbCr) RGBA -> I420 conversion
+      // Eliminates browser/GPU RGB->YUV BT.601 matrix & full-range VUI mismatches in QuickTime .mov
+      function rgbaToI420Bt709(rgba, width, height, out) {
+        const ySize = width * height;
+        const uvWidth = width >> 1;
+        const uvHeight = height >> 1;
+        const uOffset = ySize;
+        const vOffset = ySize + uvWidth * uvHeight;
+
+        for (let j = 0; j < height; j++) {
+          const rowOff = j * width;
+          const rgbaRow = rowOff << 2;
+          for (let i = 0; i < width; i++) {
+            const idx = rgbaRow + (i << 2);
+            const r = rgba[idx], g = rgba[idx + 1], b = rgba[idx + 2];
+            out[rowOff + i] = ((47 * r + 157 * g + 16 * b + 128) >> 8) + 16;
+          }
+        }
+
+        let uvIdx = 0;
+        for (let j = 0; j < height; j += 2) {
+          const row0 = (j * width) << 2;
+          const row1 = ((j + 1) * width) << 2;
+          for (let i = 0; i < width; i += 2) {
+            const p00 = row0 + (i << 2), p01 = p00 + 4;
+            const p10 = row1 + (i << 2), p11 = p10 + 4;
+            const r = (rgba[p00] + rgba[p01] + rgba[p10] + rgba[p11] + 2) >> 2;
+            const g = (rgba[p00 + 1] + rgba[p01 + 1] + rgba[p10 + 1] + rgba[p11 + 1] + 2) >> 2;
+            const b = (rgba[p00 + 2] + rgba[p01 + 2] + rgba[p10 + 2] + rgba[p11 + 2] + 2) >> 2;
+            out[uOffset + uvIdx] = ((-26 * r - 86 * g + 112 * b + 128) >> 8) + 128;
+            out[vOffset + uvIdx] = ((112 * r - 102 * g - 10 * b + 128) >> 8) + 128;
+            uvIdx++;
+          }
+        }
+      }
 
       // Initialize WebCodecs H.264 VideoEncoder if supported, else fallback to Motion-JPEG
       let codec = 'jpeg';
@@ -454,10 +498,24 @@
           });
         }
 
-        // 4. Encode frame
+        // 4. Encode frame with explicit ITU-R BT.709 studio-range I420 colorSpace
         if (codec === 'avc1' && videoEncoder && videoEncoder.state === 'configured') {
+          const imgData = compCtx.getImageData(0, 0, outW, outH);
+          rgbaToI420Bt709(imgData.data, outW, outH, i420Buffer);
           const timestampUs = Math.round(((f - 1) * 1_000_000) / fps);
-          const vFrame = new VideoFrame(compCanvas, { timestamp: timestampUs, duration: Math.round(1_000_000 / fps) });
+          const vFrame = new VideoFrame(i420Buffer, {
+            format: 'I420',
+            codedWidth: outW,
+            codedHeight: outH,
+            timestamp: timestampUs,
+            duration: Math.round(1_000_000 / fps),
+            colorSpace: {
+              primaries: 'bt709',
+              transfer: 'bt709',
+              matrix: 'bt709',
+              fullRange: false
+            }
+          });
           const isKey = (f === 1) || ((f - 1) % fps === 0);
           videoEncoder.encode(vFrame, { keyFrame: isKey });
           vFrame.close();
