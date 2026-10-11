@@ -374,9 +374,9 @@
       <div class="soft-dial">
         <div class="soft-dial-header">
           <span>Walk Speed</span>
-          <span id="val-walkspeed" class="soft-dial-val">50%</span>
+          <span id="val-walkspeed" class="soft-dial-val">100%</span>
         </div>
-        <input id="slider-walkspeed" class="soft-slider" type="range" min="0" max="200" step="5" value="50">
+        <input id="slider-walkspeed" class="soft-slider" type="range" min="0" max="200" step="5" value="100">
       </div>
       <div class="soft-dial">
         <div class="soft-dial-header">
@@ -530,6 +530,7 @@
     <option value="1">Mocap 2: Brisk Stride</option>
     <option value="2">Mocap 3: Heavy Prowl</option>
   </select>
+  <button id="btn-shirt-toggle" class="cloth-active" title="Enable or disable the Cotton Shirt simulation & mesh">Shirt: On</button>
   <button id="btn-subdiv-soft" class="active" title="Toggle Softbody Mesh Divisions (takes effect on clicking Bind Pose)">Softbody 2×: On</button>
   <button id="btn-subdiv-cloth" class="cloth-active" title="Toggle Cloth Shirt Mesh Divisions (takes effect on clicking Bind Pose)">Cloth 2×: On</button>
   <button id="btn-wire">Wireframe</button>
@@ -994,6 +995,7 @@ shirtMesh.castShadow = true;
 shirtMesh.receiveShadow = true;
 scene.add(shirtMesh);
 
+let shirtEnabled = true;
 let currentSoftDiv = 2;
 let currentClothDiv = 2;
 let currentShirtNx = 61;
@@ -1077,6 +1079,7 @@ function syncBlobMesh() {
 }
 
 function syncShirtMesh() {
+  if (!shirtEnabled) return;
   const posAttr = shirtGeom.attributes.position;
   if (!posAttr) return;
   const arr = posAttr.array;
@@ -1794,7 +1797,8 @@ function buildCharacterMeshes(softDiv, clothDiv) {
   shirtMesh.geometry = shirtGeom;
   syncShirtMesh();
 
-  draggableParticles = shirtParticles.concat(blobParticles);
+  shirtMesh.visible = shirtEnabled;
+  draggableParticles = shirtEnabled ? shirtParticles.concat(blobParticles) : blobParticles;
 }
 
 buildCharacterMeshes(2, 2);
@@ -1820,6 +1824,7 @@ const skinGridBuckets  = Array.from({ length: SKIN_GX * SKIN_GY }, () => []);
 const innerGridBuckets = Array.from({ length: SKIN_GX * SKIN_GY }, () => []);
 
 function rebuildSkinGrid() {
+  if (!shirtEnabled) return;
   for (let i = 0; i < skinGridBuckets.length; i++) skinGridBuckets[i].length = 0;
   for (let i = 0; i < innerGridBuckets.length; i++) innerGridBuckets[i].length = 0;
 
@@ -1883,6 +1888,7 @@ function rebuildSkinGrid() {
 }
 
 function solveShirtBodyCollision(h, applyFrictionCarry) {
+  if (!shirtEnabled) return;
   const dragK = Math.max(0, Math.min(1, clothDampingVal * h * 0.5));
   const contactFric = Math.min(0.36, shirtBodyFriction * 0.32);
   const fricCarry = applyFrictionCarry ? Math.min(0.82, shirtBodyFriction * 1.85) : 0;
@@ -2110,7 +2116,7 @@ world.onParticleSubstep = function(wWorld, h, substepIdx) {
   solveShirtBodyCollision(h, true);
 
   // 3b. When Cloth is subdivided 2x (60x62 grid), run 2 stretch-only structural sweeps with damped px so 2x cloth has zero extra gravity sag and zero buckling flutter
-  if (currentClothDiv > 1) {
+  if (shirtEnabled && currentClothDiv > 1) {
     for (let it = 0; it < 2; it++) {
       for (let i = 0; i < shirtStructConstraints.length; i++) {
         const c = shirtStructConstraints[i];
@@ -2574,7 +2580,7 @@ const valWalkSpeed    = document.getElementById('val-walkspeed');
 const valArmLift      = document.getElementById('val-armlift');
 const valClothArmLift = document.getElementById('val-cloth-armlift');
 
-let walkSpeedScale = 0.50;
+let walkSpeedScale = 1.00;
 let armLiftRad = THREE.MathUtils.degToRad(22);
 
 function syncArmLiftValue(deg) {
@@ -2709,7 +2715,7 @@ function applyClothSliders() {
   for (let i = 0; i < shirtParticles.length; i++) {
     const sp = shirtParticles[i];
     sp.friction = shirtBodyFriction;
-    sp.invM = (sp._side === 0) ? invShirtMass * 0.5 : invShirtMass;
+    sp.invM = !shirtEnabled ? 0 : ((sp._side === 0) ? invShirtMass * 0.5 : invShirtMass);
   }
 }
 
@@ -2761,6 +2767,25 @@ tabToggle.addEventListener('click', () => {
 updateSlidersUI();
 
 /* ================= HUD Controls & Keyboard Shortcuts ================= */
+const btnShirtToggle = document.getElementById('btn-shirt-toggle');
+btnShirtToggle.addEventListener('click', () => {
+  shirtEnabled = !shirtEnabled;
+  shirtMesh.visible = shirtEnabled;
+  btnShirtToggle.classList.toggle('cloth-active', shirtEnabled);
+  btnShirtToggle.textContent = shirtEnabled ? 'Shirt: On' : 'Shirt: Off';
+  draggableParticles = shirtEnabled ? shirtParticles.concat(blobParticles) : blobParticles;
+  applyClothSliders();
+  if (shirtEnabled) {
+    startBindPoseSequence();
+    RoomEnv.showNote('Cotton Shirt enabled — resetting to Bind Pose', 2200);
+  } else {
+    for (let i = 0; i < shirtParticles.length; i++) {
+      shirtParticles[i].v.set(0, 0, 0);
+    }
+    RoomEnv.showNote('Cotton Shirt disabled', 1800);
+  }
+});
+
 btnSubdivSoft.addEventListener('click', () => {
   pendingSoftDiv = pendingSoftDiv === 1 ? 2 : 1;
   updateSubdivButtonsUI();
@@ -2886,7 +2911,7 @@ const playblastCtrl = Playblast.createPlayblastController({
   getHudInfo() {
     return {
       title: 'Test 08 — Marshmallow Man & Cotton Shirt',
-      subtitle: `Softbody: ${currentSoftDiv}×  |  Cloth: ${currentClothDiv}×  |  Substeps: ${world.substeps}`,
+      subtitle: `Softbody: ${currentSoftDiv}×  |  Cloth: ${shirtEnabled ? currentClothDiv + '×' : 'Off'}  |  Substeps: ${world.substeps}`,
       bottomLeft: stateLabel.textContent
     };
   },
