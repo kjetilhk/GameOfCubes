@@ -615,11 +615,10 @@ const PIN_BONE_NAMES = new Set([
   'Head',
   'LeftForeArm', 'RightForeArm',
   'LeftHand', 'RightHand',
-  'LeftLeg', 'RightLeg',
   'LeftFoot', 'RightFoot'
 ]);
 
-// Build hierarchical THREE.Bone tree and parent a poly sphere + poly cylinder to every joint
+// Build hierarchical THREE.Bone tree and parent a poly sphere + poly cylinder to every joint (hidden from render)
 for (const def of BONE_DEFS) {
   const bone = new THREE.Bone();
   bone.name = def.name;
@@ -629,8 +628,7 @@ for (const def of BONE_DEFS) {
   const isPinBone = PIN_BONE_NAMES.has(def.name);
   const sphereMesh = new THREE.Mesh(unitSphereGeom, isPinBone ? headSphereMat : jointSphereMat);
   sphereMesh.scale.setScalar(def.rSphere);
-  sphereMesh.castShadow = true;
-  sphereMesh.receiveShadow = true;
+  sphereMesh.visible = false;
   bone.add(sphereMesh);
   bone._sphereMesh = sphereMesh;
   bone._rSphere = def.rSphere;
@@ -651,8 +649,7 @@ for (const def of BONE_DEFS) {
       cylMesh.position.copy(offset).multiplyScalar(0.5);
       const dir = offset.clone().normalize();
       cylMesh.quaternion.setFromUnitVectors(upVec, dir);
-      cylMesh.castShadow = true;
-      cylMesh.receiveShadow = true;
+      cylMesh.visible = false;
       parentBone.add(cylMesh);
 
       const isCore = def.name.startsWith('Spine') || def.name.includes('Leg') || def.name.includes('Foot');
@@ -854,8 +851,6 @@ const pinAnchors = {
   rElbow: bonesByName['RightForeArm']._sphereMesh,
   lHand:  bonesByName['LeftHand']._sphereMesh,
   rHand:  bonesByName['RightHand']._sphereMesh,
-  lKnee:  bonesByName['LeftLeg']._sphereMesh,
-  rKnee:  bonesByName['RightLeg']._sphereMesh,
   lFoot:  bonesByName['LeftFoot']._sphereMesh,
   rFoot:  bonesByName['RightFoot']._sphereMesh
 };
@@ -1234,7 +1229,7 @@ function buildCharacterMeshes(softDiv, clothDiv) {
     }
   }
 
-  // Pin Head, Elbows, Hands, Knees, and Feet particles directly to their bone spheres
+  // Pin Head, Elbows, Hands, and Feet particles directly to their bone spheres (knees unpinned!)
   const pinBindPos = {};
   const pinInvMat = {};
   for (const [key, mesh] of Object.entries(pinAnchors)) {
@@ -1257,6 +1252,7 @@ function buildCharacterMeshes(softDiv, clothDiv) {
 
     const pinDot = new THREE.Mesh(pinMarkerGeom, pinMarkerMat);
     pinDot.position.copy(p._pinLocalPos);
+    pinDot.visible = false;
     sphereMesh.add(pinDot);
     pinDotMeshes.push(pinDot);
   }
@@ -1280,10 +1276,6 @@ function buildCharacterMeshes(softDiv, clothDiv) {
       attachParticleToAnchor(p, 'lFoot');
     } else if (px < -0.02 && py <= -1.30) {
       attachParticleToAnchor(p, 'rFoot');
-    } else if (px > 0.02 && py >= -1.11 && py <= -0.94 && Math.hypot(px - pinBindPos.lKnee.x, py - pinBindPos.lKnee.y, pz - pinBindPos.lKnee.z) <= 0.135) {
-      attachParticleToAnchor(p, 'lKnee');
-    } else if (px < -0.02 && py >= -1.11 && py <= -0.94 && Math.hypot(px - pinBindPos.rKnee.x, py - pinBindPos.rKnee.y, pz - pinBindPos.rKnee.z) <= 0.135) {
-      attachParticleToAnchor(p, 'rKnee');
     }
   }
 
