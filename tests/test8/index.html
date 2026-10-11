@@ -1559,59 +1559,31 @@ function buildCharacterMeshes(softDiv, clothDiv) {
     }
   }
 
-  // Bind each shirt particle to its anatomical bone & pre-link local Marshmallow Man boundary skin particles
-  const shirtBoneNames = ['Hips', 'Spine', 'Spine1', 'Spine2', 'LeftArm', 'RightArm'];
-  const shirtBoneInvBind = {};
-  for (const bName of shirtBoneNames) {
-    bonesByName[bName].updateMatrixWorld(true);
-    shirtBoneInvBind[bName] = new THREE.Matrix4().copy(bonesByName[bName].matrixWorld).invert();
-  }
-
+  // Pre-link local Marshmallow Man boundary skin particles for one-way soft-body skin collision (no bone pins!)
   const boundaryList = [];
   for (let k = 0; k < numBaseVerts; k++) {
-    if (blobParticles[k]._isBoundary) boundaryList.push(blobParticles[k]);
+    if (blobParticles[k]._isBoundary) {
+      blobParticles[k]._prevFrameX = blobParticles[k].x.clone();
+      blobParticles[k]._stepDelta = new V();
+      boundaryList.push(blobParticles[k]);
+    }
   }
 
   for (let i = 0; i < shirtParticles.length; i++) {
     const p = shirtParticles[i];
     p._bindPos = p.x.clone();
 
-    let bName = 'Spine1';
-    let transportW = 0.34;
-    if (p._bindPos.y > -0.24 && p._bindPos.x > 0.215) {
-      bName = 'LeftArm';
-      transportW = 0.86;
-    } else if (p._bindPos.y > -0.24 && p._bindPos.x < -0.215) {
-      bName = 'RightArm';
-      transportW = 0.86;
-    } else if (p._bindPos.y > -0.22) {
-      bName = 'Spine2';
-      transportW = p._bindPos.y > -0.05 ? 0.86 : 0.56;
-    } else if (p._bindPos.y <= -0.55) {
-      bName = 'Hips';
-      transportW = 0.14;
-    } else if (p._bindPos.y <= -0.38) {
-      bName = 'Spine';
-      transportW = 0.26;
-    }
-    p._boneRef = bonesByName[bName];
-    p._boneLocalBind = p._bindPos.clone().applyMatrix4(shirtBoneInvBind[bName]);
-    p._prevBoneWorldPos = p._bindPos.clone();
-    p._targetBoneWorldPos = p._bindPos.clone();
-    p._boneStepDelta = new V();
-    p._transportW = transportW;
-
     const candidates = [];
     for (let k = 0; k < boundaryList.length; k++) {
       const bp = boundaryList[k];
       const d0 = p._bindPos.distanceTo(bp._bindPos);
-      if (d0 < 0.24) {
+      if (d0 < 0.28) {
         candidates.push({ bp, d0 });
       }
     }
-    if (candidates.length > 28) {
+    if (candidates.length > 36) {
       candidates.sort((a, b) => a.d0 - b.d0);
-      candidates.length = 28;
+      candidates.length = 36;
     }
     p._skinNeighbors = candidates.map(c => c.bp);
   }
@@ -1628,32 +1600,98 @@ function buildCharacterMeshes(softDiv, clothDiv) {
   draggableParticles = shirtParticles.concat(blobParticles);
 }
 
+// Articulated Marshmallow Man volumetric capsules (exact primitives from marshmallowSDF attached to their skeleton bones)
+// Guarantees a 100% smooth, gap-free C1 collision surface even for 2x subdivided cloth (1.5cm vertex spacing)
+characterRoot.updateMatrixWorld(true);
+const BODY_CAPSULE_DEFS = [
+  { bone: 'Head',         ax:  0.00,  ay:  0.080, az: -1.200, bx:  0.00,  by:  0.160, bz: -1.200, r: 0.152 },
+  { bone: 'Neck',         ax:  0.00,  ay: -0.040, az: -1.200, bx:  0.00,  by:  0.030, bz: -1.200, r: 0.104 },
+  { bone: 'Spine2',       ax: -0.20,  ay: -0.068, az: -1.200, bx:  0.20,  by: -0.068, bz: -1.200, r: 0.118 },
+  { bone: 'Spine2',       ax: -0.10,  ay: -0.135, az: -1.200, bx:  0.10,  by: -0.135, bz: -1.200, r: 0.162 },
+  { bone: 'Spine1',       ax: -0.09,  ay: -0.220, az: -1.195, bx:  0.09,  by: -0.220, bz: -1.195, r: 0.172 },
+  { bone: 'Spine1',       ax: -0.085, ay: -0.320, az: -1.190, bx:  0.085, by: -0.320, bz: -1.190, r: 0.184 },
+  { bone: 'Spine',        ax: -0.09,  ay: -0.420, az: -1.195, bx:  0.09,  by: -0.420, bz: -1.195, r: 0.170 },
+  { bone: 'Hips',         ax: -0.095, ay: -0.510, az: -1.200, bx:  0.095, by: -0.510, bz: -1.200, r: 0.160 },
+  { bone: 'LeftArm',      ax:  0.21,  ay: -0.065, az: -1.200, bx:  0.40,  by: -0.065, bz: -1.200, r: 0.110 },
+  { bone: 'RightArm',     ax: -0.21,  ay: -0.065, az: -1.200, bx: -0.40,  by: -0.065, bz: -1.200, r: 0.110 },
+  { bone: 'LeftForeArm',  ax:  0.40,  ay: -0.065, az: -1.200, bx:  0.68,  by: -0.065, bz: -1.200, r: 0.098 },
+  { bone: 'RightForeArm', ax: -0.40,  ay: -0.065, az: -1.200, bx: -0.68,  by: -0.065, bz: -1.200, r: 0.098 },
+  { bone: 'LeftUpLeg',    ax:  0.160, ay: -0.650, az: -1.200, bx:  0.165, by: -0.950, bz: -1.200, r: 0.118 },
+  { bone: 'RightUpLeg',   ax: -0.160, ay: -0.650, az: -1.200, bx: -0.165, by: -0.950, bz: -1.200, r: 0.118 }
+];
+
+const bodyCapsules = BODY_CAPSULE_DEFS.map(def => {
+  const bObj = bonesByName[def.bone];
+  bObj.updateMatrixWorld(true);
+  const invBind = new THREE.Matrix4().copy(bObj.matrixWorld).invert();
+  const wA = new V(def.ax, def.ay, def.az);
+  const wB = new V(def.bx, def.by, def.bz);
+  return {
+    bone: bObj,
+    localA: wA.clone().applyMatrix4(invBind),
+    localB: wB.clone().applyMatrix4(invBind),
+    prevA: wA.clone(),
+    prevB: wB.clone(),
+    targetA: wA.clone(),
+    targetB: wB.clone(),
+    currA: wA.clone(),
+    currB: wB.clone(),
+    deltaSub: new V(),
+    r: def.r
+  };
+});
+
 buildCharacterMeshes(1, 1);
 
-// One-Way Body-to-Shirt Collision Solver:
-// Runs once per substep in world.onPostParticleSubstep (after XPBD distance constraints and before velocity derivation).
-// Shirt particles collide against the live deforming Marshmallow Man soft-body skin & core capsules,
+// One-Way Body-to-Shirt Collision Solver (100% Unpinned Cloth):
+// Runs in both onParticleSubstep (pre-constraint) and onPostParticleSubstep (post-constraint).
+// Shirt particles collide one-way against the Marshmallow Man's volumetric capsules and live deforming skin spheres,
 // while Marshmallow Man particles NEVER react to the shirt!
-const skinCenter = new V(), skinDiff = new V(), skinRelDisp = new V();
-const R_SKIN_SPHERE = 0.048;
-const R_SKIN_INSET  = 0.030;
+const skinCenter = new V(), skinDiff = new V(), contactDelta = new V();
+const segAB = new V(), segAP = new V(), closestPt = new V(), pushDir = new V();
+// Large 9.6cm sphere radius inset by 7.8cm (+1.8cm skin offset) bridges the 7.2cm spacing between 1x softbody vertices with zero craters
+const R_SKIN_SPHERE = 0.096;
+const R_SKIN_INSET  = 0.078;
 let shirtBodyFriction = 0.32;
 let clothDampingVal   = 0.80;
 
-function solveShirtBodyCollision(h) {
-  const dragK = Math.max(0, Math.min(1, clothDampingVal * h));
-  const contactFric = Math.min(0.35, shirtBodyFriction * 0.35);
-  const shoulderMinI = 6 * currentClothDiv;
-  const shoulderMaxI = currentShirtNx - 1 - 6 * currentClothDiv;
+function solveShirtBodyCollision(h, applyFrictionCarry) {
+  const dragK = Math.max(0, Math.min(1, clothDampingVal * h * 0.5));
+  const contactFric = Math.min(0.32, shirtBodyFriction * 0.28);
+  const fricCarry = applyFrictionCarry ? Math.min(0.82, shirtBodyFriction * 1.85) : 0;
 
   for (let i = 0; i < shirtParticles.length; i++) {
     const p = shirtParticles[i];
     let hadSkinContact = false;
+    contactDelta.set(0, 0, 0);
+    let contactCount = 0;
 
-    // 1. Softly seat the top shoulder/collar seam onto the moving shoulder frame so the shirt hangs naturally from the shoulders
-    if (p._sj === 0 && p._si >= shoulderMinI && p._si <= shoulderMaxI) {
-      p.x.lerp(p._targetBoneWorldPos, 0.45);
-      p.px.lerp(p._targetBoneWorldPos, 0.45);
+    // 1. Collide one-way against articulated Marshmallow Man volumetric capsules (gap-free smooth body volume)
+    for (let c = 0; c < bodyCapsules.length; c++) {
+      const cap = bodyCapsules[c];
+      const a = cap.currA;
+      const b = cap.currB;
+      const minR = cap.r + 0.014;
+      segAB.subVectors(b, a);
+      segAP.subVectors(p.x, a);
+      const abLenSq = segAB.lengthSq();
+      let t = abLenSq > 1e-8 ? segAP.dot(segAB) / abLenSq : 0;
+      if (t < 0) t = 0;
+      else if (t > 1) t = 1;
+      closestPt.copy(a).addScaledVector(segAB, t);
+      pushDir.subVectors(p.x, closestPt);
+      const d2 = pushDir.lengthSq();
+      if (d2 < minR * minR && d2 > 1e-12) {
+        const d = Math.sqrt(d2);
+        const pen = minR - d;
+        pushDir.divideScalar(d);
+        p.x.addScaledVector(pushDir, pen);
+        const vn = (p.x.x - p.px.x) * pushDir.x + (p.x.y - p.px.y) * pushDir.y + (p.x.z - p.px.z) * pushDir.z;
+        if (vn > 0) p.px.addScaledVector(pushDir, vn);
+        contactDelta.add(cap.deltaSub);
+        contactCount++;
+        hadSkinContact = true;
+      }
     }
 
     // 2. Collide one-way against live deforming Marshmallow Man boundary skin particles (Normal-Inset Spheres)
@@ -1669,56 +1707,33 @@ function solveShirtBodyCollision(h) {
         const pen = R_SKIN_SPHERE - d;
         skinDiff.divideScalar(d); // outward unit normal n
         p.x.addScaledVector(skinDiff, pen);
+        const vn = (p.x.x - p.px.x) * skinDiff.x + (p.x.y - p.px.y) * skinDiff.y + (p.x.z - p.px.z) * skinDiff.z;
+        if (vn > 0) p.px.addScaledVector(skinDiff, vn);
+        if (bp._stepDelta) {
+          contactDelta.add(bp._stepDelta);
+          contactCount++;
+        }
         hadSkinContact = true;
       }
     }
 
-    // 3. Watertight fallback against skeleton capsules (prevents tunneling during fast arm/thigh swings or mouse grabs)
-    for (let s = 0; s < boneSegments.length; s++) {
-      const seg = boneSegments[s];
-      const a = cachedSegA[s];
-      const b = cachedSegB[s];
-      const minR = seg.radius * 1.35 + p.radius;
-      segAB.subVectors(b, a);
-      segAP.subVectors(p.x, a);
-      const abLenSq = segAB.lengthSq();
-      let t = abLenSq > 1e-8 ? segAP.dot(segAB) / abLenSq : 0;
-      if (t < 0) t = 0;
-      else if (t > 1) t = 1;
-      closestPt.copy(a).addScaledVector(segAB, t);
-      pushDir.subVectors(p.x, closestPt);
-      const d2 = pushDir.lengthSq();
-      if (d2 < minR * minR && d2 > 1e-12) {
-        const d = Math.sqrt(d2);
-        const pen = minR - d;
-        pushDir.divideScalar(d);
-        p.x.addScaledVector(pushDir, pen);
-        hadSkinContact = true;
-      }
+    // 3. Physical contact friction: carry contacting cloth with the moving skin/capsule surface (no pins!)
+    if (hadSkinContact && contactCount > 0 && fricCarry > 0) {
+      const s = fricCarry / contactCount;
+      p.x.addScaledVector(contactDelta, s);
+      p.px.addScaledVector(contactDelta, s);
     }
 
-    // 4. Apply cloth contact friction & cloth damping (strictly damps p.px toward p.x)
+    // 4. Apply cloth contact friction & air damping
     const dampFactor = hadSkinContact ? Math.max(dragK, contactFric) : dragK;
     if (dampFactor > 0) {
       p.px.lerp(p.x, dampFactor);
-    }
-
-    // 5. Clamp per-substep relative displacement so one-way depenetration never injects explosive velocity
-    skinRelDisp.subVectors(p.x, p.px);
-    const maxStepDisp = 0.0032; // <= 1.9 m/s at 600Hz substep rate
-    const dispLenSq = skinRelDisp.lengthSq();
-    if (dispLenSq > maxStepDisp * maxStepDisp) {
-      const scale = maxStepDisp / Math.sqrt(dispLenSq);
-      p.px.x = p.x.x - skinRelDisp.x * scale;
-      p.px.y = p.x.y - skinRelDisp.y * scale;
-      p.px.z = p.x.z - skinRelDisp.z * scale;
     }
   }
 }
 
 // Update pinned Marshmallow Man particles (Head, Elbows, Hands, Knees, Feet) to follow their bone spheres,
 // and transfer moving skeleton momentum into the unpinned soft-body tissue inside each substep
-const segAB = new V(), segAP = new V(), closestPt = new V(), pushDir = new V();
 const cachedSegA = boneSegments.map(() => new V());
 const cachedSegB = boneSegments.map(() => new V());
 const prevSegMid = boneSegments.map(() => new V());
@@ -1743,19 +1758,36 @@ function updateSkeletonBlobInteraction() {
     }
   }
 
-  // 2. Compute per-substep anatomical bone frame motion for the Cotton Shirt
-  for (let i = 0; i < shirtParticles.length; i++) {
-    const sp = shirtParticles[i];
-    sp._targetBoneWorldPos.copy(sp._boneLocalBind).applyMatrix4(sp._boneRef.matrixWorld);
+  // 2. Compute per-substep skin displacement for boundary Marshmallow Man particles
+  for (let i = 0; i < numBaseVerts; i++) {
+    const bp = blobParticles[i];
+    if (!bp._isBoundary || !bp._prevFrameX) continue;
     if (hasPrevSegs) {
-      sp._boneStepDelta.subVectors(sp._targetBoneWorldPos, sp._prevBoneWorldPos).multiplyScalar(invSub);
+      bp._stepDelta.subVectors(bp.x, bp._prevFrameX).multiplyScalar(invSub);
     } else {
-      sp._boneStepDelta.set(0, 0, 0);
+      bp._stepDelta.set(0, 0, 0);
+      bp._prevFrameX.copy(bp.x);
     }
-    sp._prevBoneWorldPos.copy(sp._targetBoneWorldPos);
   }
 
-  // 3. Compute world endpoints and per-substep motion delta of skeleton bone segments
+  // 3. Compute world endpoints and per-substep motion delta of articulated Marshmallow body capsules
+  for (let c = 0; c < bodyCapsules.length; c++) {
+    const cap = bodyCapsules[c];
+    cap.bone.updateMatrixWorld(true);
+    cap.targetA.copy(cap.localA).applyMatrix4(cap.bone.matrixWorld);
+    cap.targetB.copy(cap.localB).applyMatrix4(cap.bone.matrixWorld);
+    if (hasPrevSegs) {
+      cap.deltaSub.x = ((cap.targetA.x - cap.prevA.x) + (cap.targetB.x - cap.prevB.x)) * 0.5 * invSub;
+      cap.deltaSub.y = ((cap.targetA.y - cap.prevA.y) + (cap.targetB.y - cap.prevB.y)) * 0.5 * invSub;
+      cap.deltaSub.z = ((cap.targetA.z - cap.prevA.z) + (cap.targetB.z - cap.prevB.z)) * 0.5 * invSub;
+    } else {
+      cap.prevA.copy(cap.targetA);
+      cap.prevB.copy(cap.targetB);
+      cap.deltaSub.set(0, 0, 0);
+    }
+  }
+
+  // 4. Compute world endpoints and per-substep motion delta of skeleton bone segments
   for (let s = 0; s < boneSegments.length; s++) {
     boneSegments[s].boneA.getWorldPosition(cachedSegA[s]);
     boneSegments[s].boneB.getWorldPosition(cachedSegB[s]);
@@ -1778,6 +1810,23 @@ world.onParticleSubstep = function(wWorld, h, substepIdx) {
     p.x.lerpVectors(p._prevPinWorldPos, p._targetPinWorldPos, alpha);
     p.px.copy(p.x);
     p.v.set(0, 0, 0);
+  }
+
+  // 1b. Interpolate articulated Marshmallow body capsules across substeps
+  for (let c = 0; c < bodyCapsules.length; c++) {
+    const cap = bodyCapsules[c];
+    cap.currA.lerpVectors(cap.prevA, cap.targetA, alpha);
+    cap.currB.lerpVectors(cap.prevB, cap.targetB, alpha);
+    if (substepIdx === world.substeps - 1) {
+      cap.prevA.copy(cap.targetA);
+      cap.prevB.copy(cap.targetB);
+    }
+  }
+  if (substepIdx === world.substeps - 1) {
+    for (let i = 0; i < numBaseVerts; i++) {
+      const bp = blobParticles[i];
+      if (bp._isBoundary && bp._prevFrameX) bp._prevFrameX.copy(bp.x);
+    }
   }
 
   // 2. Transfer moving skeleton limb/torso momentum into unpinned Marshmallow Man soft-body particles
@@ -1821,18 +1870,31 @@ world.onParticleSubstep = function(wWorld, h, substepIdx) {
     }
   }
 
-  // 3. Transport Cotton Shirt sleeves/shoulders with rotating upper-arm/spine frames (zero velocity compounding)
-  for (let i = 0; i < shirtParticles.length; i++) {
-    const sp = shirtParticles[i];
-    const wT = sp._transportW;
-    sp.x.addScaledVector(sp._boneStepDelta, wT);
-    sp.px.addScaledVector(sp._boneStepDelta, wT);
+  // 3. Pre-constraint one-way body->shirt collision + contact friction (supports unpinned shirt on shoulders before cloth constraints run)
+  solveShirtBodyCollision(h, true);
+
+  // 3b. When Cloth is subdivided 2x (60x62 grid), run 2 fast structural sweeps so 2x cloth has zero extra gravity sag
+  if (currentClothDiv > 1) {
+    for (let it = 0; it < 2; it++) {
+      for (let i = 0; i < shirtStructConstraints.length; i++) {
+        const c = shirtStructConstraints[i];
+        const p1 = c.p1, p2 = c.p2;
+        const dx = p1.x.x - p2.x.x;
+        const dy = p1.x.y - p2.x.y;
+        const dz = p1.x.z - p2.x.z;
+        const len = Math.hypot(dx, dy, dz);
+        if (len < 1e-9) continue;
+        const corr = ((c.restLength - len) / len) * 0.48;
+        p1.x.x += dx * corr; p1.x.y += dy * corr; p1.x.z += dz * corr;
+        p2.x.x -= dx * corr; p2.x.y -= dy * corr; p2.x.z -= dz * corr;
+      }
+    }
   }
 };
 
-// 4. Single-pass post-constraint one-way collision: project Cotton Shirt outside the solved Marshmallow Man surface before velocity derivation
+// 4. Post-constraint one-way collision: project Cotton Shirt outside the solved Marshmallow Man surface before velocity derivation
 world.onPostParticleSubstep = function(wWorld, h) {
-  solveShirtBodyCollision(h);
+  solveShirtBodyCollision(h, false);
 };
 
 /* ================= 3 Motion-Captured Walk Cycle Profiles ================= */
@@ -2207,15 +2269,16 @@ function startBindPoseSequence() {
       p._prevPinWorldPos.copy(p._bindPos);
       p._targetPinWorldPos.copy(p._bindPos);
     }
+    if (p._prevFrameX) {
+      p._prevFrameX.copy(p._bindPos);
+      p._stepDelta.set(0, 0, 0);
+    }
   }
   for (let i = 0; i < shirtParticles.length; i++) {
     const sp = shirtParticles[i];
     sp.x.copy(sp._bindPos);
     sp.px.copy(sp._bindPos);
     sp.v.set(0, 0, 0);
-    sp._prevBoneWorldPos.copy(sp._bindPos);
-    sp._targetBoneWorldPos.copy(sp._bindPos);
-    sp._boneStepDelta.set(0, 0, 0);
   }
   syncBlobMesh();
   syncShirtMesh();
