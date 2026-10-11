@@ -602,7 +602,7 @@ scene.add(keyLight);
 keyLight.target.position.set(0, -0.5, -1.2);
 scene.add(keyLight.target);
 
-const fillLight = new THREE.DirectionalLight(0x90b8f8, 0.45);
+const fillLight = new THREE.DirectionalLight(0x90b8f8, 0.09);
 fillLight.position.set(-3.0, 2.2, 1.5);
 scene.add(fillLight);
 
@@ -610,7 +610,7 @@ const rimLight = new THREE.DirectionalLight(0x60d0ff, 0.38);
 rimLight.position.set(0.0, 2.5, -4.2);
 scene.add(rimLight);
 
-const ambLight = new THREE.AmbientLight(0xd0dcf0, 0.32);
+const ambLight = new THREE.AmbientLight(0xd0dcf0, 0.10);
 scene.add(ambLight);
 
 // Open Infinite-Space Ground Plane (shadow receiver, no walls or ceiling)
@@ -886,10 +886,10 @@ blobMat.onBeforeCompile = function(shader) {
         );
       }
     #endif
-    // Epidermal velvet peach-fuzz Fresnel rim & warm dermal crease bounce
+    // Epidermal velvet peach-fuzz Fresnel rim & subtle dermal crease bounce
     float skinRim = 1.0 - max( 0.0, dot( skinN, skinV ) );
     float peachFuzz = pow( skinRim, 3.2 );
-    reflectedLight.indirectDiffuse += vec3( 1.0, 0.74, 0.62 ) * ( peachFuzz * 0.14 ) + diffuseColor.rgb * vec3( 0.86, 0.34, 0.24 ) * 0.16;
+    reflectedLight.indirectDiffuse += vec3( 1.0, 0.74, 0.62 ) * ( peachFuzz * 0.06 ) + diffuseColor.rgb * vec3( 0.86, 0.34, 0.24 ) * 0.04;
     `
   );
 };
