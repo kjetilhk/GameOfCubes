@@ -1725,7 +1725,7 @@ function buildCharacterMeshes(softDiv, clothDiv) {
       const d = ip._bindPos.distanceTo(boundaryList[k]._bindPos);
       if (d < minD) minD = d;
     }
-    ip._innerR = minD * 0.92;
+    ip._innerR = Math.min(0.052, minD * 0.72);
   }
 
   for (let i = 0; i < shirtParticles.length; i++) {
@@ -1753,7 +1753,7 @@ buildCharacterMeshes(2, 2);
 // Runs in both onParticleSubstep (pre-constraint) and onPostParticleSubstep (post-constraint).
 // Shirt particles collide one-way strictly against the Marshmallow Man meta-mesh (its interior volumetric
 // soft-body particles and its outer boundary skin particles with live surface normals), while the meta-mesh NEVER reacts to the shirt!
-const skinCenter = new V(), skinDiff = new V(), contactDelta = new V();
+const skinCenter = new V(), skinDiff = new V(), contactDelta = new V(), netPush = new V();
 const segAB = new V(), segAP = new V(), closestPt = new V(), pushDir = new V();
 // 10.5cm sphere radius inset by 8.6cm (+1.9cm skin offset) smoothly bridges the meta-mesh boundary vertices
 const R_SKIN_SPHERE = 0.105;
@@ -1762,11 +1762,11 @@ let shirtBodyFriction = 0.32;
 let clothDampingVal   = 0.80;
 
 // Live 3D Spatial Grid for Marshmallow Man Meta-Mesh (boundary skin particles + interior volumetric particles):
-// Uses 3x3 cell neighborhood scatter so 100% of meta-mesh particles within 9.5cm of any shirt vertex are found every frame!
-const SKIN_GX = 20, SKIN_GY = 22, SKIN_GZ = 2;
-const SKIN_CELL = 0.095;
+// Uses 3x3 cell neighborhood scatter with 0.16m cell width so 100% of meta-mesh particles within 15cm of any shirt vertex are found every frame without broadphase ping-pong!
+const SKIN_GX = 20, SKIN_GY = 22;
+const SKIN_CELL = 0.16;
 const SKIN_MIN_X = -0.95, SKIN_MIN_Y = -1.45;
-const skinGridBuckets  = Array.from({ length: SKIN_GX * SKIN_GY * SKIN_GZ }, () => []);
+const skinGridBuckets  = Array.from({ length: SKIN_GX * SKIN_GY }, () => []);
 const innerGridBuckets = Array.from({ length: SKIN_GX * SKIN_GY }, () => []);
 
 function rebuildSkinGrid() {
@@ -1780,13 +1780,9 @@ function rebuildSkinGrid() {
     const cy = Math.floor((bp.x.y - SKIN_MIN_Y) / SKIN_CELL);
     const x0 = Math.max(0, cx - 1), x1 = Math.min(SKIN_GX - 1, cx + 1);
     const y0 = Math.max(0, cy - 1), y1 = Math.min(SKIN_GY - 1, cy + 1);
-    const zFront = bp.x.z >= -1.26;
-    const zBack  = bp.x.z <= -1.14;
     for (let jy = y0; jy <= y1; jy++) {
       for (let jx = x0; jx <= x1; jx++) {
-        const base = (jy * SKIN_GX + jx) * 2;
-        if (zFront) skinGridBuckets[base].push(bp);
-        if (zBack)  skinGridBuckets[base + 1].push(bp);
+        skinGridBuckets[jy * SKIN_GX + jx].push(bp);
       }
     }
   }
@@ -1815,19 +1811,18 @@ function rebuildSkinGrid() {
     const ix = Math.floor((px - SKIN_MIN_X) / SKIN_CELL);
     const iy = Math.floor((py - SKIN_MIN_Y) / SKIN_CELL);
     if (ix >= 0 && ix < SKIN_GX && iy >= 0 && iy < SKIN_GY) {
-      const gz = pz >= -1.20 ? 0 : 1;
-      const cell = skinGridBuckets[(iy * SKIN_GX + ix) * 2 + gz];
+      const cell = skinGridBuckets[iy * SKIN_GX + ix];
       for (let k = 0; k < cell.length; k++) {
         const bp = cell[k];
         const dx = px - bp.x.x, dy = py - bp.x.y, dz = pz - bp.x.z;
-        if (dx * dx + dy * dy + dz * dz < 0.0090) {
+        if (dx * dx + dy * dy + dz * dz < 0.0225) {
           liveNbrs.push(bp);
         }
       }
       const iCell = innerGridBuckets[iy * SKIN_GX + ix];
       for (let k = 0; k < iCell.length; k++) {
         const ip = iCell[k];
-        const rCheck = ip._innerR + 0.035;
+        const rCheck = ip._innerR + 0.085;
         const dx = px - ip.x.x, dy = py - ip.x.y, dz = pz - ip.x.z;
         if (dx * dx + dy * dy + dz * dz < rCheck * rCheck) {
           liveInner.push(ip);
@@ -1839,7 +1834,7 @@ function rebuildSkinGrid() {
 
 function solveShirtBodyCollision(h, applyFrictionCarry) {
   const dragK = Math.max(0, Math.min(1, clothDampingVal * h * 0.5));
-  const contactFric = Math.min(0.32, shirtBodyFriction * 0.28);
+  const contactFric = Math.min(0.36, shirtBodyFriction * 0.32);
   const fricCarry = applyFrictionCarry ? Math.min(0.82, shirtBodyFriction * 1.85) : 0;
 
   for (let i = 0; i < shirtParticles.length; i++) {
@@ -1847,6 +1842,11 @@ function solveShirtBodyCollision(h, applyFrictionCarry) {
     let hadSkinContact = false;
     contactDelta.set(0, 0, 0);
     let contactCount = 0;
+
+    // Order-independent weighted normal accumulation across all contacting interior & boundary skin spheres
+    netPush.set(0, 0, 0);
+    let weightSum = 0;
+    let maxPen = 0;
 
     // 1. Collide one-way against interior Marshmallow Man meta-mesh particles (solid soft-body volume, zero bone collision)
     const innerNbrs = p._liveInnerNbrs;
@@ -1858,10 +1858,11 @@ function solveShirtBodyCollision(h, applyFrictionCarry) {
       if (d2 < minR * minR && d2 > 1e-12) {
         const d = Math.sqrt(d2);
         const pen = minR - d;
+        const w = pen * pen + 1e-4;
         skinDiff.divideScalar(d);
-        p.x.addScaledVector(skinDiff, pen);
-        const vn = (p.x.x - p.px.x) * skinDiff.x + (p.x.y - p.px.y) * skinDiff.y + (p.x.z - p.px.z) * skinDiff.z;
-        if (vn > 0) p.px.addScaledVector(skinDiff, vn);
+        netPush.addScaledVector(skinDiff, pen * w);
+        weightSum += w;
+        if (pen > maxPen) maxPen = pen;
         if (ip._stepDelta) {
           contactDelta.add(ip._stepDelta);
           contactCount++;
@@ -1882,15 +1883,43 @@ function solveShirtBodyCollision(h, applyFrictionCarry) {
       if (d2 < R_SKIN_SPHERE * R_SKIN_SPHERE && d2 > 1e-12) {
         const d = Math.sqrt(d2);
         const pen = R_SKIN_SPHERE - d;
+        const w = pen * pen + 1e-4;
         skinDiff.divideScalar(d); // outward unit normal n
-        p.x.addScaledVector(skinDiff, pen);
-        const vn = (p.x.x - p.px.x) * skinDiff.x + (p.x.y - p.px.y) * skinDiff.y + (p.x.z - p.px.z) * skinDiff.z;
-        if (vn > 0) p.px.addScaledVector(skinDiff, vn);
+        netPush.addScaledVector(skinDiff, pen * w);
+        weightSum += w;
+        if (pen > maxPen) maxPen = pen;
         if (bp._stepDelta) {
           contactDelta.add(bp._stepDelta);
           contactCount++;
         }
         hadSkinContact = true;
+      }
+    }
+
+    if (hadSkinContact && weightSum > 0) {
+      netPush.divideScalar(weightSum);
+      const pushLen = netPush.length();
+      if (pushLen > 1e-9) {
+        const targetMag = Math.min(maxPen, pushLen * 1.15);
+        netPush.multiplyScalar(targetMag / pushLen);
+        p.x.add(netPush);
+
+        if (applyFrictionCarry) {
+          // Pre-constraint pass: project velocity onto smooth skin tangent plane
+          skinDiff.copy(netPush).divideScalar(targetMag);
+          const vn = (p.x.x - p.px.x) * skinDiff.x + (p.x.y - p.px.y) * skinDiff.y + (p.x.z - p.px.z) * skinDiff.z;
+          p.px.addScaledVector(skinDiff, vn);
+          // Dampen oscillation when pinched in a concave crease (e.g. armpit between opposing arm & torso normals)
+          if (contactCount >= 3 && pushLen < maxPen * 0.75) {
+            p.px.lerp(p.x, 0.50);
+          }
+        } else {
+          // Post-constraint pass: velocity-neutral projection so curved-surface chord pull-in never injects bounce velocity
+          p.px.add(netPush);
+          skinDiff.copy(netPush).divideScalar(targetMag);
+          const vn = (p.x.x - p.px.x) * skinDiff.x + (p.x.y - p.px.y) * skinDiff.y + (p.x.z - p.px.z) * skinDiff.z;
+          if (vn < 0) p.px.addScaledVector(skinDiff, vn);
+        }
       }
     }
 
@@ -2026,7 +2055,7 @@ world.onParticleSubstep = function(wWorld, h, substepIdx) {
   // 3. Pre-constraint one-way body->shirt collision + contact friction (supports unpinned shirt on shoulders before cloth constraints run)
   solveShirtBodyCollision(h, true);
 
-  // 3b. When Cloth is subdivided 2x (60x62 grid), run 2 fast structural sweeps so 2x cloth has zero extra gravity sag
+  // 3b. When Cloth is subdivided 2x (60x62 grid), run 2 stretch-only structural sweeps with damped px so 2x cloth has zero extra gravity sag and zero buckling flutter
   if (currentClothDiv > 1) {
     for (let it = 0; it < 2; it++) {
       for (let i = 0; i < shirtStructConstraints.length; i++) {
@@ -2036,10 +2065,13 @@ world.onParticleSubstep = function(wWorld, h, substepIdx) {
         const dy = p1.x.y - p2.x.y;
         const dz = p1.x.z - p2.x.z;
         const len = Math.hypot(dx, dy, dz);
-        if (len < 1e-9) continue;
-        const corr = ((c.restLength - len) / len) * 0.48;
+        if (len <= c.restLength || len < 1e-9) continue;
+        const corr = ((c.restLength - len) / len) * 0.35;
+        const pxCorr = corr * 0.70;
         p1.x.x += dx * corr; p1.x.y += dy * corr; p1.x.z += dz * corr;
         p2.x.x -= dx * corr; p2.x.y -= dy * corr; p2.x.z -= dz * corr;
+        p1.px.x += dx * pxCorr; p1.px.y += dy * pxCorr; p1.px.z += dz * pxCorr;
+        p2.px.x -= dx * pxCorr; p2.px.y -= dy * pxCorr; p2.px.z -= dz * pxCorr;
       }
     }
   }
