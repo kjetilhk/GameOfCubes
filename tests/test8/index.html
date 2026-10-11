@@ -2716,7 +2716,8 @@ window.addEventListener('keydown', e => {
 
 /* ================= Animation, Deterministic Playblast & Soft-Body Physics Loop ================= */
 const tickFps = RoomEnv.createFpsMeter();
-let acc = 0, last = performance.now();
+const FIXED_SIM_DT = 1 / 60;
+let acc = 0, pbSimAcc = 0, last = performance.now();
 const Z_AXIS = new V(0, 0, 1);
 const qArmLiftL = new Q(), qArmLiftR = new Q();
 
@@ -2744,6 +2745,18 @@ function advanceAnimationAndArmLift(dt) {
   }
 }
 
+// Single canonical 60Hz simulation step shared by both Realtime and Playblast
+// Ensures world.dt is always 1/60s (preserving exact XPBD compliance alphaTilde = alpha/h^2)
+// and that skeleton animation, skin normals, and XPBD substeps advance in 1:1 lockstep.
+function stepSingleSimulationFrame() {
+  world.dt = FIXED_SIM_DT;
+  advanceAnimationAndArmLift(FIXED_SIM_DT);
+  updateSkeletonBlobInteraction();
+  world.step();
+  syncBlobMesh();
+  syncShirtMesh();
+}
+
 const btnPlayblast      = document.getElementById('btn-playblast');
 const playblastPopover  = document.getElementById('playblast-popover');
 const btnPlayblastStart = document.getElementById('btn-playblast-start');
@@ -2758,17 +2771,18 @@ const playblastCtrl = Playblast.createPlayblastController({
   scene,
   camera,
   stepSimulation(stepDt) {
-    world.dt = stepDt;
-    advanceAnimationAndArmLift(stepDt);
-    updateSkeletonBlobInteraction();
-    world.step();
-    syncBlobMesh();
-    syncShirtMesh();
+    pbSimAcc += stepDt;
+    while (pbSimAcc + 1e-6 >= FIXED_SIM_DT) {
+      stepSingleSimulationFrame();
+      pbSimAcc -= FIXED_SIM_DT;
+    }
   },
   onStartPlayblast({ resetFirst, fps, totalFrames, outW, outH, codec }) {
     playblastPopover.classList.remove('open');
     btnPlayblast.classList.add('recording');
     btnPlayblast.textContent = `⏹ Stop (0/${totalFrames})`;
+    pbSimAcc = 0;
+    acc = 0;
     if (resetFirst) {
       startBindPoseSequence();
     }
@@ -2776,7 +2790,8 @@ const playblastCtrl = Playblast.createPlayblastController({
     RoomEnv.showNote(`Playblasting ${totalFrames} frames @ ${fps}fps (${outW}×${outH} ${codecLabel} .mov)...`, 3000);
   },
   onFinishPlayblast() {
-    world.dt = 1 / 60;
+    world.dt = FIXED_SIM_DT;
+    pbSimAcc = 0;
     acc = 0;
     last = performance.now();
     btnPlayblast.classList.remove('recording');
@@ -2824,19 +2839,12 @@ function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
 
-  advanceAnimationAndArmLift(dt);
-
-  // 2. Pin soft-body particles to bone spheres & step XPBD soft-body + Cotton Shirt physics
+  // Step animation + XPBD soft-body + Cotton Shirt physics in exact 60Hz lockstep (identical to Playblast)
   acc += dt;
-  if (acc >= world.dt) {
-    updateSkeletonBlobInteraction();
-    world.step();
-    acc = Math.min(acc - world.dt, world.dt * 0.5);
+  if (acc >= FIXED_SIM_DT) {
+    stepSingleSimulationFrame();
+    acc = Math.min(acc - FIXED_SIM_DT, FIXED_SIM_DT * 0.5);
   }
-
-  // 3. Sync soft-body Marshmallow Man & Cotton Shirt surface vertices & normals
-  syncBlobMesh();
-  syncShirtMesh();
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
