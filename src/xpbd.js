@@ -1157,7 +1157,9 @@ class World {
           const len = t1.length();
           if (len < 1e-9) continue;
           const C = len - c.restLength;
-          const alphaTilde = c.compliance / (h * h);
+          if (C < 0 && c.tensionOnly) continue;
+          const comp = (C < 0 && c.compressCompliance !== undefined) ? c.compressCompliance : c.compliance;
+          const alphaTilde = comp / (h * h);
           const dLambda = (-C - alphaTilde * c.lambda) / (wSum + alphaTilde);
           c.lambda += dLambda;
           t1.multiplyScalar(dLambda / len);

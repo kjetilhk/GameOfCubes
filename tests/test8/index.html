@@ -537,7 +537,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="../../src/xpbd.js?v=25"></script>
+<script src="../../src/xpbd.js?v=40"></script>
 <script src="../../src/room.js?v=25"></script>
 <script src="../../src/playblast.js?v=1"></script>
 <script>
@@ -1049,14 +1049,29 @@ function syncBlobMesh() {
   posAttr.needsUpdate = true;
   blobGeom.computeVertexNormals();
 
-  // Copy live outward unit normals onto Marshmallow Man boundary particles for one-way shirt collision
+  // Copy live outward unit normals onto Marshmallow Man boundary particles and smooth across 1-ring boundary neighbors
   const normArr = blobGeom.attributes.normal.array;
   for (let i = 0; i < numBaseVerts; i++) {
     const bp = blobParticles[i];
     if (bp._isBoundary) {
+      if (!bp._rawNormal) bp._rawNormal = new V(0, 0, 1);
       if (!bp._skinNormal) bp._skinNormal = new V(0, 0, 1);
       const i3 = i * 3;
-      bp._skinNormal.set(normArr[i3], normArr[i3 + 1], normArr[i3 + 2]);
+      bp._rawNormal.set(normArr[i3], normArr[i3 + 1], normArr[i3 + 2]);
+    }
+  }
+  for (let i = 0; i < numBaseVerts; i++) {
+    const bp = blobParticles[i];
+    if (bp._isBoundary) {
+      bp._skinNormal.copy(bp._rawNormal).multiplyScalar(2.0);
+      const bNbrs = bp._boundNbrs;
+      if (bNbrs) {
+        for (let k = 0; k < bNbrs.length; k++) {
+          bp._skinNormal.add(bNbrs[k]._rawNormal);
+        }
+      }
+      const nl = bp._skinNormal.length();
+      if (nl > 1e-6) bp._skinNormal.divideScalar(nl);
     }
   }
 }
@@ -1096,9 +1111,9 @@ function buildCharacterMeshes(softDiv, clothDiv) {
   }
   pinDotMeshes.length = 0;
 
-  // Increase solver substeps to 12 for 2x subdivided cloth/softbody so fine 1.5cm cloth never tunnels or sags through the belly
+  // Increase solver substeps to 16 for 2x subdivided cloth/softbody (h = 1/960s)
   if (softDiv > 1 || clothDiv > 1) {
-    world.substeps = 12;
+    world.substeps = 16;
     world.positionIterations = 1;
   } else {
     world.substeps = 10;
@@ -1302,7 +1317,11 @@ function buildCharacterMeshes(softDiv, clothDiv) {
   }
 
   for (let i = 0; i < blobParticles.length; i++) {
-    blobParticles[i]._bindPos = blobParticles[i].x.clone();
+    const bp = blobParticles[i];
+    bp._bindPos = bp.x.clone();
+    if (bp._isBoundary) {
+      bp._boundNbrs = Array.from(boundaryNeighbors[i]).map(j => blobParticles[j]);
+    }
   }
 
   // Create XPBD Soft-Body Constraints (1-hop tet edges + 2-hop axial bending + TetVolumeConstraints)
@@ -1539,14 +1558,15 @@ function buildCharacterMeshes(softDiv, clothDiv) {
       if (!isShirtNodeUsed(i, j)) continue;
       const x0 = -shirtHalfW + i * sDx;
       const y0 = shirtTopY - j * sDy;
-      let zOff = 0.215;
-      if (j <= sleeveBotJ && (i < 5 * S || i > sNx - 1 - 5 * S)) {
-        const uArm = Math.max(-1, Math.min(1, (y0 - (-0.065)) / 0.145));
-        zOff = 0.145 * Math.sqrt(Math.max(0.08, 1 - uArm * uArm));
-      } else {
-        const uTorso = Math.max(-1, Math.min(1, x0 / 0.315));
-        zOff = 0.225 * Math.sqrt(Math.max(0.08, 1 - uTorso * uTorso));
-      }
+      const uTorso = Math.max(-1, Math.min(1, x0 / 0.310));
+      const uTop = Math.max(0, Math.min(1, (y0 - (-0.12)) / (shirtTopY - (-0.12))));
+      const topArch = Math.sqrt(Math.max(0.10, 1 - 0.90 * uTop * uTop));
+      const zTorso = 0.225 * Math.sqrt(Math.max(0.14, 1 - uTorso * uTorso)) * topArch;
+      const uArm = Math.max(-1, Math.min(1, (y0 - (-0.065)) / 0.145));
+      const zArm = 0.145 * Math.sqrt(Math.max(0.10, 1 - uArm * uArm));
+      const tArm = Math.max(0, Math.min(1, (Math.abs(x0) - 0.16) / 0.14));
+      const armBlend = (j <= sleeveBotJ) ? (tArm * tArm * (3 - 2 * tArm)) : 0;
+      const zOff = zTorso * (1 - armBlend) + zArm * armBlend;
       if (isSharedSeamNode(i, j)) {
         const id = createShirtParticle(x0, y0, -1.2, 0, i, j);
         shirtFrontIdx[j][i] = id;
@@ -1582,32 +1602,69 @@ function buildCharacterMeshes(softDiv, clothDiv) {
     }
   }
 
-  // Mold the 30cm longer 3D T-Shirt in Bind Pose so every vertex starts at least +0.042m (4.2cm) outside Marshmallow Man skin
-  const shirtTargetOffset = 0.042;
+  // Mold the 3D T-Shirt in Bind Pose using a neck-cleared body SDF (excluding the bulbous head sphere above the collar)
+  // and pattern-length-preserving edge relaxation so inner-shoulder triangles never collapse or pile up!
+  function shirtMoldSDF(x, y, z) {
+    const ax = Math.abs(x), zc = z + 1.2;
+    let dT = sdSphere(ax, y, zc, 0.0, -0.02, 0.0, 0.095);
+    dT = smin(dT, sdCapsule(ax, y, zc, 0.0, -0.14, 0.0, 0.10, -0.13, 0.0, 0.156), 0.024);
+    dT = smin(dT, sdCapsule(ax, y, zc, 0.0, -0.32, 0.015, 0.085, -0.32, 0.01, 0.178), 0.024);
+    dT = smin(dT, sdCapsule(ax, y, zc, 0.0, -0.50, 0.0, 0.095, -0.52, 0.0, 0.154), 0.024);
+    dT = smin(dT, sdCapsule(ax, y, zc, 0.0, -0.68, -0.01, 0.085, -0.69, -0.01, 0.142), 0.020);
+    let dA = sdSphere(ax, y, zc, 0.23, -0.065, 0.0, 0.106);
+    dA = smin(dA, sdSphere(ax, y, zc, 0.38, -0.065, 0.0, 0.100), 0.020);
+    dA = smin(dA, sdSphere(ax, y, zc, 0.53, -0.065, 0.0, 0.095), 0.020);
+    let dL = sdSphere(ax, y, zc, 0.105, -0.85, 0.0, 0.118);
+    return smin(smin(dT, dA, 0.032), dL, 0.025);
+  }
+  const shirtTargetOffset = 0.038;
   const moldIters = 14 * S;
   for (let iter = 0; iter < moldIters; iter++) {
+    // 1. Pattern-distance-preserving edge relaxation (prevents open collar boundaries from shrinking onto shoulder seams)
     for (let v = 0; v < shirtParticles.length; v++) {
       const p = shirtParticles[v];
-      let sx = 0, sy = 0, sz = 0;
       const nSet = shirtNbrs[v];
-      if (nSet.size > 0) {
+      for (const nb of nSet) {
+        if (nb <= v) continue;
+        const q = shirtParticles[nb];
+        const rest2D = Math.hypot((p._si - q._si) * sDx, (p._sj - q._sj) * sDy);
+        const dx = q.x.x - p.x.x, dy = q.x.y - p.x.y, dz = q.x.z - p.x.z;
+        const dist = Math.hypot(dx, dy, dz);
+        if (dist > 1e-6) {
+          const corr = (dist - rest2D) * 0.22 / dist;
+          p.x.x += dx * corr; p.x.y += dy * corr; p.x.z += dz * corr;
+          q.x.x -= dx * corr; q.x.y -= dy * corr; q.x.z -= dz * corr;
+        }
+      }
+    }
+    // 2. Gentle interior-only Laplacian fairing + SDF surface projection
+    for (let v = 0; v < shirtParticles.length; v++) {
+      const p = shirtParticles[v];
+      const nSet = shirtNbrs[v];
+      const isCollarEdge = (p._sj <= 3 * S && p._si >= 9 * S && p._si <= 21 * S);
+      if (nSet.size >= 4 && !isCollarEdge) {
+        let sx = 0, sy = 0, sz = 0;
         for (const nb of nSet) {
           sx += shirtParticles[nb].x.x;
           sy += shirtParticles[nb].x.y;
           sz += shirtParticles[nb].x.z;
         }
         const inv = 1 / nSet.size;
-        const w = 0.25;
-        p.x.x = p.x.x * (1 - w) + sx * inv * w;
-        p.x.y = p.x.y * (1 - w) + sy * inv * w;
-        p.x.z = p.x.z * (1 - w) + sz * inv * w;
+        p.x.x = p.x.x * 0.88 + sx * inv * 0.12;
+        p.x.y = p.x.y * 0.88 + sy * inv * 0.12;
+        p.x.z = p.x.z * 0.85 + sz * inv * 0.15;
       }
       if (p._side === 0) p.x.z = -1.2;
-      const d = marshmallowSDF(p.x.x, p.x.y, p.x.z) - shirtTargetOffset;
+      const d = shirtMoldSDF(p.x.x, p.x.y, p.x.z) - shirtTargetOffset;
       if (d < 0) {
-        const [gx, gy, gz] = sdfGrad(p.x.x, p.x.y, p.x.z);
-        const step = -d * 0.90;
-        p.x.x += gx * step;
+        const e = 0.002;
+        let gx = shirtMoldSDF(p.x.x + e, p.x.y, p.x.z) - shirtMoldSDF(p.x.x - e, p.x.y, p.x.z);
+        let gy = shirtMoldSDF(p.x.x, p.x.y + e, p.x.z) - shirtMoldSDF(p.x.x, p.x.y - e, p.x.z);
+        let gz = shirtMoldSDF(p.x.x, p.x.y, p.x.z + e) - shirtMoldSDF(p.x.x, p.x.y, p.x.z - e);
+        const gl = Math.hypot(gx, gy, gz) || 1;
+        gx /= gl; gy /= gl; gz /= gl;
+        const step = -d * 0.88;
+        if (!isCollarEdge) p.x.x += gx * step;
         p.x.y += gy * step;
         if (p._side !== 0) p.x.z += gz * step;
       }
@@ -1620,14 +1677,21 @@ function buildCharacterMeshes(softDiv, clothDiv) {
   shirtShearConstraints  = [];
   shirtBendConstraints   = [];
 
-  function addShirtEdge(u, v, compliance, bucket, enabled = true, isCollarLock = false) {
+  function addShirtEdge(u, v, compliance, bucket, enabled = true, isCollarLock = false, tensionOnly = false) {
     if (u < 0 || v < 0 || u === v) return;
     const key = u < v ? u + ',' + v : v + ',' + u;
     if (!shirtEdgeSet.has(key)) {
       shirtEdgeSet.add(key);
-      const c = world.addDistanceConstraint(shirtParticles[u], shirtParticles[v], compliance);
+      const pU = shirtParticles[u], pV = shirtParticles[v];
+      const patternDist = Math.hypot((pU._si - pV._si) * sDx, (pU._sj - pV._sj) * sDy);
+      const restLen = Math.max(pU.x.distanceTo(pV.x), patternDist * 0.80);
+      const c = world.addDistanceConstraint(pU, pV, compliance, restLen);
       c.enabled = enabled;
       c._isCollarLock = isCollarLock;
+      c.tensionOnly = tensionOnly;
+      if (!tensionOnly && bucket === shirtStructConstraints) {
+        c.compressCompliance = 0.004;
+      }
       if (bucket) bucket.push(c);
     }
   }
@@ -1657,16 +1721,16 @@ function buildCharacterMeshes(softDiv, clothDiv) {
       for (let i = 0; i < sNx; i++) {
         const a = grid[j][i];
         if (a < 0) continue;
-        // When cloth is subdivided 2x, embed the 1x coarse structural grid on even nodes
-        // so 2x cloth has the exact same membrane tensile resistance as 1x cloth across the belly & shoulders
+        // When cloth is subdivided 2x, embed the 1x coarse structural grid on even nodes (tension-only)
+        // so 2x cloth has the exact same membrane tensile resistance as 1x cloth without compression buckling
         if (S > 1 && (i % 2 === 0) && (j % 2 === 0)) {
           const isCollar = (j <= 2 * S && i >= 8 * S && i <= 22 * S);
           const structComp = isCollar ? 0.0 : COTTON_STRUCT_COMPLIANCE;
           if (i + 2 < sNx && grid[j][i + 1] >= 0 && grid[j][i + 2] >= 0) {
-            addShirtEdge(a, grid[j][i + 2], structComp, shirtStructConstraints, true, isCollar);
+            addShirtEdge(a, grid[j][i + 2], structComp, shirtStructConstraints, true, isCollar, true);
           }
           if (j + 2 < sNy && grid[j + 1][i] >= 0 && grid[j + 2][i] >= 0) {
-            addShirtEdge(a, grid[j + 2][i], structComp, shirtStructConstraints, true, isCollar);
+            addShirtEdge(a, grid[j + 2][i], structComp, shirtStructConstraints, true, isCollar, true);
           }
         }
         if (i + 2 < sNx && grid[j][i + 1] >= 0 && grid[j][i + 2] >= 0) {
@@ -1679,28 +1743,14 @@ function buildCharacterMeshes(softDiv, clothDiv) {
     }
   }
 
-  // Collar rib-knit structural chords (strictly cloth-to-cloth, zero pinning to the body!)
-  // Prevents the unpinned collar scoop opening from stretching wider than the shoulders under 2x subdivision
+  // Collar rib-knit structural chords (strictly cloth-to-cloth, tension-only, zero pinning to the body!)
   const cLeft = shirtFrontIdx[0][10 * S];
   const cRight = shirtFrontIdx[0][20 * S];
-  addShirtEdge(cLeft, cRight, 0.0, shirtStructConstraints, true, true);
+  addShirtEdge(cLeft, cRight, 0.0, shirtStructConstraints, true, true, true);
   for (const grid of [shirtFrontIdx, shirtBackIdx]) {
     const cMid = grid[3 * S][15 * S];
-    addShirtEdge(cLeft, cMid, 0.0, shirtStructConstraints, true, true);
-    addShirtEdge(cRight, cMid, 0.0, shirtStructConstraints, true, true);
-    const span = 3 * S;
-    for (let j = 0; j <= 4 * S; j++) {
-      for (let i = 9 * S; i <= 21 * S; i++) {
-        const a = grid[j][i];
-        if (a < 0) continue;
-        if (i + span < sNx && grid[j][i + span] >= 0) {
-          addShirtEdge(a, grid[j][i + span], 0.0, shirtStructConstraints, true, true);
-        }
-        if (j + span < sNy && grid[j + span][i] >= 0) {
-          addShirtEdge(a, grid[j + span][i], 0.0, shirtStructConstraints, true, true);
-        }
-      }
-    }
+    addShirtEdge(cLeft, cMid, 0.0, shirtStructConstraints, true, true, true);
+    addShirtEdge(cRight, cMid, 0.0, shirtStructConstraints, true, true, true);
   }
 
   // Collect boundary and interior Marshmallow Man meta-mesh particles for live one-way collision
@@ -2042,11 +2092,15 @@ world.onParticleSubstep = function(wWorld, h, substepIdx) {
         const d = Math.sqrt(d2);
         const w = 1 - d / influenceR;
         if (isMoving) {
-          p.x.addScaledVector(delta, 0.42 * w * w);
+          const kMove = 0.42 * w * w;
+          p.x.addScaledVector(delta, kMove);
+          p.px.addScaledVector(delta, kMove * 0.65);
         }
         if (seg.isCore && p._isBoundary && d < rCap + p.radius && d > 1e-9) {
           const push = Math.min(0.0025, ((rCap + p.radius) - d) * 0.25);
-          p.x.addScaledVector(pushDir, push / d);
+          const sPush = push / d;
+          p.x.addScaledVector(pushDir, sPush);
+          p.px.addScaledVector(pushDir, sPush * 0.70);
         }
       }
     }
@@ -2650,12 +2704,12 @@ function applyClothSliders() {
   shirtBodyFriction = frictionPct / 100;
   clothDampingVal   = dampingVal;
 
-  // 5. Shirt particle mass & friction
+  // 5. Shirt particle mass & friction (shared seam nodes _side === 0 carry both Front & Back panel constraints so they get 2x mass)
   const invShirtMass = 1 / Math.max(0.0001, massVal / shirtParticles.length);
   for (let i = 0; i < shirtParticles.length; i++) {
     const sp = shirtParticles[i];
     sp.friction = shirtBodyFriction;
-    sp.invM = invShirtMass;
+    sp.invM = (sp._side === 0) ? invShirtMass * 0.5 : invShirtMass;
   }
 }
 
