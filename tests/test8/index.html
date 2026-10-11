@@ -418,8 +418,8 @@
     <option value="1">Mocap 2: Brisk Stride</option>
     <option value="2">Mocap 3: Heavy Prowl</option>
   </select>
-  <button id="btn-subdiv-soft" title="Double Softbody Mesh Divisions (takes effect on clicking Bind Pose)">Softbody 2× Div</button>
-  <button id="btn-subdiv-cloth" title="Double Cloth Shirt Mesh Divisions (takes effect on clicking Bind Pose)">Cloth 2× Div</button>
+  <button id="btn-subdiv-soft" class="active" title="Toggle Softbody Mesh Divisions (takes effect on clicking Bind Pose)">Softbody 2×: On</button>
+  <button id="btn-subdiv-cloth" class="cloth-active" title="Toggle Cloth Shirt Mesh Divisions (takes effect on clicking Bind Pose)">Cloth 2×: On</button>
   <button id="btn-wire">Wireframe</button>
 </div>
 
@@ -885,9 +885,9 @@ shirtMesh.castShadow = true;
 shirtMesh.receiveShadow = true;
 scene.add(shirtMesh);
 
-let currentSoftDiv = 1;
-let currentClothDiv = 1;
-let currentShirtNx = 31;
+let currentSoftDiv = 2;
+let currentClothDiv = 2;
+let currentShirtNx = 61;
 let draggableParticles = [];
 
 function syncBlobMesh() {
@@ -1641,7 +1641,7 @@ const bodyCapsules = BODY_CAPSULE_DEFS.map(def => {
   };
 });
 
-buildCharacterMeshes(1, 1);
+buildCharacterMeshes(2, 2);
 
 // One-Way Body-to-Shirt Collision Solver (100% Unpinned Cloth):
 // Runs in both onParticleSubstep (pre-constraint) and onPostParticleSubstep (post-constraint).
@@ -2194,8 +2194,8 @@ const selectWalk    = document.getElementById('select-walk');
 const btnSubdivSoft  = document.getElementById('btn-subdiv-soft');
 const btnSubdivCloth = document.getElementById('btn-subdiv-cloth');
 
-let pendingSoftDiv = 1;
-let pendingClothDiv = 1;
+let pendingSoftDiv = 2;
+let pendingClothDiv = 2;
 
 function updateSubdivButtonsUI() {
   btnSubdivSoft.classList.toggle('active', pendingSoftDiv === 2);
