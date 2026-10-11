@@ -201,27 +201,69 @@
     }
   }
 
+  #hud {
+    align-items: center;
+    gap: 6px;
+  }
+
+  #hud a,
+  #hud button,
   #hud select {
     pointer-events: auto;
-    appearance: none;
-    -webkit-appearance: none;
-    background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' stroke='%23f3efe6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") no-repeat right 0.78rem center;
-    color: var(--ink);
-    border: 0;
-    font: inherit;
-    font-size: 0.92rem;
-    padding: 0.52rem 2.1rem 0.52rem 0.95rem;
+    background: rgba(14, 19, 26, 0.84);
+    color: var(--muted);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 999px;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    padding: 3px 10px;
+    font: inherit;
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     cursor: pointer;
     outline: none;
-    transition: background-color 0.2s, color 0.2s;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  #hud a:hover,
+  #hud button:hover,
+  #hud select:hover {
+    background: rgba(28, 36, 48, 0.92);
+    color: var(--ink);
+  }
+
+  #hud #btn-bindpose {
+    padding: 0.52rem 0.95rem;
+    font-size: 0.92rem;
+  }
+
+  #hud button.active {
+    background: #f2b632;
+    color: #11151c;
+    border-color: #f2b632;
+  }
+
+  #hud button.cloth-active {
+    background: #20d6ee;
+    color: #09181d;
+    border-color: #20d6ee;
+  }
+
+  #hud select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' stroke='%23b9c4cf' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 22px;
   }
 
   #hud select.active {
-    background: var(--btn) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' stroke='%231d2632' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") no-repeat right 0.78rem center;
-    color: var(--btn-ink);
+    background-color: #f2b632;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' stroke='%2311151c' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+    color: #11151c;
+    border-color: #f2b632;
     font-weight: 700;
   }
 
@@ -376,6 +418,8 @@
     <option value="1">Mocap 2: Brisk Stride</option>
     <option value="2">Mocap 3: Heavy Prowl</option>
   </select>
+  <button id="btn-subdiv-soft" title="Double Softbody Mesh Divisions (takes effect on clicking Bind Pose)">Softbody 2× Div</button>
+  <button id="btn-subdiv-cloth" title="Double Cloth Shirt Mesh Divisions (takes effect on clicking Bind Pose)">Cloth 2× Div</button>
   <button id="btn-wire">Wireframe</button>
 </div>
 
@@ -694,400 +738,6 @@ function calcSignedTetVol(a, b, c, d) {
   return ((uy * vz - uz * vy) * wx + (uz * vx - ux * vz) * wy + (ux * vy - uy * vx) * wz) / 6;
 }
 
-// Build volumetric tetrahedral Meta-Mesh + Surface-Net projected & Loop-subdivided Marshmallow Man surface
-const dx = 0.072;
-const cxN = 23, cyN = 26, czN = 7;
-const nx = cxN + 1, ny = cyN + 1, nz = czN + 1;
-const minX = -cxN * 0.5 * dx;
-const maxY = 0.34;
-const minZ = -1.2 - czN * 0.5 * dx;
-const cIdx = (i, j, k) => (k * cyN + j) * cxN + i;
-const cellActive = new Uint8Array(cxN * cyN * czN);
-const midXCol = Math.floor(cxN / 2);
-
-for (let k = 0; k < czN; k++) {
-  for (let j = 0; j < cyN; j++) {
-    for (let i = 0; i < cxN; i++) {
-      const cx = minX + (i + 0.5) * dx;
-      const cy = maxY - (j + 0.5) * dx;
-      const cz = minZ + (k + 0.5) * dx;
-      // Keep center column between legs clear below hips so left & right marshmallow legs are separate
-      if (i === midXCol && cy < -0.66) continue;
-      if (marshmallowSDF(cx, cy, cz) <= 0.016) {
-        cellActive[cIdx(i, j, k)] = 1;
-      }
-    }
-  }
-}
-
-// Prune any dangling 1-neighbor hex cell
-for (let pass = 0; pass < 2; pass++) {
-  for (let k = 0; k < czN; k++) {
-    for (let j = 0; j < cyN; j++) {
-      for (let i = 0; i < cxN; i++) {
-        if (!cellActive[cIdx(i, j, k)]) continue;
-        let n = 0;
-        if (i > 0 && cellActive[cIdx(i - 1, j, k)]) n++;
-        if (i < cxN - 1 && cellActive[cIdx(i + 1, j, k)]) n++;
-        if (j > 0 && cellActive[cIdx(i, j - 1, k)]) n++;
-        if (j < cyN - 1 && cellActive[cIdx(i, j + 1, k)]) n++;
-        if (k > 0 && cellActive[cIdx(i, j, k - 1)]) n++;
-        if (k < czN - 1 && cellActive[cIdx(i, j, k + 1)]) n++;
-        if (n <= 1) cellActive[cIdx(i, j, k)] = 0;
-      }
-    }
-  }
-}
-
-const gIdx = (i, j, k) => (k * ny + j) * nx + i;
-const vertMap = new Map();
-const blobParticles = [];
-const metaMeshRef = {};
-
-function getMetaVert(i, j, k) {
-  const g = gIdx(i, j, k);
-  if (!vertMap.has(g)) {
-    vertMap.set(g, blobParticles.length);
-    const p = world.addParticle(minX + i * dx, maxY - j * dx, minZ + k * dx, 0.048, dx * 0.25, 0.30);
-    p._tetMesh = metaMeshRef;
-    p._tx = i; p._ty = j; p._tz = k;
-    p._isBoundary = false;
-    blobParticles.push(p);
-  }
-  return vertMap.get(g);
-}
-
-const metaTets = [];
-for (let k = 0; k < czN; k++) {
-  for (let j = 0; j < cyN; j++) {
-    for (let i = 0; i < cxN; i++) {
-      if (!cellActive[cIdx(i, j, k)]) continue;
-      const v0 = getMetaVert(i, j, k),         v1 = getMetaVert(i + 1, j, k),
-            v2 = getMetaVert(i + 1, j + 1, k), v3 = getMetaVert(i, j + 1, k),
-            v4 = getMetaVert(i, j, k + 1),     v5 = getMetaVert(i + 1, j, k + 1),
-            v6 = getMetaVert(i + 1, j + 1, k + 1), v7 = getMetaVert(i, j + 1, k + 1);
-      if ((i + j + k) % 2 === 0) {
-        metaTets.push([v0, v1, v3, v4], [v1, v2, v3, v6], [v1, v4, v5, v6], [v3, v4, v6, v7], [v1, v3, v4, v6]);
-      } else {
-        metaTets.push([v0, v1, v2, v5], [v0, v2, v3, v7], [v0, v4, v5, v7], [v2, v5, v6, v7], [v0, v2, v5, v7]);
-      }
-    }
-  }
-}
-
-for (let ti = 0; ti < metaTets.length; ti++) {
-  const tet = metaTets[ti];
-  if (calcSignedTetVol(blobParticles[tet[0]], blobParticles[tet[1]], blobParticles[tet[2]], blobParticles[tet[3]]) < 0) {
-    const tmp = tet[1]; tet[1] = tet[2]; tet[2] = tmp;
-  }
-}
-
-// Extract closed manifold outer surface triangles of the Marshmallow Man Meta-Mesh
-const faceMap = new Map();
-for (let ti = 0; ti < metaTets.length; ti++) {
-  const tet = metaTets[ti];
-  const fList = [
-    [tet[0], tet[1], tet[2], tet[3]],
-    [tet[0], tet[1], tet[3], tet[2]],
-    [tet[0], tet[2], tet[3], tet[1]],
-    [tet[1], tet[2], tet[3], tet[0]]
-  ];
-  for (let f = 0; f < 4; f++) {
-    const [a, b, c, opp] = fList[f];
-    const key = [a, b, c].sort((x, y) => x - y).join(',');
-    if (!faceMap.has(key)) faceMap.set(key, { count: 0, a, b, c, opp });
-    faceMap.get(key).count++;
-  }
-}
-
-const boundaryNeighbors = blobParticles.map(() => new Set());
-const allNeighbors = blobParticles.map(() => new Set());
-const incidentTets = blobParticles.map(() => []);
-for (let ti = 0; ti < metaTets.length; ti++) {
-  const [a, b, c, d] = metaTets[ti];
-  incidentTets[a].push(ti); incidentTets[b].push(ti);
-  incidentTets[c].push(ti); incidentTets[d].push(ti);
-  for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) {
-    allNeighbors[u].add(v);
-    allNeighbors[v].add(u);
-  }
-}
-
-const baseTris = [];
-for (const [, val] of faceMap) {
-  if (val.count === 1) {
-    const { a, b, c, opp } = val;
-    blobParticles[a]._isBoundary = true;
-    blobParticles[b]._isBoundary = true;
-    blobParticles[c]._isBoundary = true;
-    boundaryNeighbors[a].add(b); boundaryNeighbors[a].add(c);
-    boundaryNeighbors[b].add(a); boundaryNeighbors[b].add(c);
-    boundaryNeighbors[c].add(a); boundaryNeighbors[c].add(b);
-
-    const pa = blobParticles[a].x, pb = blobParticles[b].x, pc = blobParticles[c].x, po = blobParticles[opp].x;
-    const ux = pb.x - pa.x, uy = pb.y - pa.y, uz = pb.z - pa.z;
-    const vx = pc.x - pa.x, vy = pc.y - pa.y, vz = pc.z - pa.z;
-    const fnx = uy * vz - uz * vy, fny = uz * vx - ux * vz, fnz = ux * vy - uy * vx;
-    const ox = pa.x - po.x, oy = pa.y - po.y, oz = pa.z - po.z;
-    if (fnx * ox + fny * oy + fnz * oz > 0) baseTris.push([a, b, c]);
-    else baseTris.push([a, c, b]);
-  }
-}
-
-// Constrained Elastic Surface-Net smoothing + exact Newton projection onto marshmallowSDF = 0
-const minAllowedVol = (dx * dx * dx / 6) * 0.08;
-for (let iter = 0; iter < 14; iter++) {
-  for (let i = 0; i < blobParticles.length; i++) {
-    const p = blobParticles[i];
-    const oldX = p.x.x, oldY = p.x.y, oldZ = p.x.z;
-    const nbrs = p._isBoundary ? boundaryNeighbors[i] : allNeighbors[i];
-    let nxPos = oldX, nyPos = oldY, nzPos = oldZ;
-    if (nbrs.size > 0) {
-      let sx = 0, sy = 0, sz = 0;
-      for (const j of nbrs) {
-        sx += blobParticles[j].x.x;
-        sy += blobParticles[j].x.y;
-        sz += blobParticles[j].x.z;
-      }
-      const inv = 1 / nbrs.size;
-      const w = p._isBoundary ? 0.42 : 0.35;
-      nxPos = oldX * (1 - w) + sx * inv * w;
-      nyPos = oldY * (1 - w) + sy * inv * w;
-      nzPos = oldZ * (1 - w) + sz * inv * w;
-    }
-    if (p._isBoundary) {
-      const d = marshmallowSDF(nxPos, nyPos, nzPos);
-      const [gx, gy, gz] = sdfGrad(nxPos, nyPos, nzPos);
-      const step = Math.max(-0.022, Math.min(0.022, d * 0.78));
-      nxPos -= gx * step;
-      nyPos -= gy * step;
-      nzPos -= gz * step;
-    }
-    p.x.set(nxPos, nyPos, nzPos);
-    let ok = true;
-    for (const ti of incidentTets[i]) {
-      const tet = metaTets[ti];
-      if (calcSignedTetVol(blobParticles[tet[0]], blobParticles[tet[1]], blobParticles[tet[2]], blobParticles[tet[3]]) < minAllowedVol) {
-        ok = false;
-        break;
-      }
-    }
-    if (!ok) {
-      p.x.set(0.5 * (oldX + nxPos), 0.5 * (oldY + nyPos), 0.5 * (oldZ + nzPos));
-      let ok2 = true;
-      for (const ti of incidentTets[i]) {
-        const tet = metaTets[ti];
-        if (calcSignedTetVol(blobParticles[tet[0]], blobParticles[tet[1]], blobParticles[tet[2]], blobParticles[tet[3]]) < minAllowedVol) {
-          ok2 = false;
-          break;
-        }
-      }
-      if (!ok2) p.x.set(oldX, oldY, oldZ);
-    }
-    p.px.copy(p.x);
-  }
-}
-
-for (let i = 0; i < blobParticles.length; i++) {
-  blobParticles[i]._bindPos = blobParticles[i].x.clone();
-}
-
-// Create XPBD Soft-Body Constraints (1-hop tet edges + 2-hop axial bending + TetVolumeConstraints)
-const edgeSet = new Set();
-const tetEdgeConstraints = [];
-const bendEdgeConstraints = [];
-function addMetaEdge(u, v, compliance, targetList) {
-  const key = u < v ? u + ',' + v : v + ',' + u;
-  if (!edgeSet.has(key)) {
-    edgeSet.add(key);
-    const c = world.addDistanceConstraint(blobParticles[u], blobParticles[v], compliance);
-    if (targetList) targetList.push(c);
-  }
-}
-for (let ti = 0; ti < metaTets.length; ti++) {
-  const [a, b, c, d] = metaTets[ti];
-  for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) {
-    addMetaEdge(u, v, 0.0040, tetEdgeConstraints);
-  }
-  world.volumeConstraints.push(new XPBD.TetVolumeConstraint(
-    blobParticles[a], blobParticles[b], blobParticles[c], blobParticles[d], 0.0
-  ));
-}
-// 2-hop axial structural bending constraints so marshmallow arms/torso/legs stay plump and bouncy
-for (let u = 0; u < blobParticles.length; u++) {
-  for (const m of allNeighbors[u]) {
-    for (const v of allNeighbors[m]) {
-      if (v > u) {
-        const di = Math.abs(blobParticles[u]._tx - blobParticles[v]._tx);
-        const dj = Math.abs(blobParticles[u]._ty - blobParticles[v]._ty);
-        const dk = Math.abs(blobParticles[u]._tz - blobParticles[v]._tz);
-        if (di + dj + dk === 2 && Math.max(di, dj, dk) === 2) {
-          addMetaEdge(u, v, 0.0090, bendEdgeConstraints);
-        }
-      }
-    }
-  }
-}
-
-// Pin Head, Elbows (LeftForeArm/RightForeArm), Hands (LeftHand/RightHand),
-// Knees (LeftLeg/RightLeg), and Feet (LeftFoot/RightFoot) particles directly to their bone spheres!
-characterRoot.updateMatrixWorld(true);
-
-const pinAnchors = {
-  head:   bonesByName['Head']._sphereMesh,
-  lElbow: bonesByName['LeftForeArm']._sphereMesh,
-  rElbow: bonesByName['RightForeArm']._sphereMesh,
-  lHand:  bonesByName['LeftHand']._sphereMesh,
-  rHand:  bonesByName['RightHand']._sphereMesh,
-  lKnee:  bonesByName['LeftLeg']._sphereMesh,
-  rKnee:  bonesByName['RightLeg']._sphereMesh,
-  lFoot:  bonesByName['LeftFoot']._sphereMesh,
-  rFoot:  bonesByName['RightFoot']._sphereMesh
-};
-
-const pinBindPos = {};
-const pinInvMat = {};
-for (const [key, mesh] of Object.entries(pinAnchors)) {
-  mesh.updateMatrixWorld(true);
-  pinBindPos[key] = new V();
-  mesh.getWorldPosition(pinBindPos[key]);
-  pinInvMat[key] = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
-}
-
-const blobPinnedParticles = [];
-const pinMarkerGeom = new THREE.SphereGeometry(0.012, 10, 8);
-const pinMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
-
-function attachParticleToAnchor(p, anchorKey) {
-  const sphereMesh = pinAnchors[anchorKey];
-  p.invM = 0;
-  p._isPinned = true;
-  p._pinSphereMesh = sphereMesh;
-  p._pinLocalPos = p.x.clone().applyMatrix4(pinInvMat[anchorKey]);
-  p._prevPinWorldPos = p.x.clone();
-  p._targetPinWorldPos = p.x.clone();
-  blobPinnedParticles.push(p);
-
-  // Visual pin marker parented directly to the joint's poly sphere
-  const pinDot = new THREE.Mesh(pinMarkerGeom, pinMarkerMat);
-  pinDot.position.copy(p._pinLocalPos);
-  sphereMesh.add(pinDot);
-}
-
-for (let i = 0; i < blobParticles.length; i++) {
-  const p = blobParticles[i];
-  p._isPinned = false;
-  const px = p.x.x, py = p.x.y, pz = p.x.z;
-
-  // 1. Head sphere pin (crown/head region around Head bone sphere)
-  if (py >= 0.02 && Math.hypot(px - pinBindPos.head.x, py - 0.11, pz - pinBindPos.head.z) <= 0.175) {
-    attachParticleToAnchor(p, 'head');
-  }
-  // 2. Left Hand sphere pin (left mitt hand around LeftHand bone sphere)
-  else if (px >= 0.60 && Math.hypot(px - pinBindPos.lHand.x, py - pinBindPos.lHand.y, pz - pinBindPos.lHand.z) <= 0.135) {
-    attachParticleToAnchor(p, 'lHand');
-  }
-  // 3. Right Hand sphere pin (right mitt hand around RightHand bone sphere)
-  else if (px <= -0.60 && Math.hypot(px - pinBindPos.rHand.x, py - pinBindPos.rHand.y, pz - pinBindPos.rHand.z) <= 0.135) {
-    attachParticleToAnchor(p, 'rHand');
-  }
-  // 4. Left Elbow sphere pin (around LeftForeArm elbow bone sphere)
-  else if (px >= 0.36 && px <= 0.52 && Math.hypot(px - pinBindPos.lElbow.x, py - pinBindPos.lElbow.y, pz - pinBindPos.lElbow.z) <= 0.125) {
-    attachParticleToAnchor(p, 'lElbow');
-  }
-  // 5. Right Elbow sphere pin (around RightForeArm elbow bone sphere)
-  else if (px <= -0.36 && px >= -0.52 && Math.hypot(px - pinBindPos.rElbow.x, py - pinBindPos.rElbow.y, pz - pinBindPos.rElbow.z) <= 0.125) {
-    attachParticleToAnchor(p, 'rElbow');
-  }
-  // 6. Left Foot sphere pin (left marshmallow boot around LeftFoot bone sphere)
-  else if (px > 0.02 && py <= -1.30) {
-    attachParticleToAnchor(p, 'lFoot');
-  }
-  // 7. Right Foot sphere pin (right marshmallow boot around RightFoot bone sphere)
-  else if (px < -0.02 && py <= -1.30) {
-    attachParticleToAnchor(p, 'rFoot');
-  }
-  // 8. Left Knee sphere pin (around LeftLeg knee bone sphere)
-  else if (px > 0.02 && py >= -1.11 && py <= -0.94 && Math.hypot(px - pinBindPos.lKnee.x, py - pinBindPos.lKnee.y, pz - pinBindPos.lKnee.z) <= 0.135) {
-    attachParticleToAnchor(p, 'lKnee');
-  }
-  // 9. Right Knee sphere pin (around RightLeg knee bone sphere)
-  else if (px < -0.02 && py >= -1.11 && py <= -0.94 && Math.hypot(px - pinBindPos.rKnee.x, py - pinBindPos.rKnee.y, pz - pinBindPos.rKnee.z) <= 0.135) {
-    attachParticleToAnchor(p, 'rKnee');
-  }
-}
-
-// Build 1-level Loop-subdivided Meta-Mesh surface projected onto marshmallowSDF = 0 (~7,024 triangles)
-const numBaseVerts = blobParticles.length;
-const edgeMidMap = new Map();
-const midEdges = []; // { u, v, oppA, oppB, offsetN }
-
-function getOrCreateMidEdge(u, v, opp) {
-  const key = u < v ? u + ',' + v : v + ',' + u;
-  let eIdx = edgeMidMap.get(key);
-  if (eIdx === undefined) {
-    eIdx = midEdges.length;
-    edgeMidMap.set(key, eIdx);
-    midEdges.push({
-      u: Math.min(u, v),
-      v: Math.max(u, v),
-      oppA: opp,
-      oppB: opp,
-      offsetN: 0
-    });
-  } else {
-    midEdges[eIdx].oppB = opp;
-  }
-  return numBaseVerts + eIdx;
-}
-
-const subIndices = [];
-for (let t = 0; t < baseTris.length; t++) {
-  const [a, b, c] = baseTris[t];
-  const mab = getOrCreateMidEdge(a, b, c);
-  const mbc = getOrCreateMidEdge(b, c, a);
-  const mca = getOrCreateMidEdge(c, a, b);
-  subIndices.push(
-    a, mab, mca,
-    b, mbc, mab,
-    c, mca, mbc,
-    mab, mbc, mca
-  );
-}
-
-// Compute bind-pose metaball curvature offset for each subdivided edge midpoint
-for (let e = 0; e < midEdges.length; e++) {
-  const me = midEdges[e];
-  const pu = blobParticles[me.u].x;
-  const pv = blobParticles[me.v].x;
-  const pa = blobParticles[me.oppA].x;
-  const pb = blobParticles[me.oppB].x;
-
-  // Smooth Loop diamond stencil midpoint
-  const mx0 = 0.375 * (pu.x + pv.x) + 0.125 * (pa.x + pb.x);
-  const my0 = 0.375 * (pu.y + pv.y) + 0.125 * (pa.y + pb.y);
-  const mz0 = 0.375 * (pu.z + pv.z) + 0.125 * (pa.z + pb.z);
-
-  // Project onto analytical marshmallowSDF = 0 surface
-  let sx = mx0, sy = my0, sz = mz0;
-  for (let s = 0; s < 3; s++) {
-    const d = marshmallowSDF(sx, sy, sz);
-    const [gx, gy, gz] = sdfGrad(sx, sy, sz);
-    sx -= gx * d * 0.85;
-    sy -= gy * d * 0.85;
-    sz -= gz * d * 0.85;
-  }
-  const [gnx, gny, gnz] = sdfGrad(mx0, my0, mz0);
-  const off = (sx - mx0) * gnx + (sy - my0) * gny + (sz - mz0) * gnz;
-  me.offsetN = Math.max(-0.012, Math.min(0.012, off));
-}
-
-const totalRenderVerts = numBaseVerts + midEdges.length;
-const blobGeom = new THREE.BufferGeometry();
-const blobPosArr = new Float32Array(totalRenderVerts * 3);
-blobGeom.setAttribute('position', new THREE.BufferAttribute(blobPosArr, 3));
-blobGeom.setIndex(subIndices);
-
 // Light Gray PBR Shader for the Marshmallow Man Meta-Mesh
 const blobMat = new THREE.MeshPhysicalMaterial({
   color: 0xd8dde4,
@@ -1098,73 +748,7 @@ const blobMat = new THREE.MeshPhysicalMaterial({
   reflectivity: 0.35
 });
 
-const blobMesh = new THREE.Mesh(blobGeom, blobMat);
-blobMesh.castShadow = true;
-blobMesh.receiveShadow = true;
-scene.add(blobMesh);
-
-function syncBlobMesh() {
-  const posAttr = blobGeom.attributes.position;
-  const arr = posAttr.array;
-
-  // 1. Copy base XPBD soft-body particle positions
-  for (let i = 0; i < numBaseVerts; i++) {
-    const pt = blobParticles[i].x;
-    const i3 = i * 3;
-    arr[i3] = pt.x;
-    arr[i3 + 1] = pt.y;
-    arr[i3 + 2] = pt.z;
-  }
-
-  // 2. Interpolate Loop-subdivided edge midpoints with live diamond normal curvature offset
-  for (let e = 0; e < midEdges.length; e++) {
-    const me = midEdges[e];
-    const pu = blobParticles[me.u].x;
-    const pv = blobParticles[me.v].x;
-    const pa = blobParticles[me.oppA].x;
-    const pb = blobParticles[me.oppB].x;
-
-    const mx = 0.375 * (pu.x + pv.x) + 0.125 * (pa.x + pb.x);
-    const my = 0.375 * (pu.y + pv.y) + 0.125 * (pa.y + pb.y);
-    const mz = 0.375 * (pu.z + pv.z) + 0.125 * (pa.z + pb.z);
-
-    const idx3 = (numBaseVerts + e) * 3;
-    if (Math.abs(me.offsetN) > 1e-5) {
-      // Outward normal across the (oppA -> oppB) and (u -> v) diamond diagonals
-      const ex = pv.x - pu.x, ey = pv.y - pu.y, ez = pv.z - pu.z;
-      const dx1 = pa.x - pu.x, dy1 = pa.y - pu.y, dz1 = pa.z - pu.z;
-      const dx2 = pb.x - pv.x, dy2 = pb.y - pv.y, dz2 = pb.z - pv.z;
-      const nx1 = ey * dz1 - ez * dy1, ny1 = ez * dx1 - ex * dz1, nz1 = ex * dy1 - ey * dx1;
-      const nx2 = dz2 * ey - dy2 * ez, ny2 = dx2 * ez - dz2 * ex, nz2 = dy2 * ex - dx2 * ey;
-      let nx = nx1 + nx2, ny = ny1 + ny2, nz = nz1 + nz2;
-      const nl = Math.hypot(nx, ny, nz) || 1;
-      arr[idx3] = mx + (nx / nl) * me.offsetN;
-      arr[idx3 + 1] = my + (ny / nl) * me.offsetN;
-      arr[idx3 + 2] = mz + (nz / nl) * me.offsetN;
-    } else {
-      arr[idx3] = mx;
-      arr[idx3 + 1] = my;
-      arr[idx3 + 2] = mz;
-    }
-  }
-
-  posAttr.needsUpdate = true;
-  blobGeom.computeVertexNormals();
-
-  // Copy live outward unit normals onto Marshmallow Man boundary particles for one-way shirt collision
-  const normArr = blobGeom.attributes.normal.array;
-  for (let i = 0; i < numBaseVerts; i++) {
-    const bp = blobParticles[i];
-    if (bp._isBoundary) {
-      if (!bp._skinNormal) bp._skinNormal = new V(0, 0, 1);
-      const i3 = i * 3;
-      bp._skinNormal.set(normArr[i3], normArr[i3 + 1], normArr[i3 + 2]);
-    }
-  }
-}
-syncBlobMesh();
-
-/* ================= Cyan Checker Cotton Shirt (One-Way Body Collision, Cotton Preset, No Self-Collision) ================= */
+/* ================= Cyan Checker Cotton Shirt Material ================= */
 function createCyanCheckerShirtTextures() {
   const size = 512, threads = 32, repeat = 6;
   const canvas = document.createElement('canvas');
@@ -1264,275 +848,111 @@ const shirtMat = new THREE.MeshStandardMaterial({
   polygonOffsetUnits: -1
 });
 
-const sNx = 31, sNy = 32;
-const shirtHalfW = 0.455;
-const shirtTopY = 0.068, shirtBotY = -0.872;
-const sDx = (2 * shirtHalfW) / (sNx - 1);
-const sDy = (shirtTopY - shirtBotY) / (sNy - 1);
-const sleeveBotJ = 9;
+const pinAnchors = {
+  head:   bonesByName['Head']._sphereMesh,
+  lElbow: bonesByName['LeftForeArm']._sphereMesh,
+  rElbow: bonesByName['RightForeArm']._sphereMesh,
+  lHand:  bonesByName['LeftHand']._sphereMesh,
+  rHand:  bonesByName['RightHand']._sphereMesh,
+  lKnee:  bonesByName['LeftLeg']._sphereMesh,
+  rKnee:  bonesByName['RightLeg']._sphereMesh,
+  lFoot:  bonesByName['LeftFoot']._sphereMesh,
+  rFoot:  bonesByName['RightFoot']._sphereMesh
+};
+const pinMarkerGeom = new THREE.SphereGeometry(0.012, 10, 8);
+const pinMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+const pinDotMeshes = [];
 
-function isCellInShirt(ci, cj) {
-  const xMid = -shirtHalfW + (ci + 0.5) * sDx;
-  const yMid = shirtTopY - (cj + 0.5) * sDy;
-  // Scoop collar cutout at top center
-  if (cj < 3 && Math.abs(xMid) < 0.145) {
-    const nr = Math.hypot(xMid / 0.155, (yMid - shirtTopY) / 0.088);
-    if (nr < 1.0) return false;
-  }
-  // Under-sleeve cutout below armpits
-  if (cj >= sleeveBotJ && (ci < 5 || ci >= sNx - 1 - 5)) return false;
-  return true;
-}
+let blobParticles = [];
+let numBaseVerts = 0;
+let midEdges = [];
+let tetEdgeConstraints = [];
+let bendEdgeConstraints = [];
+let blobPinnedParticles = [];
+let blobGeom = new THREE.BufferGeometry();
+const blobMesh = new THREE.Mesh(blobGeom, blobMat);
+blobMesh.castShadow = true;
+blobMesh.receiveShadow = true;
+scene.add(blobMesh);
 
-function isShirtNodeUsed(i, j) {
-  for (let dj = -1; dj <= 0; dj++) {
-    for (let di = -1; di <= 0; di++) {
-      const ci = i + di, cj = j + dj;
-      if (ci >= 0 && ci < sNx - 1 && cj >= 0 && cj < sNy - 1) {
-        if (isCellInShirt(ci, cj)) return true;
-      }
-    }
-  }
-  return false;
-}
-
-function isSharedSeamNode(i, j) {
-  const c00 = (i > 0 && j > 0) ? isCellInShirt(i - 1, j - 1) : false;
-  const c10 = (i < sNx - 1 && j > 0) ? isCellInShirt(i, j - 1) : false;
-  const c01 = (i > 0 && j < sNy - 1) ? isCellInShirt(i - 1, j) : false;
-  const c11 = (i < sNx - 1 && j < sNy - 1) ? isCellInShirt(i, j) : false;
-  if (c00 && c10 && c01 && c11) return false; // interior node -> separate Front & Back panels
-  if (i === 0 && j > 0 && j < sleeveBotJ) return false; // open right cuff
-  if (i === sNx - 1 && j > 0 && j < sleeveBotJ) return false; // open left cuff
-  if (j === sNy - 1 && i > 5 && i < sNx - 1 - 5) return false; // open bottom waist hem
-  if (j <= 3 && i >= 10 && i <= 20) {
-    if (j === 0 && (i === 10 || i === 20)) return true; // shoulder-collar seam corners
-    return false; // open neck collar hole
-  }
-  return true;
-}
-
-const shirtFrontIdx = Array.from({ length: sNy }, () => new Int32Array(sNx).fill(-1));
-const shirtBackIdx  = Array.from({ length: sNy }, () => new Int32Array(sNx).fill(-1));
-const shirtParticles = [];
-const shirtUVs = [];
-const shirtParticleMass = 1.4 / 1400;
-
-function createShirtParticle(x, y, z, side, i, j) {
-  const idx = shirtParticles.length;
-  const p = world.addParticle(x, y, z, shirtParticleMass, 0.014, 0.32);
-  p._isShirt = true;
-  p._side = side;
-  p._si = i;
-  p._sj = j;
-  shirtParticles.push(p);
-  shirtUVs.push(i / (sNx - 1), 1 - j / (sNy - 1));
-  return idx;
-}
-
-for (let j = 0; j < sNy; j++) {
-  for (let i = 0; i < sNx; i++) {
-    if (!isShirtNodeUsed(i, j)) continue;
-    const x0 = -shirtHalfW + i * sDx;
-    const y0 = shirtTopY - j * sDy;
-    let zOff = 0.215;
-    if (j <= sleeveBotJ && (i < 5 || i > sNx - 1 - 5)) {
-      const uArm = Math.max(-1, Math.min(1, (y0 - (-0.065)) / 0.145));
-      zOff = 0.145 * Math.sqrt(Math.max(0.08, 1 - uArm * uArm));
-    } else {
-      const uTorso = Math.max(-1, Math.min(1, x0 / 0.315));
-      zOff = 0.225 * Math.sqrt(Math.max(0.08, 1 - uTorso * uTorso));
-    }
-    if (isSharedSeamNode(i, j)) {
-      const id = createShirtParticle(x0, y0, -1.2, 0, i, j);
-      shirtFrontIdx[j][i] = id;
-      shirtBackIdx[j][i] = id;
-    } else {
-      shirtFrontIdx[j][i] = createShirtParticle(x0, y0, -1.2 + zOff, 1, i, j);
-      shirtBackIdx[j][i]  = createShirtParticle(x0, y0, -1.2 - zOff, -1, i, j);
-    }
-  }
-}
-
-const shirtNbrs = shirtParticles.map(() => new Set());
-function linkShirtNbr(a, b) {
-  if (a >= 0 && b >= 0 && a !== b) {
-    shirtNbrs[a].add(b);
-    shirtNbrs[b].add(a);
-  }
-}
-
-const shirtIndices = [];
-for (let j = 0; j < sNy - 1; j++) {
-  for (let i = 0; i < sNx - 1; i++) {
-    if (!isCellInShirt(i, j)) continue;
-    // Front quad (+Z outward normal)
-    const fa = shirtFrontIdx[j][i], fb = shirtFrontIdx[j][i + 1],
-          fc = shirtFrontIdx[j + 1][i], fd = shirtFrontIdx[j + 1][i + 1];
-    shirtIndices.push(fa, fc, fb, fb, fc, fd);
-    linkShirtNbr(fa, fb); linkShirtNbr(fc, fd); linkShirtNbr(fa, fc); linkShirtNbr(fb, fd);
-
-    // Back quad (-Z outward normal)
-    const ba = shirtBackIdx[j][i], bb = shirtBackIdx[j][i + 1],
-          bc = shirtBackIdx[j + 1][i], bd = shirtBackIdx[j + 1][i + 1];
-    shirtIndices.push(ba, bb, bc, bb, bd, bc);
-    linkShirtNbr(ba, bb); linkShirtNbr(bc, bd); linkShirtNbr(ba, bc); linkShirtNbr(bb, bd);
-  }
-}
-
-// Mold the 30cm longer 3D T-Shirt in Bind Pose so every vertex starts at least +0.042m (4.2cm) outside Marshmallow Man skin
-const shirtTargetOffset = 0.042;
-for (let iter = 0; iter < 14; iter++) {
-  for (let v = 0; v < shirtParticles.length; v++) {
-    const p = shirtParticles[v];
-    let sx = 0, sy = 0, sz = 0;
-    const nSet = shirtNbrs[v];
-    if (nSet.size > 0) {
-      for (const nb of nSet) {
-        sx += shirtParticles[nb].x.x;
-        sy += shirtParticles[nb].x.y;
-        sz += shirtParticles[nb].x.z;
-      }
-      const inv = 1 / nSet.size;
-      const w = 0.25;
-      p.x.x = p.x.x * (1 - w) + sx * inv * w;
-      p.x.y = p.x.y * (1 - w) + sy * inv * w;
-      p.x.z = p.x.z * (1 - w) + sz * inv * w;
-    }
-    if (p._side === 0) p.x.z = -1.2;
-    const d = marshmallowSDF(p.x.x, p.x.y, p.x.z) - shirtTargetOffset;
-    if (d < 0) {
-      const [gx, gy, gz] = sdfGrad(p.x.x, p.x.y, p.x.z);
-      const step = -d * 0.90;
-      p.x.x += gx * step;
-      p.x.y += gy * step;
-      if (p._side !== 0) p.x.z += gz * step;
-    }
-    p.px.copy(p.x);
-  }
-}
-
-// Add Cotton Preset XPBD Distance Constraints (compliance = 0.000004 warp/weft, shearCompliance = 0.02, bendCompliance = 0)
-const shirtEdgeSet = new Set();
-const shirtStructConstraints = [];
-const shirtShearConstraints  = [];
-const shirtBendConstraints   = [];
-
-function addShirtEdge(u, v, compliance, bucket, enabled = true, isCollarLock = false) {
-  if (u < 0 || v < 0 || u === v) return;
-  const key = u < v ? u + ',' + v : v + ',' + u;
-  if (!shirtEdgeSet.has(key)) {
-    shirtEdgeSet.add(key);
-    const c = world.addDistanceConstraint(shirtParticles[u], shirtParticles[v], compliance);
-    c.enabled = enabled;
-    c._isCollarLock = isCollarLock;
-    if (bucket) bucket.push(c);
-  }
-}
-
-const COTTON_STRUCT_COMPLIANCE = 0.000004;
-const COTTON_SHEAR_COMPLIANCE  = 0.02;
-
-for (let j = 0; j < sNy - 1; j++) {
-  for (let i = 0; i < sNx - 1; i++) {
-    if (!isCellInShirt(i, j)) continue;
-    // Collar & top shoulder seam reinforcement keeps neckline inextensible
-    const isCollar = (j <= 2 && i >= 8 && i <= 22);
-    const structComp = isCollar ? 0.0 : COTTON_STRUCT_COMPLIANCE;
-    for (const grid of [shirtFrontIdx, shirtBackIdx]) {
-      const a = grid[j][i], b = grid[j][i + 1], c = grid[j + 1][i], d = grid[j + 1][i + 1];
-      // Structural warp & weft
-      addShirtEdge(a, b, structComp, shirtStructConstraints, true, isCollar);
-      addShirtEdge(c, d, structComp, shirtStructConstraints, true, isCollar);
-      addShirtEdge(a, c, structComp, shirtStructConstraints, true, isCollar);
-      addShirtEdge(b, d, structComp, shirtStructConstraints, true, isCollar);
-      // Diagonal cotton weave shear
-      addShirtEdge(a, d, COTTON_SHEAR_COMPLIANCE, shirtShearConstraints, true, false);
-      addShirtEdge(b, c, COTTON_SHEAR_COMPLIANCE, shirtShearConstraints, true, false);
-    }
-  }
-}
-
-// 2-hop bending constraints along warp & weft (disabled at 0% Bending for Cotton preset; enabled when Cloth Bending > 0%)
-for (const grid of [shirtFrontIdx, shirtBackIdx]) {
-  for (let j = 0; j < sNy; j++) {
-    for (let i = 0; i < sNx; i++) {
-      const a = grid[j][i];
-      if (a < 0) continue;
-      if (i + 2 < sNx && grid[j][i + 1] >= 0 && grid[j][i + 2] >= 0) {
-        addShirtEdge(a, grid[j][i + 2], 0.01, shirtBendConstraints, false, false);
-      }
-      if (j + 2 < sNy && grid[j + 1][i] >= 0 && grid[j + 2][i] >= 0) {
-        addShirtEdge(a, grid[j + 2][i], 0.01, shirtBendConstraints, false, false);
-      }
-    }
-  }
-}
-
-// Bind each shirt particle to its anatomical bone for smooth frame transport & pre-link local Marshmallow Man skin particles
-characterRoot.updateMatrixWorld(true);
-const shirtBoneNames = ['Hips', 'Spine', 'Spine1', 'Spine2', 'LeftArm', 'RightArm'];
-const shirtBoneInvBind = {};
-for (const bName of shirtBoneNames) {
-  bonesByName[bName].updateMatrixWorld(true);
-  shirtBoneInvBind[bName] = new THREE.Matrix4().copy(bonesByName[bName].matrixWorld).invert();
-}
-
-for (let i = 0; i < shirtParticles.length; i++) {
-  const p = shirtParticles[i];
-  p._bindPos = p.x.clone();
-
-  // 1. Assign primary anatomical bone & transport weight (carries sleeves with rotating arms while torso/hem cloth drapes freely)
-  let bName = 'Spine1';
-  let transportW = 0.34;
-  if (p._bindPos.y > -0.24 && p._bindPos.x > 0.215) {
-    bName = 'LeftArm';
-    transportW = 0.86;
-  } else if (p._bindPos.y > -0.24 && p._bindPos.x < -0.215) {
-    bName = 'RightArm';
-    transportW = 0.86;
-  } else if (p._bindPos.y > -0.22) {
-    bName = 'Spine2';
-    transportW = p._bindPos.y > -0.05 ? 0.86 : 0.56;
-  } else if (p._bindPos.y <= -0.55) {
-    bName = 'Hips';
-    transportW = 0.14;
-  } else if (p._bindPos.y <= -0.38) {
-    bName = 'Spine';
-    transportW = 0.26;
-  }
-  p._boneRef = bonesByName[bName];
-  p._boneLocalBind = p._bindPos.clone().applyMatrix4(shirtBoneInvBind[bName]);
-  p._prevBoneWorldPos = p._bindPos.clone();
-  p._targetBoneWorldPos = p._bindPos.clone();
-  p._boneStepDelta = new V();
-  p._transportW = transportW;
-
-  // 2. Pre-link nearby Marshmallow Man outer boundary particles for one-way soft-body skin collision
-  p._skinNeighbors = [];
-  for (let k = 0; k < numBaseVerts; k++) {
-    const bp = blobParticles[k];
-    if (!bp._isBoundary) continue;
-    const d0 = p._bindPos.distanceTo(bp._bindPos);
-    if (d0 < 0.24) {
-      p._skinNeighbors.push(bp);
-    }
-  }
-}
-
-const shirtGeom = new THREE.BufferGeometry();
-const shirtPosArr = new Float32Array(shirtParticles.length * 3);
-shirtGeom.setAttribute('position', new THREE.BufferAttribute(shirtPosArr, 3));
-shirtGeom.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(shirtUVs), 2));
-shirtGeom.setIndex(shirtIndices);
-
+let shirtParticles = [];
+let shirtStructConstraints = [];
+let shirtShearConstraints  = [];
+let shirtBendConstraints   = [];
+let shirtGeom = new THREE.BufferGeometry();
 const shirtMesh = new THREE.Mesh(shirtGeom, shirtMat);
 shirtMesh.castShadow = true;
 shirtMesh.receiveShadow = true;
 scene.add(shirtMesh);
 
+let currentSoftDiv = 1;
+let currentClothDiv = 1;
+let currentShirtNx = 31;
+let draggableParticles = [];
+
+function syncBlobMesh() {
+  const posAttr = blobGeom.attributes.position;
+  if (!posAttr) return;
+  const arr = posAttr.array;
+
+  // 1. Copy base XPBD soft-body particle positions
+  for (let i = 0; i < numBaseVerts; i++) {
+    const pt = blobParticles[i].x;
+    const i3 = i * 3;
+    arr[i3] = pt.x;
+    arr[i3 + 1] = pt.y;
+    arr[i3 + 2] = pt.z;
+  }
+
+  // 2. Interpolate Loop-subdivided edge midpoints with live diamond normal curvature offset
+  for (let e = 0; e < midEdges.length; e++) {
+    const me = midEdges[e];
+    const pu = blobParticles[me.u].x;
+    const pv = blobParticles[me.v].x;
+    const pa = blobParticles[me.oppA].x;
+    const pb = blobParticles[me.oppB].x;
+
+    const mx = 0.375 * (pu.x + pv.x) + 0.125 * (pa.x + pb.x);
+    const my = 0.375 * (pu.y + pv.y) + 0.125 * (pa.y + pb.y);
+    const mz = 0.375 * (pu.z + pv.z) + 0.125 * (pa.z + pb.z);
+
+    const idx3 = (numBaseVerts + e) * 3;
+    if (Math.abs(me.offsetN) > 1e-5) {
+      const ex = pv.x - pu.x, ey = pv.y - pu.y, ez = pv.z - pu.z;
+      const dx1 = pa.x - pu.x, dy1 = pa.y - pu.y, dz1 = pa.z - pu.z;
+      const dx2 = pb.x - pv.x, dy2 = pb.y - pv.y, dz2 = pb.z - pv.z;
+      const nx1 = ey * dz1 - ez * dy1, ny1 = ez * dx1 - ex * dz1, nz1 = ex * dy1 - ey * dx1;
+      const nx2 = dz2 * ey - dy2 * ez, ny2 = dx2 * ez - dz2 * ex, nz2 = dy2 * ex - dx2 * ey;
+      const nx = nx1 + nx2, ny = ny1 + ny2, nz = nz1 + nz2;
+      const nl = Math.hypot(nx, ny, nz) || 1;
+      arr[idx3] = mx + (nx / nl) * me.offsetN;
+      arr[idx3 + 1] = my + (ny / nl) * me.offsetN;
+      arr[idx3 + 2] = mz + (nz / nl) * me.offsetN;
+    } else {
+      arr[idx3] = mx;
+      arr[idx3 + 1] = my;
+      arr[idx3 + 2] = mz;
+    }
+  }
+
+  posAttr.needsUpdate = true;
+  blobGeom.computeVertexNormals();
+
+  // Copy live outward unit normals onto Marshmallow Man boundary particles for one-way shirt collision
+  const normArr = blobGeom.attributes.normal.array;
+  for (let i = 0; i < numBaseVerts; i++) {
+    const bp = blobParticles[i];
+    if (bp._isBoundary) {
+      if (!bp._skinNormal) bp._skinNormal = new V(0, 0, 1);
+      const i3 = i * 3;
+      bp._skinNormal.set(normArr[i3], normArr[i3 + 1], normArr[i3 + 2]);
+    }
+  }
+}
+
 function syncShirtMesh() {
   const posAttr = shirtGeom.attributes.position;
+  if (!posAttr) return;
   const arr = posAttr.array;
   for (let i = 0; i < shirtParticles.length; i++) {
     const pt = shirtParticles[i].x;
@@ -1544,7 +964,671 @@ function syncShirtMesh() {
   posAttr.needsUpdate = true;
   shirtGeom.computeVertexNormals();
 }
-syncShirtMesh();
+
+function buildCharacterMeshes(softDiv, clothDiv) {
+  currentSoftDiv = softDiv;
+  currentClothDiv = clothDiv;
+
+  // Reset skeleton to exact T-Pose (Bind Pose) before generating bind-pose meshes & pin anchors
+  rootBone.position.copy(HIP_BIND_POS);
+  for (let i = 0; i < boneList.length; i++) {
+    boneList[i].quaternion.identity();
+  }
+  characterRoot.updateMatrixWorld(true);
+
+  // Clear previous XPBD particles, constraints, volume constraints, and pin markers
+  world.particles.length = 0;
+  world.constraints.length = 0;
+  world.volumeConstraints.length = 0;
+  for (let i = 0; i < pinDotMeshes.length; i++) {
+    if (pinDotMeshes[i].parent) pinDotMeshes[i].parent.remove(pinDotMeshes[i]);
+  }
+  pinDotMeshes.length = 0;
+
+  // Tune solver substep budget so 2x subdivided meshes maintain high frame rate
+  if (softDiv > 1 || clothDiv > 1) {
+    world.substeps = 8;
+    world.positionIterations = 1;
+  } else {
+    world.substeps = 10;
+    world.positionIterations = 2;
+  }
+
+  /* ---- 1. Build Volumetric Tetrahedral Marshmallow Man Meta-Mesh (1x or 2x Divisions) ---- */
+  const dx = 0.072 / softDiv;
+  const cxN = softDiv === 1 ? 23 : 47;
+  const cyN = 26 * softDiv;
+  const czN = softDiv === 1 ? 7 : 15;
+  const nx = cxN + 1, ny = cyN + 1, nz = czN + 1;
+  const minX = -cxN * 0.5 * dx;
+  const maxY = 0.34;
+  const minZ = -1.2 - czN * 0.5 * dx;
+  const cIdx = (i, j, k) => (k * cyN + j) * cxN + i;
+  const cellActive = new Uint8Array(cxN * cyN * czN);
+  const midXCol = Math.floor(cxN / 2);
+
+  for (let k = 0; k < czN; k++) {
+    for (let j = 0; j < cyN; j++) {
+      for (let i = 0; i < cxN; i++) {
+        const cx = minX + (i + 0.5) * dx;
+        const cy = maxY - (j + 0.5) * dx;
+        const cz = minZ + (k + 0.5) * dx;
+        // Keep center column between legs clear below hips so left & right marshmallow legs are separate
+        if (i === midXCol && cy < -0.66) continue;
+        if (marshmallowSDF(cx, cy, cz) <= 0.016) {
+          cellActive[cIdx(i, j, k)] = 1;
+        }
+      }
+    }
+  }
+
+  // Prune any dangling 1-neighbor hex cell
+  for (let pass = 0; pass < 2; pass++) {
+    for (let k = 0; k < czN; k++) {
+      for (let j = 0; j < cyN; j++) {
+        for (let i = 0; i < cxN; i++) {
+          if (!cellActive[cIdx(i, j, k)]) continue;
+          let n = 0;
+          if (i > 0 && cellActive[cIdx(i - 1, j, k)]) n++;
+          if (i < cxN - 1 && cellActive[cIdx(i + 1, j, k)]) n++;
+          if (j > 0 && cellActive[cIdx(i, j - 1, k)]) n++;
+          if (j < cyN - 1 && cellActive[cIdx(i, j + 1, k)]) n++;
+          if (k > 0 && cellActive[cIdx(i, j, k - 1)]) n++;
+          if (k < czN - 1 && cellActive[cIdx(i, j, k + 1)]) n++;
+          if (n <= 1) cellActive[cIdx(i, j, k)] = 0;
+        }
+      }
+    }
+  }
+
+  const gIdx = (i, j, k) => (k * ny + j) * nx + i;
+  const vertMap = new Map();
+  blobParticles = [];
+  const metaMeshRef = {};
+
+  function getMetaVert(i, j, k) {
+    const g = gIdx(i, j, k);
+    if (!vertMap.has(g)) {
+      vertMap.set(g, blobParticles.length);
+      const p = world.addParticle(minX + i * dx, maxY - j * dx, minZ + k * dx, 0.048, dx * 0.25, 0.30);
+      p._tetMesh = metaMeshRef;
+      p._tx = i; p._ty = j; p._tz = k;
+      p._isBoundary = false;
+      blobParticles.push(p);
+    }
+    return vertMap.get(g);
+  }
+
+  const metaTets = [];
+  for (let k = 0; k < czN; k++) {
+    for (let j = 0; j < cyN; j++) {
+      for (let i = 0; i < cxN; i++) {
+        if (!cellActive[cIdx(i, j, k)]) continue;
+        const v0 = getMetaVert(i, j, k),         v1 = getMetaVert(i + 1, j, k),
+              v2 = getMetaVert(i + 1, j + 1, k), v3 = getMetaVert(i, j + 1, k),
+              v4 = getMetaVert(i, j, k + 1),     v5 = getMetaVert(i + 1, j, k + 1),
+              v6 = getMetaVert(i + 1, j + 1, k + 1), v7 = getMetaVert(i, j + 1, k + 1);
+        if ((i + j + k) % 2 === 0) {
+          metaTets.push([v0, v1, v3, v4], [v1, v2, v3, v6], [v1, v4, v5, v6], [v3, v4, v6, v7], [v1, v3, v4, v6]);
+        } else {
+          metaTets.push([v0, v1, v2, v5], [v0, v2, v3, v7], [v0, v4, v5, v7], [v2, v5, v6, v7], [v0, v2, v5, v7]);
+        }
+      }
+    }
+  }
+
+  for (let ti = 0; ti < metaTets.length; ti++) {
+    const tet = metaTets[ti];
+    if (calcSignedTetVol(blobParticles[tet[0]], blobParticles[tet[1]], blobParticles[tet[2]], blobParticles[tet[3]]) < 0) {
+      const tmp = tet[1]; tet[1] = tet[2]; tet[2] = tmp;
+    }
+  }
+
+  const faceMap = new Map();
+  for (let ti = 0; ti < metaTets.length; ti++) {
+    const tet = metaTets[ti];
+    const fList = [
+      [tet[0], tet[1], tet[2], tet[3]],
+      [tet[0], tet[1], tet[3], tet[2]],
+      [tet[0], tet[2], tet[3], tet[1]],
+      [tet[1], tet[2], tet[3], tet[0]]
+    ];
+    for (let f = 0; f < 4; f++) {
+      const [a, b, c, opp] = fList[f];
+      const key = [a, b, c].sort((x, y) => x - y).join(',');
+      if (!faceMap.has(key)) faceMap.set(key, { count: 0, a, b, c, opp });
+      faceMap.get(key).count++;
+    }
+  }
+
+  const boundaryNeighbors = blobParticles.map(() => new Set());
+  const allNeighbors = blobParticles.map(() => new Set());
+  const incidentTets = blobParticles.map(() => []);
+  for (let ti = 0; ti < metaTets.length; ti++) {
+    const [a, b, c, d] = metaTets[ti];
+    incidentTets[a].push(ti); incidentTets[b].push(ti);
+    incidentTets[c].push(ti); incidentTets[d].push(ti);
+    for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) {
+      allNeighbors[u].add(v);
+      allNeighbors[v].add(u);
+    }
+  }
+
+  const baseTris = [];
+  for (const [, val] of faceMap) {
+    if (val.count === 1) {
+      const { a, b, c, opp } = val;
+      blobParticles[a]._isBoundary = true;
+      blobParticles[b]._isBoundary = true;
+      blobParticles[c]._isBoundary = true;
+      boundaryNeighbors[a].add(b); boundaryNeighbors[a].add(c);
+      boundaryNeighbors[b].add(a); boundaryNeighbors[b].add(c);
+      boundaryNeighbors[c].add(a); boundaryNeighbors[c].add(b);
+
+      const pa = blobParticles[a].x, pb = blobParticles[b].x, pc = blobParticles[c].x, po = blobParticles[opp].x;
+      const ux = pb.x - pa.x, uy = pb.y - pa.y, uz = pb.z - pa.z;
+      const vx = pc.x - pa.x, vy = pc.y - pa.y, vz = pc.z - pa.z;
+      const fnx = uy * vz - uz * vy, fny = uz * vx - ux * vz, fnz = ux * vy - uy * vx;
+      const ox = pa.x - po.x, oy = pa.y - po.y, oz = pa.z - po.z;
+      if (fnx * ox + fny * oy + fnz * oz > 0) baseTris.push([a, b, c]);
+      else baseTris.push([a, c, b]);
+    }
+  }
+
+  // Constrained Elastic Surface-Net smoothing + exact Newton projection onto marshmallowSDF = 0
+  const minAllowedVol = (dx * dx * dx / 6) * 0.08;
+  const maxProjStep = 0.022 / softDiv;
+  for (let iter = 0; iter < 14; iter++) {
+    for (let i = 0; i < blobParticles.length; i++) {
+      const p = blobParticles[i];
+      const oldX = p.x.x, oldY = p.x.y, oldZ = p.x.z;
+      const nbrs = p._isBoundary ? boundaryNeighbors[i] : allNeighbors[i];
+      let nxPos = oldX, nyPos = oldY, nzPos = oldZ;
+      if (nbrs.size > 0) {
+        let sx = 0, sy = 0, sz = 0;
+        for (const j of nbrs) {
+          sx += blobParticles[j].x.x;
+          sy += blobParticles[j].x.y;
+          sz += blobParticles[j].x.z;
+        }
+        const inv = 1 / nbrs.size;
+        const w = p._isBoundary ? 0.42 : 0.35;
+        nxPos = oldX * (1 - w) + sx * inv * w;
+        nyPos = oldY * (1 - w) + sy * inv * w;
+        nzPos = oldZ * (1 - w) + sz * inv * w;
+      }
+      if (p._isBoundary) {
+        const d = marshmallowSDF(nxPos, nyPos, nzPos);
+        const [gx, gy, gz] = sdfGrad(nxPos, nyPos, nzPos);
+        const step = Math.max(-maxProjStep, Math.min(maxProjStep, d * 0.78));
+        nxPos -= gx * step;
+        nyPos -= gy * step;
+        nzPos -= gz * step;
+      }
+      p.x.set(nxPos, nyPos, nzPos);
+      let ok = true;
+      for (const ti of incidentTets[i]) {
+        const tet = metaTets[ti];
+        if (calcSignedTetVol(blobParticles[tet[0]], blobParticles[tet[1]], blobParticles[tet[2]], blobParticles[tet[3]]) < minAllowedVol) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok) {
+        p.x.set(0.5 * (oldX + nxPos), 0.5 * (oldY + nyPos), 0.5 * (oldZ + nzPos));
+        let ok2 = true;
+        for (const ti of incidentTets[i]) {
+          const tet = metaTets[ti];
+          if (calcSignedTetVol(blobParticles[tet[0]], blobParticles[tet[1]], blobParticles[tet[2]], blobParticles[tet[3]]) < minAllowedVol) {
+            ok2 = false;
+            break;
+          }
+        }
+        if (!ok2) p.x.set(oldX, oldY, oldZ);
+      }
+      p.px.copy(p.x);
+    }
+  }
+
+  for (let i = 0; i < blobParticles.length; i++) {
+    blobParticles[i]._bindPos = blobParticles[i].x.clone();
+  }
+
+  // Create XPBD Soft-Body Constraints (1-hop tet edges + 2-hop axial bending + TetVolumeConstraints)
+  const edgeSet = new Set();
+  tetEdgeConstraints = [];
+  bendEdgeConstraints = [];
+  function addMetaEdge(u, v, compliance, targetList) {
+    const key = u < v ? u + ',' + v : v + ',' + u;
+    if (!edgeSet.has(key)) {
+      edgeSet.add(key);
+      const c = world.addDistanceConstraint(blobParticles[u], blobParticles[v], compliance);
+      if (targetList) targetList.push(c);
+    }
+  }
+  for (let ti = 0; ti < metaTets.length; ti++) {
+    const [a, b, c, d] = metaTets[ti];
+    for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) {
+      addMetaEdge(u, v, 0.0040, tetEdgeConstraints);
+    }
+    if (softDiv === 1 || ti % 5 === 4) {
+      world.volumeConstraints.push(new XPBD.TetVolumeConstraint(
+        blobParticles[a], blobParticles[b], blobParticles[c], blobParticles[d], 0.0
+      ));
+    }
+  }
+  for (let u = 0; u < blobParticles.length; u++) {
+    for (const m of allNeighbors[u]) {
+      for (const v of allNeighbors[m]) {
+        if (v > u) {
+          const di = Math.abs(blobParticles[u]._tx - blobParticles[v]._tx);
+          const dj = Math.abs(blobParticles[u]._ty - blobParticles[v]._ty);
+          const dk = Math.abs(blobParticles[u]._tz - blobParticles[v]._tz);
+          if (di + dj + dk === 2 && Math.max(di, dj, dk) === 2) {
+            addMetaEdge(u, v, 0.0090, bendEdgeConstraints);
+          }
+        }
+      }
+    }
+  }
+
+  // Pin Head, Elbows, Hands, Knees, and Feet particles directly to their bone spheres
+  const pinBindPos = {};
+  const pinInvMat = {};
+  for (const [key, mesh] of Object.entries(pinAnchors)) {
+    mesh.updateMatrixWorld(true);
+    pinBindPos[key] = new V();
+    mesh.getWorldPosition(pinBindPos[key]);
+    pinInvMat[key] = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+  }
+
+  blobPinnedParticles = [];
+  function attachParticleToAnchor(p, anchorKey) {
+    const sphereMesh = pinAnchors[anchorKey];
+    p.invM = 0;
+    p._isPinned = true;
+    p._pinSphereMesh = sphereMesh;
+    p._pinLocalPos = p.x.clone().applyMatrix4(pinInvMat[anchorKey]);
+    p._prevPinWorldPos = p.x.clone();
+    p._targetPinWorldPos = p.x.clone();
+    blobPinnedParticles.push(p);
+
+    const pinDot = new THREE.Mesh(pinMarkerGeom, pinMarkerMat);
+    pinDot.position.copy(p._pinLocalPos);
+    sphereMesh.add(pinDot);
+    pinDotMeshes.push(pinDot);
+  }
+
+  for (let i = 0; i < blobParticles.length; i++) {
+    const p = blobParticles[i];
+    p._isPinned = false;
+    const px = p.x.x, py = p.x.y, pz = p.x.z;
+
+    if (py >= 0.02 && Math.hypot(px - pinBindPos.head.x, py - 0.11, pz - pinBindPos.head.z) <= 0.175) {
+      attachParticleToAnchor(p, 'head');
+    } else if (px >= 0.60 && Math.hypot(px - pinBindPos.lHand.x, py - pinBindPos.lHand.y, pz - pinBindPos.lHand.z) <= 0.135) {
+      attachParticleToAnchor(p, 'lHand');
+    } else if (px <= -0.60 && Math.hypot(px - pinBindPos.rHand.x, py - pinBindPos.rHand.y, pz - pinBindPos.rHand.z) <= 0.135) {
+      attachParticleToAnchor(p, 'rHand');
+    } else if (px >= 0.36 && px <= 0.52 && Math.hypot(px - pinBindPos.lElbow.x, py - pinBindPos.lElbow.y, pz - pinBindPos.lElbow.z) <= 0.125) {
+      attachParticleToAnchor(p, 'lElbow');
+    } else if (px <= -0.36 && px >= -0.52 && Math.hypot(px - pinBindPos.rElbow.x, py - pinBindPos.rElbow.y, pz - pinBindPos.rElbow.z) <= 0.125) {
+      attachParticleToAnchor(p, 'rElbow');
+    } else if (px > 0.02 && py <= -1.30) {
+      attachParticleToAnchor(p, 'lFoot');
+    } else if (px < -0.02 && py <= -1.30) {
+      attachParticleToAnchor(p, 'rFoot');
+    } else if (px > 0.02 && py >= -1.11 && py <= -0.94 && Math.hypot(px - pinBindPos.lKnee.x, py - pinBindPos.lKnee.y, pz - pinBindPos.lKnee.z) <= 0.135) {
+      attachParticleToAnchor(p, 'lKnee');
+    } else if (px < -0.02 && py >= -1.11 && py <= -0.94 && Math.hypot(px - pinBindPos.rKnee.x, py - pinBindPos.rKnee.y, pz - pinBindPos.rKnee.z) <= 0.135) {
+      attachParticleToAnchor(p, 'rKnee');
+    }
+  }
+
+  // Build 1-level Loop-subdivided Meta-Mesh surface projected onto marshmallowSDF = 0
+  numBaseVerts = blobParticles.length;
+  const edgeMidMap = new Map();
+  midEdges = [];
+
+  function getOrCreateMidEdge(u, v, opp) {
+    const key = u < v ? u + ',' + v : v + ',' + u;
+    let eIdx = edgeMidMap.get(key);
+    if (eIdx === undefined) {
+      eIdx = midEdges.length;
+      edgeMidMap.set(key, eIdx);
+      midEdges.push({
+        u: Math.min(u, v),
+        v: Math.max(u, v),
+        oppA: opp,
+        oppB: opp,
+        offsetN: 0
+      });
+    } else {
+      midEdges[eIdx].oppB = opp;
+    }
+    return numBaseVerts + eIdx;
+  }
+
+  const subIndices = [];
+  for (let t = 0; t < baseTris.length; t++) {
+    const [a, b, c] = baseTris[t];
+    const mab = getOrCreateMidEdge(a, b, c);
+    const mbc = getOrCreateMidEdge(b, c, a);
+    const mca = getOrCreateMidEdge(c, a, b);
+    subIndices.push(
+      a, mab, mca,
+      b, mbc, mab,
+      c, mca, mbc,
+      mab, mbc, mca
+    );
+  }
+
+  const maxCurvOff = 0.012 / softDiv;
+  for (let e = 0; e < midEdges.length; e++) {
+    const me = midEdges[e];
+    const pu = blobParticles[me.u].x;
+    const pv = blobParticles[me.v].x;
+    const pa = blobParticles[me.oppA].x;
+    const pb = blobParticles[me.oppB].x;
+
+    const mx0 = 0.375 * (pu.x + pv.x) + 0.125 * (pa.x + pb.x);
+    const my0 = 0.375 * (pu.y + pv.y) + 0.125 * (pa.y + pb.y);
+    const mz0 = 0.375 * (pu.z + pv.z) + 0.125 * (pa.z + pb.z);
+
+    let sx = mx0, sy = my0, sz = mz0;
+    for (let s = 0; s < 3; s++) {
+      const d = marshmallowSDF(sx, sy, sz);
+      const [gx, gy, gz] = sdfGrad(sx, sy, sz);
+      sx -= gx * d * 0.85;
+      sy -= gy * d * 0.85;
+      sz -= gz * d * 0.85;
+    }
+    const [gnx, gny, gnz] = sdfGrad(mx0, my0, mz0);
+    const off = (sx - mx0) * gnx + (sy - my0) * gny + (sz - mz0) * gnz;
+    me.offsetN = Math.max(-maxCurvOff, Math.min(maxCurvOff, off));
+  }
+
+  const totalRenderVerts = numBaseVerts + midEdges.length;
+  if (blobGeom) blobGeom.dispose();
+  blobGeom = new THREE.BufferGeometry();
+  const blobPosArr = new Float32Array(totalRenderVerts * 3);
+  blobGeom.setAttribute('position', new THREE.BufferAttribute(blobPosArr, 3));
+  blobGeom.setIndex(subIndices);
+  blobMesh.geometry = blobGeom;
+  syncBlobMesh();
+
+  /* ---- 2. Build Cyan Checker Cotton Shirt Mesh (1x or 2x Divisions) ---- */
+  const S = clothDiv;
+  const sNx = 30 * S + 1;
+  const sNy = 31 * S + 1;
+  currentShirtNx = sNx;
+  const shirtHalfW = 0.455;
+  const shirtTopY = 0.068, shirtBotY = -0.872;
+  const sDx = (2 * shirtHalfW) / (sNx - 1);
+  const sDy = (shirtTopY - shirtBotY) / (sNy - 1);
+  const sleeveBotJ = 9 * S;
+
+  function isCellInShirt(ci, cj) {
+    const xMid = -shirtHalfW + (ci + 0.5) * sDx;
+    const yMid = shirtTopY - (cj + 0.5) * sDy;
+    if (cj < 3 * S && Math.abs(xMid) < 0.145) {
+      const nr = Math.hypot(xMid / 0.155, (yMid - shirtTopY) / 0.088);
+      if (nr < 1.0) return false;
+    }
+    if (cj >= sleeveBotJ && (ci < 5 * S || ci >= sNx - 1 - 5 * S)) return false;
+    return true;
+  }
+
+  function isShirtNodeUsed(i, j) {
+    for (let dj = -1; dj <= 0; dj++) {
+      for (let di = -1; di <= 0; di++) {
+        const ci = i + di, cj = j + dj;
+        if (ci >= 0 && ci < sNx - 1 && cj >= 0 && cj < sNy - 1) {
+          if (isCellInShirt(ci, cj)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function isSharedSeamNode(i, j) {
+    const c00 = (i > 0 && j > 0) ? isCellInShirt(i - 1, j - 1) : false;
+    const c10 = (i < sNx - 1 && j > 0) ? isCellInShirt(i, j - 1) : false;
+    const c01 = (i > 0 && j < sNy - 1) ? isCellInShirt(i - 1, j) : false;
+    const c11 = (i < sNx - 1 && j < sNy - 1) ? isCellInShirt(i, j) : false;
+    if (c00 && c10 && c01 && c11) return false; // interior node -> separate Front & Back panels
+    if (i === 0 && j > 0 && j < sleeveBotJ) return false; // open right cuff
+    if (i === sNx - 1 && j > 0 && j < sleeveBotJ) return false; // open left cuff
+    if (j === sNy - 1 && i > 5 * S && i < sNx - 1 - 5 * S) return false; // open bottom waist hem
+    if (j <= 3 * S && i >= 10 * S && i <= 20 * S) {
+      if (j === 0 && (i === 10 * S || i === 20 * S)) return true; // shoulder-collar seam corners
+      return false; // open neck collar hole
+    }
+    return true;
+  }
+
+  const shirtFrontIdx = Array.from({ length: sNy }, () => new Int32Array(sNx).fill(-1));
+  const shirtBackIdx  = Array.from({ length: sNy }, () => new Int32Array(sNx).fill(-1));
+  shirtParticles = [];
+  const shirtUVs = [];
+  const shirtParticleMass = 1.4 / (1400 * S * S);
+  const shirtRadius = 0.014 / Math.sqrt(S);
+
+  function createShirtParticle(x, y, z, side, i, j) {
+    const idx = shirtParticles.length;
+    const p = world.addParticle(x, y, z, shirtParticleMass, shirtRadius, 0.32);
+    p._isShirt = true;
+    p._side = side;
+    p._si = i;
+    p._sj = j;
+    shirtParticles.push(p);
+    shirtUVs.push(i / (sNx - 1), 1 - j / (sNy - 1));
+    return idx;
+  }
+
+  for (let j = 0; j < sNy; j++) {
+    for (let i = 0; i < sNx; i++) {
+      if (!isShirtNodeUsed(i, j)) continue;
+      const x0 = -shirtHalfW + i * sDx;
+      const y0 = shirtTopY - j * sDy;
+      let zOff = 0.215;
+      if (j <= sleeveBotJ && (i < 5 * S || i > sNx - 1 - 5 * S)) {
+        const uArm = Math.max(-1, Math.min(1, (y0 - (-0.065)) / 0.145));
+        zOff = 0.145 * Math.sqrt(Math.max(0.08, 1 - uArm * uArm));
+      } else {
+        const uTorso = Math.max(-1, Math.min(1, x0 / 0.315));
+        zOff = 0.225 * Math.sqrt(Math.max(0.08, 1 - uTorso * uTorso));
+      }
+      if (isSharedSeamNode(i, j)) {
+        const id = createShirtParticle(x0, y0, -1.2, 0, i, j);
+        shirtFrontIdx[j][i] = id;
+        shirtBackIdx[j][i] = id;
+      } else {
+        shirtFrontIdx[j][i] = createShirtParticle(x0, y0, -1.2 + zOff, 1, i, j);
+        shirtBackIdx[j][i]  = createShirtParticle(x0, y0, -1.2 - zOff, -1, i, j);
+      }
+    }
+  }
+
+  const shirtNbrs = shirtParticles.map(() => new Set());
+  function linkShirtNbr(a, b) {
+    if (a >= 0 && b >= 0 && a !== b) {
+      shirtNbrs[a].add(b);
+      shirtNbrs[b].add(a);
+    }
+  }
+
+  const shirtIndices = [];
+  for (let j = 0; j < sNy - 1; j++) {
+    for (let i = 0; i < sNx - 1; i++) {
+      if (!isCellInShirt(i, j)) continue;
+      const fa = shirtFrontIdx[j][i], fb = shirtFrontIdx[j][i + 1],
+            fc = shirtFrontIdx[j + 1][i], fd = shirtFrontIdx[j + 1][i + 1];
+      shirtIndices.push(fa, fc, fb, fb, fc, fd);
+      linkShirtNbr(fa, fb); linkShirtNbr(fc, fd); linkShirtNbr(fa, fc); linkShirtNbr(fb, fd);
+
+      const ba = shirtBackIdx[j][i], bb = shirtBackIdx[j][i + 1],
+            bc = shirtBackIdx[j + 1][i], bd = shirtBackIdx[j + 1][i + 1];
+      shirtIndices.push(ba, bb, bc, bb, bd, bc);
+      linkShirtNbr(ba, bb); linkShirtNbr(bc, bd); linkShirtNbr(ba, bc); linkShirtNbr(bb, bd);
+    }
+  }
+
+  // Mold the 30cm longer 3D T-Shirt in Bind Pose so every vertex starts at least +0.042m (4.2cm) outside Marshmallow Man skin
+  const shirtTargetOffset = 0.042;
+  const moldIters = 14 * S;
+  for (let iter = 0; iter < moldIters; iter++) {
+    for (let v = 0; v < shirtParticles.length; v++) {
+      const p = shirtParticles[v];
+      let sx = 0, sy = 0, sz = 0;
+      const nSet = shirtNbrs[v];
+      if (nSet.size > 0) {
+        for (const nb of nSet) {
+          sx += shirtParticles[nb].x.x;
+          sy += shirtParticles[nb].x.y;
+          sz += shirtParticles[nb].x.z;
+        }
+        const inv = 1 / nSet.size;
+        const w = 0.25;
+        p.x.x = p.x.x * (1 - w) + sx * inv * w;
+        p.x.y = p.x.y * (1 - w) + sy * inv * w;
+        p.x.z = p.x.z * (1 - w) + sz * inv * w;
+      }
+      if (p._side === 0) p.x.z = -1.2;
+      const d = marshmallowSDF(p.x.x, p.x.y, p.x.z) - shirtTargetOffset;
+      if (d < 0) {
+        const [gx, gy, gz] = sdfGrad(p.x.x, p.x.y, p.x.z);
+        const step = -d * 0.90;
+        p.x.x += gx * step;
+        p.x.y += gy * step;
+        if (p._side !== 0) p.x.z += gz * step;
+      }
+      p.px.copy(p.x);
+    }
+  }
+
+  const shirtEdgeSet = new Set();
+  shirtStructConstraints = [];
+  shirtShearConstraints  = [];
+  shirtBendConstraints   = [];
+
+  function addShirtEdge(u, v, compliance, bucket, enabled = true, isCollarLock = false) {
+    if (u < 0 || v < 0 || u === v) return;
+    const key = u < v ? u + ',' + v : v + ',' + u;
+    if (!shirtEdgeSet.has(key)) {
+      shirtEdgeSet.add(key);
+      const c = world.addDistanceConstraint(shirtParticles[u], shirtParticles[v], compliance);
+      c.enabled = enabled;
+      c._isCollarLock = isCollarLock;
+      if (bucket) bucket.push(c);
+    }
+  }
+
+  const COTTON_STRUCT_COMPLIANCE = 0.000004;
+  const COTTON_SHEAR_COMPLIANCE  = 0.02;
+
+  for (let j = 0; j < sNy - 1; j++) {
+    for (let i = 0; i < sNx - 1; i++) {
+      if (!isCellInShirt(i, j)) continue;
+      const isCollar = (j <= 2 * S && i >= 8 * S && i <= 22 * S);
+      const structComp = isCollar ? 0.0 : COTTON_STRUCT_COMPLIANCE;
+      for (const grid of [shirtFrontIdx, shirtBackIdx]) {
+        const a = grid[j][i], b = grid[j][i + 1], c = grid[j + 1][i], d = grid[j + 1][i + 1];
+        addShirtEdge(a, b, structComp, shirtStructConstraints, true, isCollar);
+        addShirtEdge(c, d, structComp, shirtStructConstraints, true, isCollar);
+        addShirtEdge(a, c, structComp, shirtStructConstraints, true, isCollar);
+        addShirtEdge(b, d, structComp, shirtStructConstraints, true, isCollar);
+        addShirtEdge(a, d, COTTON_SHEAR_COMPLIANCE, shirtShearConstraints, true, false);
+        addShirtEdge(b, c, COTTON_SHEAR_COMPLIANCE, shirtShearConstraints, true, false);
+      }
+    }
+  }
+
+  for (const grid of [shirtFrontIdx, shirtBackIdx]) {
+    for (let j = 0; j < sNy; j++) {
+      for (let i = 0; i < sNx; i++) {
+        const a = grid[j][i];
+        if (a < 0) continue;
+        if (i + 2 < sNx && grid[j][i + 1] >= 0 && grid[j][i + 2] >= 0) {
+          addShirtEdge(a, grid[j][i + 2], 0.01, shirtBendConstraints, false, false);
+        }
+        if (j + 2 < sNy && grid[j + 1][i] >= 0 && grid[j + 2][i] >= 0) {
+          addShirtEdge(a, grid[j + 2][i], 0.01, shirtBendConstraints, false, false);
+        }
+      }
+    }
+  }
+
+  // Bind each shirt particle to its anatomical bone & pre-link local Marshmallow Man boundary skin particles
+  const shirtBoneNames = ['Hips', 'Spine', 'Spine1', 'Spine2', 'LeftArm', 'RightArm'];
+  const shirtBoneInvBind = {};
+  for (const bName of shirtBoneNames) {
+    bonesByName[bName].updateMatrixWorld(true);
+    shirtBoneInvBind[bName] = new THREE.Matrix4().copy(bonesByName[bName].matrixWorld).invert();
+  }
+
+  const boundaryList = [];
+  for (let k = 0; k < numBaseVerts; k++) {
+    if (blobParticles[k]._isBoundary) boundaryList.push(blobParticles[k]);
+  }
+
+  for (let i = 0; i < shirtParticles.length; i++) {
+    const p = shirtParticles[i];
+    p._bindPos = p.x.clone();
+
+    let bName = 'Spine1';
+    let transportW = 0.34;
+    if (p._bindPos.y > -0.24 && p._bindPos.x > 0.215) {
+      bName = 'LeftArm';
+      transportW = 0.86;
+    } else if (p._bindPos.y > -0.24 && p._bindPos.x < -0.215) {
+      bName = 'RightArm';
+      transportW = 0.86;
+    } else if (p._bindPos.y > -0.22) {
+      bName = 'Spine2';
+      transportW = p._bindPos.y > -0.05 ? 0.86 : 0.56;
+    } else if (p._bindPos.y <= -0.55) {
+      bName = 'Hips';
+      transportW = 0.14;
+    } else if (p._bindPos.y <= -0.38) {
+      bName = 'Spine';
+      transportW = 0.26;
+    }
+    p._boneRef = bonesByName[bName];
+    p._boneLocalBind = p._bindPos.clone().applyMatrix4(shirtBoneInvBind[bName]);
+    p._prevBoneWorldPos = p._bindPos.clone();
+    p._targetBoneWorldPos = p._bindPos.clone();
+    p._boneStepDelta = new V();
+    p._transportW = transportW;
+
+    const candidates = [];
+    for (let k = 0; k < boundaryList.length; k++) {
+      const bp = boundaryList[k];
+      const d0 = p._bindPos.distanceTo(bp._bindPos);
+      if (d0 < 0.24) {
+        candidates.push({ bp, d0 });
+      }
+    }
+    if (candidates.length > 28) {
+      candidates.sort((a, b) => a.d0 - b.d0);
+      candidates.length = 28;
+    }
+    p._skinNeighbors = candidates.map(c => c.bp);
+  }
+
+  if (shirtGeom) shirtGeom.dispose();
+  shirtGeom = new THREE.BufferGeometry();
+  const shirtPosArr = new Float32Array(shirtParticles.length * 3);
+  shirtGeom.setAttribute('position', new THREE.BufferAttribute(shirtPosArr, 3));
+  shirtGeom.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(shirtUVs), 2));
+  shirtGeom.setIndex(shirtIndices);
+  shirtMesh.geometry = shirtGeom;
+  syncShirtMesh();
+
+  draggableParticles = shirtParticles.concat(blobParticles);
+}
+
+buildCharacterMeshes(1, 1);
 
 // One-Way Body-to-Shirt Collision Solver:
 // Runs once per substep in world.onPostParticleSubstep (after XPBD distance constraints and before velocity derivation).
@@ -1559,13 +1643,15 @@ let clothDampingVal   = 0.80;
 function solveShirtBodyCollision(h) {
   const dragK = Math.max(0, Math.min(1, clothDampingVal * h));
   const contactFric = Math.min(0.35, shirtBodyFriction * 0.35);
+  const shoulderMinI = 6 * currentClothDiv;
+  const shoulderMaxI = currentShirtNx - 1 - 6 * currentClothDiv;
 
   for (let i = 0; i < shirtParticles.length; i++) {
     const p = shirtParticles[i];
     let hadSkinContact = false;
 
     // 1. Softly seat the top shoulder/collar seam onto the moving shoulder frame so the shirt hangs naturally from the shoulders
-    if (p._sj === 0 && p._si >= 6 && p._si <= sNx - 1 - 6) {
+    if (p._sj === 0 && p._si >= shoulderMinI && p._si <= shoulderMaxI) {
       p.x.lerp(p._targetBoneWorldPos, 0.45);
       p.px.lerp(p._targetBoneWorldPos, 0.45);
     }
@@ -2042,7 +2128,28 @@ let currentAction = bindPoseAction;
 let bindPoseTimer = null;
 const stateLabel = document.getElementById('state-label');
 
-const selectWalk = document.getElementById('select-walk');
+const selectWalk    = document.getElementById('select-walk');
+const btnSubdivSoft  = document.getElementById('btn-subdiv-soft');
+const btnSubdivCloth = document.getElementById('btn-subdiv-cloth');
+
+let pendingSoftDiv = 1;
+let pendingClothDiv = 1;
+
+function updateSubdivButtonsUI() {
+  btnSubdivSoft.classList.toggle('active', pendingSoftDiv === 2);
+  if (pendingSoftDiv === currentSoftDiv) {
+    btnSubdivSoft.textContent = currentSoftDiv === 2 ? 'Softbody 2×: On' : 'Softbody 2× Div';
+  } else {
+    btnSubdivSoft.textContent = pendingSoftDiv === 2 ? 'Softbody 2× (Bind Pose)' : 'Softbody 1× (Bind Pose)';
+  }
+
+  btnSubdivCloth.classList.toggle('cloth-active', pendingClothDiv === 2);
+  if (pendingClothDiv === currentClothDiv) {
+    btnSubdivCloth.textContent = currentClothDiv === 2 ? 'Cloth 2×: On' : 'Cloth 2× Div';
+  } else {
+    btnSubdivCloth.textContent = pendingClothDiv === 2 ? 'Cloth 2× (Bind Pose)' : 'Cloth 1× (Bind Pose)';
+  }
+}
 
 function updateButtonHighlights(inBindPose) {
   document.getElementById('btn-bindpose').classList.toggle('active', inBindPose);
@@ -2075,6 +2182,16 @@ function startBindPoseSequence() {
     bindPoseTimer = null;
   }
   mixer.stopAllAction();
+
+  // Apply queued 2x mesh redivision when user clicks Bind Pose button
+  const redivided = (pendingSoftDiv !== currentSoftDiv || pendingClothDiv !== currentClothDiv);
+  if (redivided) {
+    buildCharacterMeshes(pendingSoftDiv, pendingClothDiv);
+    if (typeof applySoftBodySliders === 'function') applySoftBodySliders();
+    if (typeof applyClothSliders === 'function') applyClothSliders();
+    updateSubdivButtonsUI();
+  }
+
   rootBone.position.copy(HIP_BIND_POS);
   for (let i = 0; i < boneList.length; i++) {
     boneList[i].quaternion.identity();
@@ -2110,7 +2227,11 @@ function startBindPoseSequence() {
 
   stateLabel.textContent = 'Bind Pose (T-Pose) — Blending in 1.0s...';
   updateButtonHighlights(true);
-  RoomEnv.showNote('Bind Pose (T-Pose). Cotton Shirt over Marshmallow Man (one-way body collision) — blending in 1.0s...', 2400);
+  if (redivided) {
+    RoomEnv.showNote(`Applied mesh divisions (Softbody ${currentSoftDiv}×, Cloth ${currentClothDiv}×) in Bind Pose — blending in 1.0s...`, 2600);
+  } else {
+    RoomEnv.showNote('Bind Pose (T-Pose). Cotton Shirt over Marshmallow Man (one-way body collision) — blending in 1.0s...', 2400);
+  }
 
   bindPoseTimer = setTimeout(() => {
     bindPoseTimer = null;
@@ -2123,7 +2244,6 @@ function startBindPoseSequence() {
 startBindPoseSequence();
 
 /* ================= Interactive Raycast Grab & Orbit Camera ================= */
-const draggableParticles = shirtParticles.concat(blobParticles);
 const dragger = RoomEnv.createParticleDragger({
   camera,
   world,
@@ -2199,15 +2319,15 @@ function applySoftBodySliders() {
   valWalkSpeed.textContent = Math.round(walkSpeedPct) + '%';
 
   // 1. 1-hop tetrahedral edge compliance (40% -> 0.0040)
-  const edgeCompliance = softnessPct <= 0
+  const edgeCompliance = (softnessPct <= 0
     ? 0.00005
-    : 0.025 * Math.pow(softnessPct / 100, 2.0);
+    : 0.025 * Math.pow(softnessPct / 100, 2.0)) / currentSoftDiv;
   for (let i = 0; i < tetEdgeConstraints.length; i++) {
     tetEdgeConstraints[i].compliance = edgeCompliance;
   }
 
   // 2. 2-hop axial structural bending compliance (55% -> ~0.0090; higher % = firmer shape)
-  const bendCompliance = 0.0002 + 0.0398 * Math.pow(1 - bendingPct / 100, 1.89);
+  const bendCompliance = (0.0002 + 0.0398 * Math.pow(1 - bendingPct / 100, 1.89)) / currentSoftDiv;
   for (let i = 0; i < bendEdgeConstraints.length; i++) {
     bendEdgeConstraints[i].compliance = bendCompliance;
   }
@@ -2222,8 +2342,9 @@ function applySoftBodySliders() {
   world.linearDamping = dampingVal;
   world.accel.set(0, -gravityVal, 0);
 
-  // 5. Unpinned Marshmallow Man particle mass scaling (Cotton Shirt keeps its cloth mass)
-  const invParticleMass = 1 / (0.048 * massScale);
+  // 5. Unpinned Marshmallow Man particle mass scaling (total softbody mass preserved across 1x/2x divisions)
+  const baseParticleMass = 0.048 * (1130 / Math.max(1, blobParticles.length));
+  const invParticleMass = 1 / (baseParticleMass * massScale);
   for (let i = 0; i < blobParticles.length; i++) {
     const p = blobParticles[i];
     if (!p._isPinned) {
@@ -2268,14 +2389,14 @@ function applyClothSliders() {
   valClothMass.textContent     = massVal.toFixed(1) + 'kg';
 
   // 1. Structural warp & weft stretch compliance (10% -> 0.000004 Cotton preset)
-  const stretchComp = stretchPct <= 0 ? 0 : 0.004 * Math.pow(stretchPct / 100, 3);
+  const stretchComp = stretchPct <= 0 ? 0 : (0.004 * Math.pow(stretchPct / 100, 3)) / (currentClothDiv * currentClothDiv);
   for (let i = 0; i < shirtStructConstraints.length; i++) {
     const c = shirtStructConstraints[i];
     c.compliance = c._isCollarLock ? 0.0 : stretchComp;
   }
 
   // 2. Diagonal weave shear compliance (20% -> 0.02 Cotton preset)
-  const shearComp = (shearPct / 100) * 0.10;
+  const shearComp = ((shearPct / 100) * 0.10) / currentClothDiv;
   for (let i = 0; i < shirtShearConstraints.length; i++) {
     shirtShearConstraints[i].compliance = shearComp;
   }
@@ -2350,6 +2471,20 @@ tabToggle.addEventListener('click', () => {
 updateSlidersUI();
 
 /* ================= HUD Controls & Keyboard Shortcuts ================= */
+btnSubdivSoft.addEventListener('click', () => {
+  pendingSoftDiv = pendingSoftDiv === 1 ? 2 : 1;
+  updateSubdivButtonsUI();
+  RoomEnv.showNote(`Softbody ${pendingSoftDiv}× divisions queued — click "Bind Pose → Walk" to apply`, 2400);
+});
+
+btnSubdivCloth.addEventListener('click', () => {
+  pendingClothDiv = pendingClothDiv === 1 ? 2 : 1;
+  updateSubdivButtonsUI();
+  RoomEnv.showNote(`Cloth ${pendingClothDiv}× divisions queued — click "Bind Pose → Walk" to apply`, 2400);
+});
+
+updateSubdivButtonsUI();
+
 let wireActive = false;
 document.getElementById('btn-wire').addEventListener('click', () => {
   wireActive = !wireActive;
